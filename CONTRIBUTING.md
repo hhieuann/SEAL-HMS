@@ -66,13 +66,31 @@ Keep the description imperative and short (≤ ~70 chars).
 ## Branch protection (leader sets once)
 Settings → Branches → protect **`main`** and **`develop`**: require a Pull Request + 1 approval before merge.
 
-## Backend module ownership (suggested — matches the task plan)
-- **Leader (BE):** `config`, `auth`, `account`, `event`, `round`, `ranking`
-- **BE Member 2:** `track`/`topic`, `criterion`, `team`, `team_member`, `prize`
-- **BE Member 3:** `submission`, `judge`, `score`, team approval, unit tests
-- **FE Member 1 / 2:** auth pages, admin config UI, team/submission/judge/ranking UIs
+## Module ownership (2 BE + 2 FE)
 
-> Define DTO/API contracts (Swagger) early so the frontend can work in parallel.
+The backend splits into two **cohesive halves** with a clean handoff at the **submission**. Each BE owns a connected slice, and there is exactly one well-defined interface between you — so you rarely touch each other's code, and bugs are easy to locate.
+
+### BE-1 — Leader (you): Foundation + Evaluation
+`common`, `config` (security, JPA, exceptions, **enums**) · `auth`, `account` (+ lecturer/student profiles, approval, roles) · `judge`, `score` (judging) · `round_ranking`, `RankingService`, `prize` (results)
+> You own the shared foundation everyone builds on **plus** the hardest business logic: weighted scoring → ranking → top-N promotion → prizes.
+
+### BE-2 — second BE: Competition setup + Participation
+`event`, `round`, `track`, `topic`, `criterion` (configure the contest) · `team`, `team_member`, `chapter`, `mentor` (registration + approval) · `submission` (submit per round + deadline validation)
+> You own everything that **produces the data to be evaluated**: a configured contest, registered teams, and their submissions.
+
+### The interface between the two BEs (agree this first!)
+- **BE-2 produces → BE-1 consumes:** the `event/round/track/criterion` config, `team`, and `submission`.
+- **BE-1 writes back:** `score`, `round_ranking`, `team.eventScore`/`eventRank`, `prize`.
+- Nail down the **DTO / API shapes at this boundary first** (Swagger), then both work in parallel and only sync here.
+- Shared `enums` / `BaseEntity` / `ApiResponse` live in `common` (BE-1 owns; change via a small PR so BE-2 isn't surprised).
+
+> Prefer to own the config side instead of scoring? You two can swap the BE-1/BE-2 halves — the seam stays the same.
+
+### FE pairing (2 FE)
+- **FE-1 ↔ BE-2:** login/register pages, Admin config UI (Event/Round/Track/Criterion), team registration UI.
+- **FE-2 ↔ BE-1:** submission UI, judge scoring UI, ranking + prize UI.
+
+> Define DTO/API contracts (Swagger) early so each FE can build against their BE counterpart in parallel.
 
 ## Handy commands
 ```bash
