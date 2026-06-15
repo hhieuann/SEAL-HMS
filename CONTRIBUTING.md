@@ -66,29 +66,31 @@ Keep the description imperative and short (≤ ~70 chars).
 ## Branch protection (leader sets once)
 Settings → Branches → protect **`main`** and **`develop`**: require a Pull Request + 1 approval before merge.
 
-## Module ownership (2 BE + 2 FE)
+## Module ownership (team)
 
-The backend splits into two **cohesive halves** with a clean handoff at the **submission**. Each BE owns a connected slice, and there is exactly one well-defined interface between you — so you rarely touch each other's code, and bugs are easy to locate.
+**Team:** **An** (Leader, BE) · **Hoàng** (BE) · **Chương** (FE) · **Khang** (FE).
 
-### BE-1 — Leader (you): Foundation + Evaluation
+The backend splits into two **cohesive halves** with a clean handoff at the **submission**. Each BE owns a connected slice, and there is exactly one well-defined interface between An and Hoàng — so you rarely touch each other's code, and bugs are easy to locate.
+
+### BE-1 — An (Leader): Foundation + Evaluation
 `common`, `config` (security, JPA, exceptions, **enums**) · `auth`, `account` (+ lecturer/student profiles, approval, roles) · `judge`, `score` (judging) · `round_ranking`, `RankingService`, `prize` (results)
-> You own the shared foundation everyone builds on **plus** the hardest business logic: weighted scoring → ranking → top-N promotion → prizes.
+> An owns the shared foundation everyone builds on **plus** the hardest business logic: weighted scoring → ranking → top-N promotion → prizes.
 
-### BE-2 — second BE: Competition setup + Participation
+### BE-2 — Hoàng: Competition setup + Participation
 `event`, `round`, `track`, `topic`, `criterion` (configure the contest) · `team`, `team_member`, `chapter`, `mentor` (registration + approval) · `submission` (submit per round + deadline validation)
-> You own everything that **produces the data to be evaluated**: a configured contest, registered teams, and their submissions.
+> Hoàng owns everything that **produces the data to be evaluated**: a configured contest, registered teams, and their submissions.
 
-### The interface between the two BEs (agree this first!)
-- **BE-2 produces → BE-1 consumes:** the `event/round/track/criterion` config, `team`, and `submission`.
-- **BE-1 writes back:** `score`, `round_ranking`, `team.eventScore`/`eventRank`, `prize`.
+### The interface between An and Hoàng (agree this first!)
+- **Hoàng (BE-2) produces → An (BE-1) consumes:** the `event/round/track/criterion` config, `team`, and `submission`.
+- **An (BE-1) writes back:** `score`, `round_ranking`, `team.eventScore`/`eventRank`, `prize`.
 - Nail down the **DTO / API shapes at this boundary first** (Swagger), then both work in parallel and only sync here.
-- Shared `enums` / `BaseEntity` / `ApiResponse` live in `common` (BE-1 owns; change via a small PR so BE-2 isn't surprised).
+- Shared `enums` / `BaseEntity` / `ApiResponse` live in `common` (An owns; change via a small PR so Hoàng isn't surprised).
 
-> Prefer to own the config side instead of scoring? You two can swap the BE-1/BE-2 halves — the seam stays the same.
+> Prefer to own the config side instead of scoring? An & Hoàng can swap the two halves — the seam stays the same.
 
-### FE pairing (2 FE)
-- **FE-1 ↔ BE-2:** login/register pages, Admin config UI (Event/Round/Track/Criterion), team registration UI.
-- **FE-2 ↔ BE-1:** submission UI, judge scoring UI, ranking + prize UI.
+### FE pairing
+- **Chương (FE) ↔ Hoàng (BE-2):** login/register pages, Admin config UI (Event/Round/Track/Criterion), team registration UI.
+- **Khang (FE) ↔ An (BE-1):** submission UI, judge scoring UI, ranking + prize UI.
 
 > Define DTO/API contracts (Swagger) early so each FE can build against their BE counterpart in parallel.
 
