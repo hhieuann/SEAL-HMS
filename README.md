@@ -109,6 +109,37 @@ SEAL-HMS/
 
 ---
 
+## Key files & folders — what each is for (read this!)
+
+New to the repo? Here is what the important scaffolding files do and **why they exist**, so nobody deletes one by mistake.
+
+### Environment files — there are **two** DB config files *on purpose*
+| File | Who reads it | What it holds | Committed? |
+|------|--------------|---------------|-----------|
+| `.env` (repo root) | **docker-compose** | DB name/user/password + host port → builds the Postgres **container** | ❌ gitignored |
+| `backend/.env.properties` | **Spring Boot** (via `application.yml` → `config.import`) | DB connection (`DB_*`) **+ `JWT_SECRET`** → how the **backend connects** | ❌ gitignored |
+| `frontend/.env.local` | **Vite** | `VITE_API_BASE_URL` (where the API lives) | ❌ gitignored |
+| `.env.example` | you | the template you copy the 3 files above from | ✅ committed |
+
+> ⚠️ **Do NOT delete `backend/.env.properties` just because `.env` exists.** They feed **different programs**: `.env` configures the *database container*, `.env.properties` tells the *backend* how to connect (and holds the JWT secret). docker-compose never reads the backend file, and Spring never reads the root `.env`. The `DB_PASSWORD` must be **identical** in both. All env files are gitignored — every member creates their own from `.env.example`.
+
+### Maven wrapper — `mvnw`, `mvnw.cmd`, `.mvn/`
+Lets anyone build/run the backend **without installing Maven manually**. `mvnw` = macOS/Linux, `mvnw.cmd` = Windows. Running `.\mvnw spring-boot:run` auto-downloads the exact Maven version pinned in `.mvn/wrapper/maven-wrapper.properties`, so the whole team uses the same version. **These are committed on purpose** — always use `.\mvnw`, not a separately-installed `mvn`.
+
+### `.gitattributes` — line-ending safety
+Forces consistent line endings in Git. Most importantly it keeps `mvnw` (a shell script) as **LF**; otherwise Windows would save it as CRLF and `./mvnw` would fail with `bad interpreter` for teammates on macOS/Linux. Leave it as-is.
+
+### `.gitignore` — what never gets pushed to GitHub
+Excludes build output (`target/`, `node_modules/`), **all secret/env files** (`.env`, `*.env.properties`, `.env.local`), IDE folders (`.idea/`, `.vscode/`), logs, and local tooling (`.claude/`, `.worktrees/`, `*.orig`). If you create a file that shouldn't be shared, add it here.
+
+### Other important files
+- `docker-compose.yml` — defines the PostgreSQL 18 container (the shared dev database).
+- `backend/pom.xml` — backend dependencies (Spring Boot, JPA, Flyway + `spring-boot-flyway`, JWT…).
+- `backend/src/main/resources/application.yml` — Spring config (datasource, JPA `validate`, Flyway, JWT). `application-dev.yml` adds verbose SQL logging for the `dev` profile.
+- `backend/src/main/resources/db/migration/V1__init_schema.sql` — the Flyway migration that **creates the 18 tables**. ⚠️ Never edit an already-applied migration — add a new `V2__…`, `V3__…` instead.
+
+---
+
 ## Git workflow (R2S Gitflow)
 Full rules in **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short:
 - Branches: `main` (stable) · `develop` (integration) · `feature/*` · `release/*` · `hotfix/*`.
