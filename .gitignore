@@ -29,3 +29,11 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# AI agent / local tooling & git worktrees (never push these)
+.claude/
+.worktrees/
+*.code-workspace
+# merge conflict leftovers
+*.orig
+*.rej
