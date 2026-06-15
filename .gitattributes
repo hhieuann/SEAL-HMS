@@ -1,0 +1,16 @@
+# Normalize line endings: store everything as LF in the repo.
+* text=auto eol=lf
+
+# Windows scripts must stay CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Unix shell scripts (incl. the Maven wrapper) MUST be LF or they break on macOS/Linux
+mvnw text eol=lf
+*.sh text eol=lf
+
+# Treat as binary (no diff/eol munging)
+*.jar binary
+*.png binary
+*.jpg binary
+*.pdf binary

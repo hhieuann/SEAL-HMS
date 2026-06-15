@@ -1,0 +1,30 @@
+# Spins up the shared database so every teammate runs the SAME PostgreSQL.
+#   docker compose up -d      # start (detached)
+#   docker compose logs -f db # watch logs
+#   docker compose down       # stop (keeps data in the named volume)
+#   docker compose down -v    # stop AND wipe the database volume
+#
+# Values come from the root .env file (cp .env.example .env). Defaults are used if unset.
+# The backend (run on your host via ./mvnw) connects to localhost:5432.
+
+services:
+  db:
+    image: postgres:18
+    container_name: seal-hms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-seal_hms}
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - seal_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres} -d ${DB_NAME:-seal_hms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  seal_pgdata:

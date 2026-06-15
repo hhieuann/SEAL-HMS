@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: seal-hms
+  config:
+    import: "optional:file:./.env.properties"
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seal_hms}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+  jpa:
+    hibernate:
+      ddl-auto: validate          # NEVER 'update' on the shared repo
+    open-in-view: false
+    properties:
+      hibernate.format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:please_change_me_to_a_long_random_secret_key}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+server:
+  port: 8080
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
