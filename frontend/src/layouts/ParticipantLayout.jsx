@@ -1,0 +1,133 @@
+import React from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock } from 'lucide-react';
+import './ParticipantLayout.css';
+
+const ParticipantLayout = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isReady = localStorage.getItem('p_hasTeam') === 'true';
+
+  const handleLogout = () => {
+    localStorage.removeItem('p_hasJoinedEvent');
+    localStorage.removeItem('p_hasTeam');
+    navigate('/login');
+  };
+
+  const LockedItem = ({ icon, label }) => (
+    <div
+      title="Complete setup first: Select an event → choose a track → join or create a team"
+      style={{
+        opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none',
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '10px 16px', borderRadius: '10px',
+        color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500'
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+      <Lock size={13} style={{ marginLeft: 'auto', opacity: 0.7 }} />
+    </div>
+  );
+
+  return (
+    <div className="app-container">
+      <header className="fpt-topbar">
+        <div className="logo" style={{ color: 'white', paddingLeft: '24px' }}>
+          <div className="logo-icon" style={{ background: 'white', color: 'var(--primary)' }}><Code size={24} /></div>
+          <span className="logo-text">SEAL<span style={{ color: 'white' }}>.</span></span>
+        </div>
+        
+        <div style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
+            <img src="https://ui-avatars.com/api/?name=John+Doe&background=fff&color=F26F21" alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+            <div className="user-info" style={{ textAlign: 'left' }}>
+              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>John Doe</span>
+              <span className="user-role" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Participant</span>
+            </div>
+          </div>
+          <button className="btn-icon" onClick={handleLogout} title="Logout" style={{ color: 'white', background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px' }}>
+            <LogOut size={18} />
+          </button>
+        </div>
+      </header>
+
+      <div className="app-body">
+        <aside className="sidebar">
+
+        <nav className="sidebar-nav">
+          <div className="nav-section">
+            <p className="nav-section-title">HACKATHON</p>
+
+            <NavLink to="/participant/events" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <LayoutTemplate size={20} />
+              <span>Explore Events</span>
+            </NavLink>
+
+            <NavLink to="/participant/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Bell size={20} />
+              <span>Announcements</span>
+              <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: 'white', fontSize: '11px', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>2</span>
+            </NavLink>
+
+            {isReady ? (
+              <>
+                <NavLink to="/participant/workspace" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Briefcase size={20} />
+                  <span>Team Workspace</span>
+                </NavLink>
+                <NavLink to="/participant/submission" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <FileCheck size={20} />
+                  <span>My Submission</span>
+                </NavLink>
+                <NavLink to="/participant/scores" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Trophy size={20} />
+                  <span>Scores & Results</span>
+                </NavLink>
+              </>
+            ) : (
+              <>
+                <LockedItem icon={<Briefcase size={20} />} label="Team Workspace" />
+                <LockedItem icon={<FileCheck size={20} />} label="My Submission" />
+                <LockedItem icon={<Trophy size={20} />} label="Scores & Results" />
+                <div style={{
+                  margin: '8px 12px', padding: '10px 12px',
+                  background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.18)',
+                  borderRadius: '10px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.7'
+                }}>
+                  <span style={{ color: 'var(--primary)', fontWeight: '600' }}>Setup required:</span><br />
+                  Select an event → choose a track → join or create a team.
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="nav-section">
+            <p className="nav-section-title">SUPPORT</p>
+            {isReady ? (
+              <NavLink to="/participant/mentor" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <MessageSquare size={20} />
+                <span>Contact Mentor</span>
+              </NavLink>
+            ) : (
+              <LockedItem icon={<MessageSquare size={20} />} label="Contact Mentor" />
+            )}
+            <NavLink to="/participant/faq" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <HelpCircle size={20} />
+              <span>FAQ & Rules</span>
+            </NavLink>
+          </div>
+        </nav>
+      </aside>
+
+      <main className="main-content">
+        <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
+          <Outlet />
+        </div>
+      </main>
+      </div>
+    </div>
+  );
+};
+
+export default ParticipantLayout;

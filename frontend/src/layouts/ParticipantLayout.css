@@ -1,0 +1,10 @@
+/* Reuses AdminLayout.css structure for sidebar but customized slightly if needed */
+@import './AdminLayout.css';
+
+/* Add any specific overrides here if needed */
+.workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}

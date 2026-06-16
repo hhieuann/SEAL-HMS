@@ -1,26 +1,29 @@
 {
-  "name": "seal-hms-frontend",
+  "name": "seal-hackathon-app",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
     "lint": "eslint .",
-    "format:check": "prettier --check \"src/**/*.{js,jsx,css}\""
+    "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.7.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.0"
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.15.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.0",
-    "eslint": "^9.9.0",
-    "globals": "^15.9.0",
-    "prettier": "^3.3.0",
-    "vite": "^5.4.0"
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "vite": "^8.0.12"
   }
 }

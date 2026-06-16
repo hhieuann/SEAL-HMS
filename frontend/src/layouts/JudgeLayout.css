@@ -1,0 +1,95 @@
+.judge-app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  color: var(--text-primary);
+}
+
+.judge-topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.judge-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-width: 220px;
+}
+
+.judge-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.judge-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid transparent;
+  transition: var(--transition);
+}
+
+.judge-nav-link:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
+
+.judge-nav-link.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.judge-select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.judge-select:focus {
+  border-color: var(--primary);
+}
+
+.judge-actions {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  justify-content: flex-end;
+}
+
+.judge-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-subtle);
+}
+
+.judge-main-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
