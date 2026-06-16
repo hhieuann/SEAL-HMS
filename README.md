@@ -140,7 +140,7 @@ Excludes build output (`target/`, `node_modules/`), **all secret/env files** (`.
 
 ---
 
-## Git workflow (R2S Gitflow)
+## Git workflow
 Full rules in **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short:
 - Branches: `main` (stable) · `develop` (integration) · `feature/*` · `release/*` · `hotfix/*`.
 - Branch a feature off **`develop`**, open a PR back into `develop`, get **1 review**, then merge.
