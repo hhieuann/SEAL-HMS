@@ -3,11 +3,13 @@ package com.fpt.seal.hms.account;
 import com.fpt.seal.hms.common.enums.AccountStatus;
 import com.fpt.seal.hms.common.enums.Role;
 import com.fpt.seal.hms.common.exception.BusinessException;
+import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -33,5 +35,43 @@ public class AccountService {
     @Transactional(readOnly = true)
     public Optional<Account> findByEmail(String email) {
         return accountRepository.findByEmail(email);
+    }
+
+    @Transactional(readOnly = true)
+    public Account getById(Long id) {
+        return accountRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public List<Account> list(AccountStatus status) {
+        return status == null ? accountRepository.findAll() : accountRepository.findByStatus(status);
+    }
+
+    /** Event Coordinator approves a PENDING account so the user can participate (AU-03). */
+    @Transactional
+    public Account approve(Long id) {
+        Account account = getById(id);
+        if (account.getStatus() != AccountStatus.PENDING) {
+            throw new BusinessException("Only PENDING accounts can be approved (current: " + account.getStatus() + ")");
+        }
+        account.setStatus(AccountStatus.ACTIVE);
+        return account; // managed entity flushes on commit
+    }
+
+    /** Enable / disable / reset an account's status. */
+    @Transactional
+    public Account updateStatus(Long id, AccountStatus status) {
+        Account account = getById(id);
+        account.setStatus(status);
+        return account;
+    }
+
+    /** Change an account's role (AU-02). Restricted to ADMIN at the controller. */
+    @Transactional
+    public Account updateRole(Long id, Role role) {
+        Account account = getById(id);
+        account.setRole(role);
+        return account;
     }
 }
