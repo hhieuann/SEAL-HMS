@@ -15,7 +15,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor
-public class TeamMember extends BaseEntity {
+public class TeamMember {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
