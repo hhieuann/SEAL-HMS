@@ -59,6 +59,9 @@
   align-items: center;
   justify-content: center;
   padding: 40px;
+  background-image: url('../assets/fptBackground.jpg');
+  background-size: cover;
+  background-position: center;
 }
 
 .auth-card {

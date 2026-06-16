@@ -1,6 +1,7 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut, Anchor } from 'lucide-react';
+import fptLogo from '../../assets/fptLogo.png';
 
 const ExpertDashboard = () => {
   const navigate = useNavigate();
@@ -41,34 +42,47 @@ const ExpertDashboard = () => {
   const hasMentor = currentUser.roles.includes('Mentor');
 
   return (
-    <div className="expert-dashboard-container animate-fade-in" style={{ minHeight: '100vh', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+    <div className="expert-dashboard-container animate-fade-in" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       
+
       {/* Top Navbar Area */}
-      <div style={{ width: '100%', maxWidth: '1000px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '60px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className="logo-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={24} color="white" /></div>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: '700', lineHeight: '1' }}>SEAL<span className="highlight">.</span></div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Expert Portal</div>
+      <header className="fpt-topbar" style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', background: 'var(--primary)', boxShadow: '0 4px 12px rgba(242, 111, 33, 0.2)', color: 'white', marginBottom: '60px' }}>
+        <Link to="/" className="logo" style={{ paddingLeft: '24px', display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}>
+          <div className="logo-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'white', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Anchor size={24} /></div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span className="logo-text" style={{ color: 'white', fontSize: '24px', fontWeight: '700' }}>SEAL<span style={{ color: 'white' }}>.</span></span>
+            <img
+              src={fptLogo}
+              alt="FPT Logo"
+              style={{
+                height: '100px',
+                objectFit: 'contain',
+                marginLeft: '12px',
+                marginTop: '-30px',
+                marginBottom: '-30px'
+              }}
+            />
           </div>
-        </div>
+        </Link>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div className="topbar-actions" style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '14px', fontWeight: '600' }}>{currentUser.name}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Senior Expert</div>
+            <div style={{ fontSize: '14px', fontWeight: '600', color: 'white' }}>{currentUser.name}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>Senior Expert</div>
           </div>
-          <img src={currentUser.avatar} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
+          <img src={currentUser.avatar} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid white' }} />
           <button 
             className="btn-icon" 
             onClick={() => navigate('/login')} 
             title="Logout" 
-            style={{ marginLeft: '8px', background: 'var(--bg-hover)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            style={{ marginLeft: '8px', background: 'rgba(255,255,255,0.2)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer', transition: 'var(--transition)' }}
+            onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
           >
-            <LogOut size={18} color="var(--text-secondary)" />
+            <LogOut size={18} color="white" />
           </button>
         </div>
-      </div>
+      </header>
 
       <div style={{ width: '100%', maxWidth: '1000px' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Welcome back, {currentUser.name.split(' ')[0]}! 👋</h1>
@@ -83,6 +97,8 @@ const ExpertDashboard = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
             {assignments.filter(item => item.role === 'Judge').map(item => (
               <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+
+
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--warning)' }} />
                 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>

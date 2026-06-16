@@ -2,14 +2,28 @@ import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Anchor } from 'lucide-react';
 import './Auth.css';
+import fptLogo from '../assets/fptLogo.png';
 
 const AuthLayout = () => {
   return (
     <div className="auth-container">
       <header className="fpt-topbar">
-        <Link to="/" className="logo" style={{ paddingLeft: '24px' }}>
-          <div className="logo-icon" style={{ background: 'white', color: 'var(--primary)' }}><Anchor size={24} /></div>
-          <span className="logo-text" style={{ color: 'white' }}>SEAL<span style={{ color: 'white' }}>.</span></span>
+        <Link to="/" className="logo" style={{ paddingLeft: '24px', display: 'flex', alignItems: 'center', textDecoration: 'none' }}>
+          <div className="logo-icon" style={{ background: 'white', color: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Anchor size={24} /></div>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span className="logo-text" style={{ color: 'white' }}>SEAL<span style={{ color: 'white' }}>.</span></span>
+            <img
+                src={fptLogo}
+                alt="FPT Logo"
+                style={{
+                  height: '100px',
+                  objectFit: 'contain',
+                  marginLeft: '12px',
+                  marginTop: '-30px',
+                  marginBottom: '-30px'
+                }}
+              />
+          </div>
         </Link>
         <div className="topbar-actions" style={{ paddingRight: '24px' }}>
           <Link to="/#about" style={{ color: 'white', fontWeight: 500, marginRight: '16px' }}>About</Link>
