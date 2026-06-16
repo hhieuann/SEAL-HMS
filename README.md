@@ -11,7 +11,7 @@ A monorepo platform to manage the **SEAL (Software Engineering Agile League)** h
 - **Spring Data JPA / Hibernate** over **PostgreSQL** (see "Why JPA" below)
 - **Flyway** for versioned DB migrations (incl. `spring-boot-flyway` — required on Spring Boot 4)
 - **Spring Security 7 + JWT** (stateless), BCrypt password hashing
-- **springdoc-openapi** (Swagger UI) — ⚠️ TODO: not wired yet, the dependency is commented out in `pom.xml` pending a Spring Boot 4-compatible springdoc version
+- **springdoc-openapi** (springdoc 3.x) — Swagger UI at `/swagger-ui.html`, OpenAPI JSON at `/v3/api-docs`
 - Lombok, Bean Validation
 
 ### Frontend (`/frontend`)
@@ -140,7 +140,7 @@ Excludes build output (`target/`, `node_modules/`), **all secret/env files** (`.
 
 ---
 
-## Git workflow (R2S Gitflow)
+## Git workflow 
 Full rules in **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short:
 - Branches: `main` (stable) · `develop` (integration) · `feature/*` · `release/*` · `hotfix/*`.
 - Branch a feature off **`develop`**, open a PR back into `develop`, get **1 review**, then merge.
