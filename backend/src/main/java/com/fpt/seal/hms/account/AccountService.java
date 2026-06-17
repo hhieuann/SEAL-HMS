@@ -24,10 +24,17 @@ public class AccountService {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
+        // Self-registration must not grant privileged roles. Only STUDENT/LECTURER
+        // can be self-registered; ADMIN/STAFF/GUEST_JUDGE are assigned by an admin
+        // afterwards via PATCH /accounts/{id}/role.
+        Role assignedRole = (role != null) ? role : Role.STUDENT;
+        if (assignedRole != Role.STUDENT && assignedRole != Role.LECTURER) {
+            throw new BusinessException("Self-registration is only allowed for STUDENT or LECTURER");
+        }
         Account account = new Account();
         account.setEmail(email);
         account.setPassword(passwordEncoder.encode(rawPassword));
-        account.setRole(role != null ? role : Role.STUDENT);
+        account.setRole(assignedRole);
         account.setStatus(AccountStatus.PENDING); // admin/staff activate later
         return accountRepository.save(account);
     }
