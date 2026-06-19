@@ -123,23 +123,28 @@ const EventForm = () => {
         ]
       };
 
-      // 2. Call Batch Create API
+      // 2. Call Create or Update API
       const { eventService } = await import('../../api/eventService.js');
-      const response = await eventService.createEventBatch(requestData);
+      let response;
+      if (isEditMode) {
+        response = await eventService.updateEvent(eventId, requestData);
+      } else {
+        response = await eventService.createEventBatch(requestData);
+      }
       console.log("Real API saved event:", response);
 
-      const createdEventId = response.data?.id || 1;
+      const savedEventId = response.data?.id || eventId;
 
       // FIX: Backend Batch API drops topics! We must manually save them.
       if (formData.subTopics && formData.subTopics.length > 0) {
         try {
           const { trackService } = await import('../../api/trackService.js');
-          const tracksRes = await trackService.getTracksByEvent(createdEventId);
+          const tracksRes = await trackService.getTracksByEvent(savedEventId);
           const tracks = tracksRes.data || [];
           let generalTrack = tracks.find(t => t.name === 'General Track');
           
           if (!generalTrack) {
-             const newTrack = await trackService.createTrack(createdEventId, { name: 'General Track', description: 'Default track for the event' });
+             const newTrack = await trackService.createTrack(savedEventId, { name: 'General Track', description: 'Default track for the event' });
              generalTrack = newTrack.data;
           }
 
@@ -155,7 +160,7 @@ const EventForm = () => {
 
       localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData)); 
       
-      navigate(`/admin/event/${createdEventId}/dashboard`);
+      navigate(`/admin/event/${savedEventId}/dashboard`);
     } catch (err) {
       console.error(err);
       setError('Failed to create event with real API');
