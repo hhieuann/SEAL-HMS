@@ -155,6 +155,7 @@ public class TeamService {
         response.setEventRank(team.getEventRank());
         response.setCreatedAt(team.getCreatedAt());
         response.setUpdatedAt(team.getUpdatedAt());
+        response.setMemberCount(team.getMemberCount() != null ? team.getMemberCount() : 0);
         return response;
     }
 }
