@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Calendar, Target, Plus, X, AlertTriangle, Save, AlertCircle } from 'lucide-react';
+import { mockService } from '../../api/mockService';
 
 const EventForm = () => {
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ const EventForm = () => {
         ],
         rounds: [
           { 
-            id: 1, name: 'Qualifying Round', status: 'planned', start: '2026-04-12', end: '2026-04-12', 
+            id: 1, name: 'Qualifying Round', status: 'planned', start: '2026-04-11T09:00', end: '2026-04-11T16:00', 
             criteria: [
               { id: 1, name: 'Domain Accuracy and Relevance', weight: 30 },
               { id: 2, name: 'Agentic RAG Architecture & Algorithms', weight: 30 },
@@ -56,7 +57,7 @@ const EventForm = () => {
             ] 
           },
           { 
-            id: 2, name: 'Finals', status: 'planned', start: '2026-04-12', end: '2026-04-12', 
+            id: 2, name: 'Finals', status: 'planned', start: '2026-04-12T08:00', end: '2026-04-12T15:00', 
             criteria: [
               { id: 6, name: 'Data Processing & Retrieval Quality', weight: 30 },
               { id: 7, name: 'Reliability & Anti-hallucination', weight: 20 },
@@ -72,7 +73,7 @@ const EventForm = () => {
 
   const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, 3));
   const handlePrev = () => setCurrentStep(prev => Math.max(prev - 1, 1));
-  const handleSave = () => {
+  const handleSave = async () => {
     setError('');
     
     // Unhappy Case Simulation
@@ -84,12 +85,53 @@ const EventForm = () => {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      // Save logic
-      localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData));
-      console.log("Saving data to localStorage:", formData);
-      navigate(`/admin/event/${eventId || 'seal-sp26'}/dashboard`);
-    }, 1500);
+    try {
+      // 1. Map data to backend format
+      const requestData = {
+        name: formData.name,
+        type: formData.type,
+        startDate: formData.startDate || null,
+        endDate: formData.endDate || null,
+        description: formData.description,
+        rounds: formData.rounds.map((r, index) => ({
+           name: r.name,
+           startTime: r.start || null,
+           endTime: r.end || null,
+           promotionTopN: 10,
+           criteria: r.criteria.map(c => ({
+              name: c.name,
+              weight: c.weight,
+              maxScore: 100 // 1-100 logic
+           }))
+        })),
+        tracks: [
+          {
+            name: 'General Track',
+            description: 'Default track for the event',
+            topics: formData.subTopics.map(t => ({ name: t.name, description: t.desc }))
+          }
+        ]
+      };
+
+      // 2. Call Batch Create API
+      const { eventService } = await import('../../api/eventService.js');
+      const response = await eventService.createEventBatch(requestData);
+      console.log("Real API saved event:", response);
+
+      // (Optional) 3. Create Criteria sequentially since backend Batch doesn't support Criteria yet
+      // This is slightly tricky without knowing exact returned round IDs, 
+      // so for now we just navigate to dashboard and let Admin add criteria later if needed.
+
+      localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData)); // Keep for frontend mock fallback in other pages
+      // response is ApiResponse format, so actual entity is in response.data
+      const createdEventId = response.data?.id || 1;
+      navigate(`/admin/event/${createdEventId}/dashboard`);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to create event with real API');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addSubTopic = () => {
@@ -343,12 +385,12 @@ const EventForm = () => {
                             <input type="text" style={formInputStyle} value={round.name} onChange={e => updateRound(round.id, 'name', e.target.value)} />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Start Date</label>
-                            <input type="date" style={formInputStyle} value={round.start} onChange={e => updateRound(round.id, 'start', e.target.value)} />
+                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Start Time</label>
+                            <input type="datetime-local" style={formInputStyle} value={round.start} onChange={e => updateRound(round.id, 'start', e.target.value)} />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>End Date</label>
-                            <input type="date" style={formInputStyle} value={round.end} onChange={e => updateRound(round.id, 'end', e.target.value)} />
+                            <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>End Time</label>
+                            <input type="datetime-local" style={formInputStyle} value={round.end} onChange={e => updateRound(round.id, 'end', e.target.value)} />
                           </div>
                         </div>
                         <button className="btn-icon" onClick={() => removeRound(round.id)} style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}><Trash2Icon /></button>
