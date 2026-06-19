@@ -128,6 +128,21 @@ const EventForm = () => {
       let response;
       if (isEditMode) {
         response = await eventService.updateEvent(eventId, requestData);
+        // Explicitly update existing rounds since updateEvent ignores them
+        for (const fr of formData.rounds) {
+          if (fr.id && fr.id < 1000000000) {
+            try {
+              await eventService.updateRound(fr.id, {
+                name: fr.name,
+                startTime: fr.start || null,
+                endTime: fr.end || null,
+                promotionTopN: 10
+              });
+            } catch (err) {
+              console.error("Failed to update round", fr.id, err);
+            }
+          }
+        }
       } else {
         response = await eventService.createEventBatch(requestData);
       }

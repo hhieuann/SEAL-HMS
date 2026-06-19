@@ -29,5 +29,10 @@ export const eventService = {
   updateEvent: async (id, eventData) => {
     const response = await apiClient.put(`/api/v1/events/${id}`, eventData);
     return response.data;
+  },
+
+  updateRound: async (id, roundData) => {
+    const response = await apiClient.put(`/api/v1/rounds/${id}`, roundData);
+    return response.data;
   }
 };
