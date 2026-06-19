@@ -44,26 +44,35 @@ const PerformingTeams = () => {
         const teamsList = rawTeams.data || rawTeams;
         const mappedTeams = Array.isArray(teamsList) ? teamsList : [];
 
-        const enriched = mappedTeams.map((team, i) => {
-          const trackInfo = teamTrackMap[team.name];
+        // Fetch members for each team concurrently
+        const membersPromises = mappedTeams.map(team => 
+          teamService.getMembers(team.id).then(res => res.data || []).catch(() => [])
+        );
 
-          return {
-            id: team.id,
-            name: team.name,
-            project: team.project || '(No submission yet)',
-            track: trackInfo ? trackInfo.trackName : 'Not assigned',
-            trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
-            status: team.status || 'Active',
-            score: team.score ?? null,
-            members: team.memberCount || 0,
-            membersList: [],
-            icon: ICONS[i % ICONS.length],
-            inviteCode: team.inviteCode || 'N/A',
-          };
+        Promise.all(membersPromises).then(allMembers => {
+          const enriched = mappedTeams.map((team, i) => {
+            const trackInfo = teamTrackMap[team.name];
+            const teamMembers = allMembers[i];
+            const activeMembers = teamMembers.filter(m => m.status !== 'INVITED');
+
+            return {
+              id: team.id,
+              name: team.name,
+              project: team.project || '(No submission yet)',
+              track: trackInfo ? trackInfo.trackName : 'Not assigned',
+              trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
+              status: team.status || 'Active',
+              score: team.score ?? null,
+              members: activeMembers.length,
+              membersList: activeMembers,
+              icon: ICONS[i % ICONS.length],
+              inviteCode: team.inviteCode || 'N/A',
+            };
+          });
+
+          setTeams(enriched);
+          setLoading(false);
         });
-
-        setTeams(enriched);
-        setLoading(false);
       }).catch(err => {
         console.error("Failed to load real teams", err);
         setLoading(false);
