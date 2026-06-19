@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Lock, Calendar, Target } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import './EventDashboard.css';
 
 const EventDashboard = () => {
@@ -10,100 +9,72 @@ const EventDashboard = () => {
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
 
-  const mapEventResponse = (rawEvent) => {
-    if (!rawEvent) return null;
-    
-    // Restore mock state for properties not in backend
-    const localStateStr = localStorage.getItem(`eventMockState_${rawEvent.id}`);
-    const localState = localStateStr ? JSON.parse(localStateStr) : { registrationOpen: true, registrationDeadline: '' };
-
-    return {
-      ...rawEvent,
-      registrationOpen: localState.registrationOpen,
-      registrationDeadline: localState.registrationDeadline,
-      subTopics: rawEvent.tracks?.flatMap(t => t.topics || []) || [],
-      rounds: (rawEvent.rounds || []).map(r => {
-        let startStr = r.startTime;
-        if (Array.isArray(startStr)) {
-          const [y, m, d, h, min, s] = startStr;
-          startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
-        }
-        let endStr = r.endTime;
-        if (Array.isArray(endStr)) {
-          const [y, m, d, h, min, s] = endStr;
-          endStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
-        }
-        return { ...r, start: startStr, end: endStr };
-      })
-    };
-  };
-
   useEffect(() => {
-    import('../../api/eventService.js').then(({ eventService }) => {
-      // Use the eventId from the URL or fallback to fetching all events and picking the first
-      if (eventId && eventId !== 'seal-sp26') {
-        eventService.getEventDetails(eventId).then(res => {
-          setEvent(mapEventResponse(res.data));
-        }).catch(err => console.error(err));
-      } else {
-        eventService.getEvents().then(res => {
-          if (res.data && res.data.length > 0) {
-            setEvent(mapEventResponse(res.data[0]));
-          }
-        }).catch(err => console.error(err));
-      }
-    });
+    const fetchData = async () => {
+      try {
+        const { eventService } = await import('../../api/eventService.js');
+        const { trackService } = await import('../../api/trackService.js');
+        const { teamService } = await import('../../api/teamService.js');
 
-    import('../../api/teamService.js').then(({ teamService }) => {
-      teamService.getTeamsByEvent(eventId === 'seal-sp26' ? 1 : (eventId || 1))
-        .then(res => setTeams(res.data || []))
-        .catch(err => console.error(err));
-    });
+        let rawEvent = null;
+        let parsedId = eventId && eventId !== 'seal-sp26' ? parseInt(eventId) : null;
+
+        if (parsedId) {
+          const eventRes = await eventService.getEventDetails(parsedId);
+          rawEvent = eventRes.data;
+        } else {
+          const eventsRes = await eventService.getEvents();
+          if (eventsRes.data && eventsRes.data.length > 0) {
+            rawEvent = eventsRes.data[0];
+            parsedId = rawEvent.id;
+          }
+        }
+
+        if (!rawEvent) return;
+
+        // Fetch Rounds
+        const roundsRes = await eventService.getEventRounds(parsedId);
+        const rawRounds = roundsRes.data || [];
+
+        // Fetch Topics
+        const tracksRes = await trackService.getTracksByEvent(parsedId);
+        const tracks = tracksRes.data || [];
+        const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || []));
+        const allTopics = await Promise.all(topicsPromises);
+        const subTopics = allTopics.flat();
+
+        const enrichedEvent = {
+          ...rawEvent,
+          subTopics: subTopics,
+          rounds: rawRounds.map(r => {
+            let startStr = r.startTime;
+            if (Array.isArray(startStr)) startStr = `${startStr[0]}-${String(startStr[1]).padStart(2, '0')}-${String(startStr[2]).padStart(2, '0')}T${String(startStr[3] || 0).padStart(2, '0')}:${String(startStr[4] || 0).padStart(2, '0')}`;
+            let endStr = r.endTime;
+            if (Array.isArray(endStr)) endStr = `${endStr[0]}-${String(endStr[1]).padStart(2, '0')}-${String(endStr[2]).padStart(2, '0')}T${String(endStr[3] || 0).padStart(2, '0')}:${String(endStr[4] || 0).padStart(2, '0')}`;
+            return { ...r, start: startStr, end: endStr };
+          })
+        };
+
+        setEvent(enrichedEvent);
+
+        // Fetch Teams
+        teamService.getTeamsByEvent(parsedId)
+          .then(res => setTeams(res.data || []))
+          .catch(err => console.error(err));
+
+      } catch (err) {
+        console.error("Failed to load event dashboard data", err);
+      }
+    };
+    fetchData();
   }, [eventId]);
 
   const handleUpdateEvent = async (updates) => {
     try {
       const { eventService } = await import('../../api/eventService.js');
-      
-      // Sync Registration Open/Deadline to Backend via updateEvent
-      if (updates.registrationOpen !== undefined || updates.registrationDeadline !== undefined) {
-        
-        const formatLocalDate = (dateVal) => {
-          if (!dateVal) return null;
-          if (Array.isArray(dateVal)) {
-            return `${dateVal[0]}-${String(dateVal[1]).padStart(2, '0')}-${String(dateVal[2]).padStart(2, '0')}`;
-          }
-          return dateVal; // String
-        };
-
-        const payload = { 
-          name: event.name, 
-          type: event.type, 
-          startDate: formatLocalDate(event.startDate), 
-          endDate: formatLocalDate(event.endDate), 
-          description: event.description,
-          registrationOpen: updates.registrationOpen !== undefined ? updates.registrationOpen : event.registrationOpen,
-          registrationDeadline: updates.registrationDeadline !== undefined ? updates.registrationDeadline : event.registrationDeadline
-        };
-        const res = await eventService.updateEvent(event.id, payload);
-        
-        // Save local mock state
-        localStorage.setItem(`eventMockState_${event.id}`, JSON.stringify({
-           registrationOpen: payload.registrationOpen,
-           registrationDeadline: payload.registrationDeadline
-        }));
-        
-        const mapped = mapEventResponse(res.data);
-        mapped.registrationOpen = payload.registrationOpen;
-        mapped.registrationDeadline = payload.registrationDeadline;
-        setEvent(mapped);
-        return;
-      }
-
-      // For Phase 1, we just update status if present. Deep updates to rounds are not supported in basic update API yet.
       if (updates.status) {
         const res = await eventService.updateEventStatus(event.id, updates.status);
-        setEvent(mapEventResponse(res.data));
+        setEvent(prev => ({ ...prev, status: res.data.status }));
       }
     } catch (err) {
       console.error(err);
@@ -115,7 +86,6 @@ const EventDashboard = () => {
       r.id === roundId ? { ...r, [field]: value } : r
     );
     setEvent({ ...event, rounds: updatedRounds });
-    // handleUpdateEvent({ rounds: updatedRounds }); // Commented out for Phase 1 as deep updates aren't supported yet
   };
 
   if (!event) {
@@ -188,36 +158,7 @@ const EventDashboard = () => {
           <Lock size={20} color="var(--primary)" /> Event Management Controls
         </h2>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
-          {/* Registration Lock */}
-          <div>
-            <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Registration Settings</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>Registration Status</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Open or close team registrations</div>
-                </div>
-                <button 
-                  onClick={() => handleUpdateEvent({ registrationOpen: !event.registrationOpen })}
-                  className={`btn ${event.registrationOpen ? 'btn-success' : 'btn-secondary'}`}
-                  style={{ padding: '6px 12px', fontSize: '13px' }}
-                >
-                  {event.registrationOpen ? 'Open' : 'Closed'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)' }}>Registration Deadline</label>
-                <input 
-                  type="datetime-local" 
-                  value={event.registrationDeadline || ''}
-                  onChange={e => handleUpdateEvent({ registrationDeadline: e.target.value })}
-                  style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '8px 12px', borderRadius: '8px', outline: 'none' }}
-                />
-              </div>
-            </div>
-          </div>
-
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
           {/* Round Time Management */}
           <div>
             <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Round Time Management</h3>

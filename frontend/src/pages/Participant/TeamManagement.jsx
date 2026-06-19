@@ -25,28 +25,44 @@ const TeamManagement = () => {
       try {
         const res = await teamService.getTeamDetails(teamId);
         let teamData = res.data;
-        
-        if (teamData && teamData.members) {
-           teamData.members = teamData.members.map(m => ({
-             ...m,
-             name: m.name || m.accountName || 'Unknown'
-           }));
+
+        // Safely map members if present, else try fetching from /members endpoint
+        if (teamData.members && teamData.members.length > 0) {
+          teamData.members = teamData.members.map(m => ({
+            ...m,
+            name: m.name || m.accountName || 'Unknown',
+            role: m.role || 'Member',
+          }));
+        } else {
+          try {
+            const membersRes = await teamService.getMembers(teamId);
+            teamData.members = (membersRes.data || []).map(m => ({
+              ...m,
+              name: m.name || m.accountName || m.email || 'Unknown',
+              role: m.role || 'Member',
+            }));
+          } catch (e) {
+            teamData.members = [];
+          }
         }
-        
+
         // Fetch track info if assigned
         if (teamData.trackId) {
           try {
             const tracksRes = await trackService.getTracksByEvent(eventId);
             const assignedTrack = tracksRes.data?.find(t => t.id === teamData.trackId);
-            if (assignedTrack) {
-              teamData.trackName = assignedTrack.name;
-            }
+            if (assignedTrack) teamData.trackName = assignedTrack.name;
           } catch (e) {
             console.error('Failed to load track info');
           }
         }
 
-        setTeam({...teamData, inviteCode: localStorage.getItem('p_teamInviteCode') || 'CODE123', pendingRequests: []});
+        // Split members by status
+        const activeMembers = teamData.members.filter(m => m.status !== 'INVITED');
+        const pendingReqs = teamData.members.filter(m => m.status === 'INVITED');
+        teamData.members = activeMembers;
+
+        setTeam({...teamData, inviteCode: localStorage.getItem('p_teamInviteCode') || `SEAL${teamId}`, pendingRequests: pendingReqs});
       } catch (err) {
         console.error(err);
       } finally {
@@ -57,13 +73,31 @@ const TeamManagement = () => {
     loadTeamData();
   }, [teamId, navigate]);
 
-  const handleRequest = async (requestId, action) => {
-    setProcessingId(requestId);
+  const handleRequest = async (accountId, action) => {
+    setProcessingId(accountId);
     try {
-      const res = await mockService.handleJoinRequest(teamId, requestId, action);
-      setTeam(res.data);
+      if (action === 'Approve') {
+        await teamService.acceptInvite(teamId, accountId);
+      } else {
+        // Backend doesn't have a explicit reject invite API yet, so we could theoretically delete member
+        // For now just simulate success or alert
+        alert('Reject functionality pending backend support');
+      }
+      
+      // Reload team data after action
+      const membersRes = await teamService.getMembers(teamId);
+      const allMembers = (membersRes.data || []).map(m => ({
+        ...m,
+        name: m.name || m.accountName || m.email || 'Unknown',
+        role: m.role || 'Member',
+      }));
+      
+      const activeMembers = allMembers.filter(m => m.status !== 'INVITED');
+      const pendingReqs = allMembers.filter(m => m.status === 'INVITED');
+      
+      setTeam(prev => ({...prev, members: activeMembers, pendingRequests: pendingReqs}));
     } catch (err) {
-      alert(err.message || 'Error processing request');
+      alert(err.response?.data?.message || err.message || 'Error processing request');
     } finally {
       setProcessingId(null);
     }
@@ -154,18 +188,18 @@ const TeamManagement = () => {
                       <button 
                         className="btn btn-secondary" 
                         style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.2)', padding: '8px 12px' }}
-                        onClick={() => handleRequest(req.id, 'Reject')}
-                        disabled={processingId === req.id}
+                        onClick={() => handleRequest(req.accountId || req.id, 'Reject')}
+                        disabled={processingId === (req.accountId || req.id)}
                       >
                         <XCircle size={18} />
                       </button>
                       <button 
                         className="btn btn-primary" 
                         style={{ padding: '8px 12px' }}
-                        onClick={() => handleRequest(req.id, 'Approve')}
-                        disabled={processingId === req.id}
+                        onClick={() => handleRequest(req.accountId || req.id, 'Approve')}
+                        disabled={processingId === (req.accountId || req.id)}
                       >
-                        {processingId === req.id ? <Loader2 className="spinner" size={18} /> : <CheckCircle size={18} />}
+                        {processingId === (req.accountId || req.id) ? <Loader2 className="spinner" size={18} /> : <CheckCircle size={18} />}
                       </button>
                     </div>
                   </div>
