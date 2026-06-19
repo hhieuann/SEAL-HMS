@@ -1,0 +1,28 @@
+import apiClient from './apiClient';
+
+export const eventService = {
+  getEvents: async () => {
+    const response = await apiClient.get('/api/v1/events');
+    return response.data;
+  },
+
+  getEventDetails: async (id) => {
+    const response = await apiClient.get(`/api/v1/events/${id}`);
+    return response.data;
+  },
+
+  createEventBatch: async (eventData) => {
+    const response = await apiClient.post('/api/v1/events', eventData);
+    return response.data;
+  },
+
+  updateEventStatus: async (id, status) => {
+    const response = await apiClient.patch(`/api/v1/events/${id}/status`, { status });
+    return response.data;
+  },
+
+  updateEvent: async (id, eventData) => {
+    const response = await apiClient.put(`/api/v1/events/${id}`, eventData);
+    return response.data;
+  }
+};

@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users } from 'lucide-react';
+import { authApi } from '../api/auth';
 import './ParticipantLayout.css';
 
 const ParticipantLayout = () => {
@@ -9,9 +10,7 @@ const ParticipantLayout = () => {
   const isReady = localStorage.getItem('p_hasTeam') === 'true';
 
   const handleLogout = () => {
-    localStorage.removeItem('p_hasJoinedEvent');
-    localStorage.removeItem('p_hasTeam');
-    navigate('/login');
+    authApi.logout();
   };
 
   const LockedItem = ({ icon, label }) => (
@@ -72,6 +71,10 @@ const ParticipantLayout = () => {
 
             {isReady ? (
               <>
+                <NavLink to="/participant/team-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Users size={20} />
+                  <span>My Team</span>
+                </NavLink>
                 <NavLink to="/participant/workspace" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Briefcase size={20} />
                   <span>Team Workspace</span>

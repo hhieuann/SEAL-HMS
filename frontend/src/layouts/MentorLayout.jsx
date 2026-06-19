@@ -1,13 +1,14 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Code, LogOut, Bell, Ticket, ArrowLeft } from 'lucide-react';
+import { authApi } from '../api/auth';
 import './MentorLayout.css';
 
 const MentorLayout = () => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    navigate('/login');
+    authApi.logout();
   };
 
   const [activeContext] = React.useState(() => {
