@@ -86,7 +86,7 @@ const Workspace = () => {
         const myTeamName = localStorage.getItem('myTeamName') || 'NullPointerException';
         
         // Find if my team is in any of the drawn tracks
-        const myTrack = parsedDraw.find(t => t.teams && t.teams.includes(myTeamName));
+        const myTrack = parsedDraw.find(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
         
         if (myTrack) {
           setTeamTrack({
@@ -98,11 +98,11 @@ const Workspace = () => {
           
           if (myTrack.subTopic) {
             setProblemStatement(prev => {
-              const rName = prev.title.split(' Problem')[0];
+              const rName = prev.title.split(' - ')[0].replace(' Problem Statement', '').replace(' Problem', '');
               return {
                 ...prev,
-                title: `${rName} Problem Statement — ${myTrack.name}`,
-                body: myTrack.subTopic.desc || prev.body
+                title: `${rName} - ${myTrack.name} - ${myTrack.subTopic.name}`,
+                body: myTrack.subTopic.description || myTrack.subTopic.desc || prev.body
               };
             });
           }
@@ -117,8 +117,13 @@ const Workspace = () => {
   };
 
   useEffect(() => {
+    const eId = localStorage.getItem('p_eventId') || 1;
+    
     // Initial load
-    checkTrackDraw(localStorage.getItem('trackDraw'));
+    const isConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
+    if (isConfirmed) {
+      checkTrackDraw(localStorage.getItem(`trackDraw_${eId}`));
+    }
 
     const tId = localStorage.getItem('p_teamId');
     if (tId && tId !== 'temp') {
@@ -138,7 +143,6 @@ const Workspace = () => {
         .catch(err => console.error(err));
     }
 
-    const eId = localStorage.getItem('p_eventId');
     teamService.getTeamDetails(tId).then(() => { // ensure teamService is loaded or just import eventService directly
       import('../../api/eventService.js').then(({ eventService }) => {
         eventService.getEvents().then(res => {
@@ -174,10 +178,10 @@ const Workspace = () => {
                 }
 
                 setProblemStatement(prev => {
-                  const trackPart = prev.title.includes(' — ') ? prev.title.split(' — ')[1] : 'Track';
+                  const trackPart = prev.title.includes(' - ') ? prev.title.substring(prev.title.indexOf(' - ') + 3) : 'Track';
                   return {
                     ...prev,
-                    title: `${rName} Problem Statement — ${trackPart}`,
+                    title: `${rName} - ${trackPart}`,
                     releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
                     deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
                     remainingHours: durationStr,
@@ -193,7 +197,10 @@ const Workspace = () => {
 
     // Real-time listener
     const handleStorage = (e) => {
-      if (e.key === 'trackDraw') {
+      const currentEId = localStorage.getItem('p_eventId') || 1;
+      if (e.key === `trackDrawConfirmed_${currentEId}` && e.newValue === 'true') {
+        checkTrackDraw(localStorage.getItem(`trackDraw_${currentEId}`), true);
+      } else if (e.key === `trackDraw_${currentEId}` && localStorage.getItem(`trackDrawConfirmed_${currentEId}`) === 'true') {
         checkTrackDraw(e.newValue, true);
       }
     };
