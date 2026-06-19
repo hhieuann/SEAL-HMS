@@ -1,13 +1,14 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Code, LogOut, Bell, Shield, BookOpen, ArrowLeft } from 'lucide-react';
+import { authApi } from '../api/auth';
 import './JudgeLayout.css';
 
 const JudgeLayout = () => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    navigate('/login');
+    authApi.logout();
   };
 
   const [activeContext, setActiveContext] = React.useState(() => {
