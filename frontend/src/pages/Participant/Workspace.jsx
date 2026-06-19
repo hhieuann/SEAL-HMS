@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { Users, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target } from 'lucide-react';
+import { teamService } from '../../api/teamService';
 import './Workspace.css';
 
 // Simulate: problem statement released after 07:00 Day 2
 const PROBLEM_RELEASED = true;
 
 const Workspace = () => {
-  const [teamTrack, setTeamTrack] = useState({ name: 'Awaiting Draw...', topic: 'TBD', color: 'var(--text-secondary)' });
+  const navigate = useNavigate();
+  const [teamTrack, setTeamTrack] = useState({ name: 'Awaiting Draw...', topic: 'TBD', color: 'var(--text-secondary)', teamsCount: 0 });
+  const [teamData, setTeamData] = useState(null);
+  const [eventData, setEventData] = useState(null);
+  const [currentRoundName, setCurrentRoundName] = useState('Main Event');
   const [problemStatement, setProblemStatement] = useState({
-    title: 'Qualifying Round Problem Statement',
+    title: 'Main Event Problem Statement',
     body: 'Build a specialized AI RAG (Retrieval-Augmented Generation) system based on a domain-specific dataset. The system must have mechanisms to detect and prevent hallucination, support multi-hop reasoning, and feature a user-friendly interface.',
     requirements: [
       'Use frameworks: LangGraph, OpenAI SDK, Gemini SDK, LlamaIndex, CrewAI, AutoGen, HuggingFace Agents.',
@@ -18,19 +23,21 @@ const Workspace = () => {
       'Source code MUST be stored on GitHub, Jira, Confluence, or Notion (Google Drive is not allowed).',
       'Live slide presentation (Canva, Google Slides, PowerPoint Online) - PDF is not allowed.',
     ],
-    releasedAt: '12/04/2026 - 07:00',
-    deadline: '12/04/2026 - 14:00',
-    remainingHours: '5h 23m',
+    releasedAt: 'TBD',
+    deadline: 'TBD',
+    remainingHours: '0h 0m',
+    durationStr: '0h'
   });
 
   const [showNotification, setShowNotification] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const [resources, setResources] = useState([
-    { type: 'PDF', name: 'SEAL_SP26_Rules.pdf', meta: 'Uploaded by Admin' },
-    { type: 'URL', name: 'PubMed Dataset Links', meta: 'External · Shared by John' },
-    { type: 'PPT', name: 'Pitch_Deck_Draft.pptx', meta: '4.5 MB · Alice' },
-  ]);
+  const tId = localStorage.getItem('p_teamId') || 'temp';
+  const currentUserEmail = localStorage.getItem('userEmail') || 'User';
+
+  const [resources, setResources] = useState(() => {
+    return JSON.parse(localStorage.getItem(`ws_resources_${tId}`) || '[]');
+  });
   const fileInputRef = useRef(null);
 
   const handleFileUpload = (e) => {
@@ -46,17 +53,26 @@ const Workspace = () => {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       
       const newFile = {
+        id: Date.now(),
         type: typeStr,
         name: file.name,
-        meta: `${sizeMB} MB · You (Just now)`
+        meta: `${sizeMB} MB · ${currentUserEmail.split('@')[0]} (Just now)`
       };
       
-      setResources(prev => [newFile, ...prev]);
+      const newResources = [newFile, ...resources];
+      setResources(newResources);
+      localStorage.setItem(`ws_resources_${tId}`, JSON.stringify(newResources));
     }
   };
 
+  const deleteResource = (id) => {
+    const newResources = resources.filter(r => r.id !== id);
+    setResources(newResources);
+    localStorage.setItem(`ws_resources_${tId}`, JSON.stringify(newResources));
+  };
+
   const handleInviteLink = () => {
-    const inviteCode = localStorage.getItem('p_teamInviteCode') || '123456';
+    const inviteCode = localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`;
     const link = `${window.location.origin}/participant/team-formation?inviteCode=${inviteCode}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
@@ -70,21 +86,25 @@ const Workspace = () => {
         const myTeamName = localStorage.getItem('myTeamName') || 'NullPointerException';
         
         // Find if my team is in any of the drawn tracks
-        const myTrack = parsedDraw.find(t => t.teams && t.teams.includes(myTeamName));
+        const myTrack = parsedDraw.find(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
         
         if (myTrack) {
           setTeamTrack({
             name: myTrack.name,
             topic: myTrack.subTopic ? myTrack.subTopic.name : 'Custom Topic',
-            color: myTrack.color || 'var(--primary)'
+            color: myTrack.color || 'var(--primary)',
+            teamsCount: myTrack.teams ? myTrack.teams.length : 0
           });
           
           if (myTrack.subTopic) {
-            setProblemStatement(prev => ({
-              ...prev,
-              title: `Qualifying Round Problem Statement — ${myTrack.name}`,
-              body: myTrack.subTopic.desc || prev.body
-            }));
+            setProblemStatement(prev => {
+              const rName = prev.title.split(' - ')[0].replace(' Problem Statement', '').replace(' Problem', '');
+              return {
+                ...prev,
+                title: `${rName} - ${myTrack.name} - ${myTrack.subTopic.name}`,
+                body: myTrack.subTopic.description || myTrack.subTopic.desc || prev.body
+              };
+            });
           }
           
           if (isRealTime) {
@@ -97,12 +117,99 @@ const Workspace = () => {
   };
 
   useEffect(() => {
+    const eId = localStorage.getItem('p_eventId') || 1;
+    
     // Initial load
-    checkTrackDraw(localStorage.getItem('trackDraw'));
+    const isConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
+    if (isConfirmed) {
+      checkTrackDraw(localStorage.getItem(`trackDraw_${eId}`));
+    }
+
+    const tId = localStorage.getItem('p_teamId');
+    if (tId && tId !== 'temp') {
+      teamService.getTeamDetails(tId)
+        .then(async res => {
+          let tData = res.data;
+          try {
+            const membersRes = await teamService.getMembers(tId);
+            // Only show members who are actively in the team
+            tData.members = (membersRes.data || []).filter(m => m.status !== 'INVITED');
+          } catch (e) {
+            tData.members = [];
+          }
+          setTeamData(tData);
+          localStorage.setItem('myTeamName', tData.name);
+        })
+        .catch(err => console.error(err));
+    }
+
+    teamService.getTeamDetails(tId).then(() => { // ensure teamService is loaded or just import eventService directly
+      import('../../api/eventService.js').then(({ eventService }) => {
+        eventService.getEvents().then(res => {
+          let evt;
+          if (eId) {
+            evt = res.data.find(e => e.id == eId);
+          }
+          if (!evt && res.data.length > 0) {
+            evt = res.data[0]; 
+          }
+          setEventData(evt);
+          
+          if (evt) {
+            eventService.getEventRounds(evt.id).then(roundRes => {
+              const rounds = roundRes.data || [];
+              if (rounds.length > 0) {
+                let activeRoundIdx = 0;
+                let lastStartedIdx = -1;
+                for (let i = rounds.length - 1; i >= 0; i--) {
+                  if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                    lastStartedIdx = i;
+                    break;
+                  }
+                }
+                activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+                
+                const round = rounds[activeRoundIdx] || rounds[0];
+                const rName = round.name || 'Main Event';
+                setCurrentRoundName(rName);
+
+                let durationStr = '0h';
+                let diffMins = 0;
+                if (round.startTime && round.endTime) {
+                  const startD = new Date(round.startTime);
+                  const endD = new Date(round.endTime);
+                  diffMins = Math.floor((endD - startD) / (1000 * 60));
+                  if (diffMins > 0) {
+                    const h = Math.floor(diffMins / 60);
+                    const m = diffMins % 60;
+                    durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  }
+                }
+
+                setProblemStatement(prev => {
+                  const trackPart = prev.title.includes(' - ') ? prev.title.substring(prev.title.indexOf(' - ') + 3) : 'Track';
+                  return {
+                    ...prev,
+                    title: `${rName} - ${trackPart}`,
+                    releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
+                    deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
+                    remainingHours: durationStr,
+                    durationStr: durationStr
+                  };
+                });
+              }
+            }).catch(err => console.error("Failed to load rounds:", err));
+          }
+        }).catch(err => console.error(err));
+      });
+    });
 
     // Real-time listener
     const handleStorage = (e) => {
-      if (e.key === 'trackDraw') {
+      const currentEId = localStorage.getItem('p_eventId') || 1;
+      if (e.key === `trackDrawConfirmed_${currentEId}` && e.newValue === 'true') {
+        checkTrackDraw(localStorage.getItem(`trackDraw_${currentEId}`), true);
+      } else if (e.key === `trackDraw_${currentEId}` && localStorage.getItem(`trackDrawConfirmed_${currentEId}`) === 'true') {
         checkTrackDraw(e.newValue, true);
       }
     };
@@ -110,40 +217,101 @@ const Workspace = () => {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  const [tasks, setTasks] = useState([
-    { id: 1, text: 'Setup GitHub Repository + project structure', completed: true },
-    { id: 2, text: 'Prepare dataset (Domain specific)', completed: true },
-    { id: 3, text: 'Build RAG pipeline', completed: false },
-    { id: 4, text: 'Integrate Ragas for hallucination evaluation', completed: false },
-    { id: 5, text: 'Build user interface', completed: false },
-    { id: 6, text: 'Prepare presentation slides (Canva/Google Slides)', completed: false },
-  ]);
+  const [tasks, setTasks] = useState(() => {
+    return JSON.parse(localStorage.getItem(`ws_tasks_${tId}`) || '[]');
+  });
   const [newTask, setNewTask] = useState('');
   const [showFullProblem, setShowFullProblem] = useState(false);
 
+  const [chatMessages, setChatMessages] = useState(() => {
+    return JSON.parse(localStorage.getItem(`ws_chat_${tId}`) || '[]');
+  });
+  const [newChat, setNewChat] = useState('');
+
   const handleAddTask = (e) => {
     if (e.key === 'Enter' && newTask.trim()) {
-      setTasks([...tasks, { id: Date.now(), text: newTask, completed: false }]);
+      const newTasks = [...tasks, { id: Date.now(), text: newTask, completed: false }];
+      setTasks(newTasks);
+      localStorage.setItem(`ws_tasks_${tId}`, JSON.stringify(newTasks));
       setNewTask('');
     }
   };
-  const toggleTask = (id) => setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+  const toggleTask = (id) => {
+    const newTasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+    setTasks(newTasks);
+    localStorage.setItem(`ws_tasks_${tId}`, JSON.stringify(newTasks));
+  };
+  const deleteTask = (id) => {
+    const newTasks = tasks.filter(t => t.id !== id);
+    setTasks(newTasks);
+    localStorage.setItem(`ws_tasks_${tId}`, JSON.stringify(newTasks));
+  };
   const completedCount = tasks.filter(t => t.completed).length;
+
+  const handleSendChat = () => {
+    if (newChat.trim()) {
+      const msg = {
+        id: Date.now(),
+        sender: currentUserEmail.split('@')[0],
+        text: newChat.trim(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isMine: true
+      };
+      const newMsgs = [...chatMessages, msg];
+      setChatMessages(newMsgs);
+      localStorage.setItem(`ws_chat_${tId}`, JSON.stringify(newMsgs));
+      setNewChat('');
+    }
+  };
 
   return (
     <div className="workspace-container animate-fade-in">
       <header className="workspace-header">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <span className="track-badge" style={{ background: 'var(--bg-active)', color: teamTrack.color, border: `1px solid ${teamTrack.color}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '6px', 
+              background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))', 
+              border: '1px solid rgba(139,92,246,0.3)',
+              color: 'var(--accent-1)', 
+              padding: '5px 14px', 
+              borderRadius: '100px', 
+              fontSize: '12px', 
+              fontWeight: '700', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.5px',
+              boxShadow: '0 4px 12px rgba(139,92,246,0.1)'
+            }}>
+              <Target size={14} /> {currentRoundName}
+            </div>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'var(--bg-subtle)',
+              border: `1px solid ${teamTrack.color}`,
+              color: teamTrack.color,
+              padding: '5px 14px', 
+              borderRadius: '100px', 
+              fontSize: '13px', 
+              fontWeight: '700',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
+            }}>
               {teamTrack.name}
-            </span>
-            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '3px 10px', borderRadius: '20px', border: '1px solid var(--bg-active)', color: 'white' }}>
-              📋 {teamTrack.topic}
-            </span>
+            </div>
+            <div style={{ 
+              display: 'flex', alignItems: 'center', gap: '6px',
+              background: 'var(--bg-hover)',
+              border: '1px solid var(--border-color)',
+              color: 'var(--text-secondary)',
+              padding: '5px 14px', 
+              borderRadius: '100px', 
+              fontSize: '13px', 
+              fontWeight: '600'
+            }}>
+              <BookOpen size={14} /> {teamTrack.topic}
+            </div>
           </div>
           <h1>Team: {localStorage.getItem('myTeamName') || 'NullPointerException'}</h1>
-          <p className="subtitle">SEAL Hackathon Spring 2026 — 12/04/2026</p>
+          <p className="subtitle">{eventData?.name || 'SEAL Hackathon'} — {eventData?.startDate || 'TBD'}</p>
         </div>
         <div className="workspace-actions">
           <Link to="/participant/submission" className="btn btn-primary">Go to Submission</Link>
@@ -173,7 +341,7 @@ const Workspace = () => {
         <div className="ws-col-left">
 
           {/* 🔴 Problem Statement Widget */}
-          {PROBLEM_RELEASED && (
+          {PROBLEM_RELEASED && teamTrack.name !== 'Awaiting Draw...' && (
             <div className="glass-panel ws-panel" style={{ background: '#FFFFFF', border: '1px solid rgba(245,158,11,0.35)', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, var(--warning), var(--danger))' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -216,56 +384,68 @@ const Workspace = () => {
           )}
 
           {/* Track Info */}
-          <div className="glass-panel ws-panel" style={{ background: '#FFFFFF', border: '1px solid rgba(139,92,246,0.2)' }}>
-            <div className="panel-header" style={{ marginBottom: '12px' }}>
-              <h3 className="panel-title" style={{ color: 'var(--accent-1)' }}>Track B — Leaderboard</h3>
+          {teamTrack.name !== 'Awaiting Draw...' ? (
+            <div className="glass-panel ws-panel" style={{ background: '#FFFFFF', border: '1px solid rgba(139,92,246,0.2)' }}>
+              <div className="panel-header" style={{ marginBottom: '12px' }}>
+                <h3 className="panel-title" style={{ color: 'var(--accent-1)' }}>{teamTrack.name} — Leaderboard</h3>
+              </div>
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
+                <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--accent-1)' }}>{teamTrack.teamsCount > 0 ? teamTrack.teamsCount : '--'}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Teams / Track</div>
+                </div>
+                <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>2</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>To Final Round</div>
+                </div>
+                <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--warning)' }}>{problemStatement.durationStr || '7h'}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Code</div>
+                </div>
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                <strong>Topic:</strong> {teamTrack.topic}
+              </p>
             </div>
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-              <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--accent-1)' }}>8</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Teams / Track</div>
-              </div>
-              <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>2</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>To Final Round</div>
-              </div>
-              <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--warning)' }}>7h</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Code</div>
-              </div>
+          ) : (
+            <div className="glass-panel ws-panel" style={{ background: 'rgba(139,92,246,0.05)', border: '1px dashed rgba(139,92,246,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
+              <Clock size={32} color="var(--accent-1)" style={{ marginBottom: '12px', opacity: 0.7 }} />
+              <h3 style={{ fontSize: '15px', color: 'var(--accent-1)', marginBottom: '8px' }}>Waiting for Track Draw</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>Your Problem Statement and Leaderboard will appear here once the Admin conducts the track draw.</p>
             </div>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              <strong>Topic:</strong> Medical Knowledge RAG System — Build a specialized medical knowledge retrieval system.
-            </p>
-          </div>
+          )}
+
 
           {/* Members */}
           <div className="glass-panel ws-panel">
             <div className="panel-header">
-              <h3 className="panel-title"><Users size={18} /> Team Members (3/5)</h3>
-              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px', border: '1px dashed var(--border-color)' }}>
-                  Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || 'A1B2C3'}</strong>
-                </span>
-                <button className="btn btn-text btn-sm" onClick={handleInviteLink}>
-                  {copied ? <Check size={16} /> : <Plus size={16} />} {copied ? 'Copied Link!' : 'Invite'}
+              <h3 className="panel-title"><Users size={18} /> Team Members ({(teamData && teamData.members) ? teamData.members.length : 0}/5)</h3>
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`}</strong></span>
+                <button 
+                  onClick={() => navigate('/participant/team-management')}
+                  style={{ fontSize: '13px', color: 'var(--primary)', padding: 0, background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                >
+                  <UserPlus size={14} style={{ marginRight: '4px' }}/> Manage / Invite
                 </button>
               </div>
             </div>
             <div className="member-list">
-              {[
-                { name: 'John Doe (You)', role: 'Team Leader', color: '8b5cf6' },
-                { name: 'Alice Smith', role: 'AI Engineer', color: '3b82f6' },
-                { name: 'Bob Chen', role: 'Backend Developer', color: '10b981' },
-              ].map(m => (
-                <div key={m.name} className="member-item">
-                  <img src={`https://ui-avatars.com/api/?name=${m.name.split(' ')[0]}+${m.name.split(' ')[1]}&background=${m.color}&color=fff`} alt={m.name} className="avatar-sm" />
+              {(teamData && teamData.members && teamData.members.length > 0) ? teamData.members.map((m, idx) => (
+                <div key={idx} className="member-item">
+                  <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', color: 'var(--text-secondary)', flexShrink: 0 }}>
+                    {(m.name || m.accountName) ? (m.name || m.accountName).charAt(0).toUpperCase() : '?'}
+                  </div>
                   <div className="member-info">
-                    <span className="member-name">{m.name}</span>
-                    <span className="member-role">{m.role}</span>
+                    <span className="member-name">{m.name || m.accountName || 'Unknown'} {(m.name || m.accountName) === localStorage.getItem('userEmail') ? '(You)' : ''}</span>
+                    <span className="member-role">{m.role || 'Member'}</span>
                   </div>
                 </div>
-              ))}
+              )) : teamData ? (
+                <div style={{ padding: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>No members found.</div>
+              ) : (
+                <div style={{ padding: '10px', fontSize: '13px', color: 'var(--text-secondary)' }}>Loading members...</div>
+              )}
             </div>
           </div>
 
@@ -277,14 +457,15 @@ const Workspace = () => {
               <button className="btn btn-text btn-sm" onClick={() => fileInputRef.current?.click()}><Upload size={16} /> Upload</button>
             </div>
             <div className="file-list">
+              {resources.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No resources uploaded yet.</p>}
               {resources.map(f => (
-                <div key={f.name} className="file-item">
+                <div key={f.id} className="file-item">
                   <div className={`file-icon ${f.type === 'PDF' ? 'pdf' : f.type === 'URL' ? 'link' : 'doc'}`}>{f.type}</div>
                   <div className="file-info">
                     <span className="file-name">{f.name}</span>
                     <span className="file-meta">{f.meta}</span>
                   </div>
-                  <button className="btn-icon"><MoreVertical size={16} /></button>
+                  <button className="btn-icon" onClick={() => deleteResource(f.id)} title="Delete file"><X size={16} color="var(--danger)" /></button>
                 </div>
               ))}
             </div>
@@ -308,10 +489,14 @@ const Workspace = () => {
               <input type="text" className="task-input" placeholder="Add a task and press Enter..." value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={handleAddTask} />
             </div>
             <div className="task-list">
+              {tasks.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No tasks added yet.</p>}
               {tasks.map(task => (
-                <div className={`task-item ${task.completed ? 'completed' : ''}`} key={task.id} onClick={() => toggleTask(task.id)}>
-                  <div className="checkbox">{task.completed && <CheckSquare size={14} color="#fff" />}</div>
-                  <span className="task-text">{task.text}</span>
+                <div className={`task-item ${task.completed ? 'completed' : ''}`} key={task.id} style={{ display: 'flex', alignItems: 'center' }}>
+                  <div className="checkbox" onClick={() => toggleTask(task.id)} style={{ flexShrink: 0, cursor: 'pointer' }}>
+                    {task.completed && <CheckSquare size={14} color="#fff" />}
+                  </div>
+                  <span className="task-text" onClick={() => toggleTask(task.id)} style={{ flexGrow: 1, cursor: 'pointer' }}>{task.text}</span>
+                  <button className="btn-icon" onClick={() => deleteTask(task.id)} title="Delete task" style={{ padding: '4px' }}><X size={14} color="var(--text-secondary)"/></button>
                 </div>
               ))}
             </div>
@@ -324,29 +509,19 @@ const Workspace = () => {
             <div className="panel-header">
               <h3 className="panel-title"><MessageSquare size={18} /> Team Chat</h3>
             </div>
-            <div className="chat-messages">
-              <div className="chat-bubble received">
-                <span className="chat-sender">Mentor Sarah</span>
-                <p>Hi team! I'm here to support you with LangGraph and RAG pipelines. Ping me anytime you need help!</p>
-                <span className="chat-time">07:15 AM</span>
-              </div>
-              <div className="chat-bubble sent">
-                <p>Thanks Mentor Sarah! We are currently setting up the pipeline, will ask about Ragas evaluation later.</p>
-                <span className="chat-time">07:32 AM</span>
-              </div>
-              <div className="chat-bubble received">
-                <span className="chat-sender">Alice Smith</span>
-                <p>PubMed dataset is ready, 2,400 records in total. John is working on the retrieval module right now.</p>
-                <span className="chat-time">08:10 AM</span>
-              </div>
-              <div className="chat-bubble sent">
-                <p>Got it! I am integrating the LangGraph agent, should be done before 10 AM.</p>
-                <span className="chat-time">08:15 AM</span>
-              </div>
+            <div className="chat-messages" style={{ overflowY: 'auto' }}>
+              {chatMessages.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No messages yet. Start chatting!</p>}
+              {chatMessages.map(msg => (
+                <div key={msg.id} className={`chat-bubble ${msg.isMine ? 'sent' : 'received'}`}>
+                  {!msg.isMine && <span className="chat-sender">{msg.sender}</span>}
+                  <p>{msg.text}</p>
+                  <span className="chat-time">{msg.time}</span>
+                </div>
+              ))}
             </div>
             <div className="chat-input-area">
-              <input type="text" placeholder="Type a message..." className="chat-input" />
-              <button className="btn-send"><Send size={16} /></button>
+              <input type="text" placeholder="Type a message..." className="chat-input" value={newChat} onChange={e => setNewChat(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChat()} />
+              <button className="btn-send" onClick={handleSendChat}><Send size={16} /></button>
             </div>
           </div>
         </div>

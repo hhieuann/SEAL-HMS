@@ -20,4 +20,5 @@ public class TeamResponse {
     private Integer eventRank;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Integer memberCount;
 }
