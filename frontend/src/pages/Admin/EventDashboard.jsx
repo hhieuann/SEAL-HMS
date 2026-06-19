@@ -220,7 +220,7 @@ const EventDashboard = () => {
                     <tr key={team.id}>
                       <td><div className="rank-badge" style={{ background: i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : 'var(--bg-active)', color: 'white' }}>{i + 1}</div></td>
                       <td><strong>{team.name}</strong><br/><small>{team.inviteCode}</small></td>
-                      <td>{team.members ? team.members.length : 0} / 5</td>
+                      <td>{team.memberCount || 0} / 5</td>
                       <td><span className="status-tag status-success">Active</span></td>
                     </tr>
                   ))}
