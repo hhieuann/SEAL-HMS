@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import { teamService } from '../../api/teamService';
 import './Workspace.css';
 
@@ -13,9 +12,9 @@ const Workspace = () => {
   const [teamTrack, setTeamTrack] = useState({ name: 'Awaiting Draw...', topic: 'TBD', color: 'var(--text-secondary)', teamsCount: 0 });
   const [teamData, setTeamData] = useState(null);
   const [eventData, setEventData] = useState(null);
-  const [currentRoundName, setCurrentRoundName] = useState('Qualifying Round');
+  const [currentRoundName, setCurrentRoundName] = useState('Main Event');
   const [problemStatement, setProblemStatement] = useState({
-    title: 'Qualifying Round Problem Statement',
+    title: 'Main Event Problem Statement',
     body: 'Build a specialized AI RAG (Retrieval-Augmented Generation) system based on a domain-specific dataset. The system must have mechanisms to detect and prevent hallucination, support multi-hop reasoning, and feature a user-friendly interface.',
     requirements: [
       'Use frameworks: LangGraph, OpenAI SDK, Gemini SDK, LlamaIndex, CrewAI, AutoGen, HuggingFace Agents.',
@@ -73,7 +72,7 @@ const Workspace = () => {
   };
 
   const handleInviteLink = () => {
-    const inviteCode = localStorage.getItem('p_teamInviteCode') || '123456';
+    const inviteCode = localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`;
     const link = `${window.location.origin}/participant/team-formation?inviteCode=${inviteCode}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
@@ -124,57 +123,73 @@ const Workspace = () => {
     const tId = localStorage.getItem('p_teamId');
     if (tId && tId !== 'temp') {
       teamService.getTeamDetails(tId)
-        .then(res => {
-          setTeamData(res.data);
-          localStorage.setItem('myTeamName', res.data.name);
+        .then(async res => {
+          let tData = res.data;
+          try {
+            const membersRes = await teamService.getMembers(tId);
+            // Only show members who are actively in the team
+            tData.members = (membersRes.data || []).filter(m => m.status !== 'INVITED');
+          } catch (e) {
+            tData.members = [];
+          }
+          setTeamData(tData);
+          localStorage.setItem('myTeamName', tData.name);
         })
         .catch(err => console.error(err));
     }
 
     const eId = localStorage.getItem('p_eventId');
-    mockService.getEvents().then(res => {
-      let evt;
-      if (eId) {
-        evt = res.data.find(e => e.id == eId);
-      }
-      if (!evt && res.data.length > 0) {
-        evt = res.data[0]; 
-      }
-      setEventData(evt);
-      if (evt && evt.rounds) {
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        const round = evt.rounds[roundIdx];
-        if (round) {
-          const rName = round.name || 'Qualifying Round';
-          setCurrentRoundName(rName);
-
-          let durationStr = '0h';
-          let diffMins = 0;
-          if (round.start && round.end) {
-             const [sh, sm] = round.start.split(':').map(Number);
-             const [eh, em] = round.end.split(':').map(Number);
-             diffMins = (eh * 60 + em) - (sh * 60 + sm);
-             if (diffMins > 0) {
-                 const h = Math.floor(diffMins / 60);
-                 const m = diffMins % 60;
-                 durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
-             }
+    teamService.getTeamDetails(tId).then(() => { // ensure teamService is loaded or just import eventService directly
+      import('../../api/eventService.js').then(({ eventService }) => {
+        eventService.getEvents().then(res => {
+          let evt;
+          if (eId) {
+            evt = res.data.find(e => e.id == eId);
           }
+          if (!evt && res.data.length > 0) {
+            evt = res.data[0]; 
+          }
+          setEventData(evt);
+          
+          if (evt) {
+            eventService.getEventRounds(evt.id).then(roundRes => {
+              const rounds = roundRes.data || [];
+              if (rounds.length > 0) {
+                const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+                const round = rounds[roundIdx] || rounds[0];
+                const rName = round.name || 'Main Event';
+                setCurrentRoundName(rName);
 
-          setProblemStatement(prev => {
-             const trackPart = prev.title.includes(' — ') ? prev.title.split(' — ')[1] : 'Track';
-             return {
-               ...prev,
-               title: `${rName} Problem Statement — ${trackPart}`,
-               releasedAt: `${evt.startDate || 'TBD'} — ${round.start || 'TBD'}`,
-               deadline: `${evt.startDate || 'TBD'} — ${round.end || 'TBD'}`,
-               remainingHours: durationStr,
-               durationStr: durationStr
-             };
-          });
-        }
-      }
-    }).catch(err => console.error(err));
+                let durationStr = '0h';
+                let diffMins = 0;
+                if (round.startTime && round.endTime) {
+                  const startD = new Date(round.startTime);
+                  const endD = new Date(round.endTime);
+                  diffMins = Math.floor((endD - startD) / (1000 * 60));
+                  if (diffMins > 0) {
+                    const h = Math.floor(diffMins / 60);
+                    const m = diffMins % 60;
+                    durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  }
+                }
+
+                setProblemStatement(prev => {
+                  const trackPart = prev.title.includes(' — ') ? prev.title.split(' — ')[1] : 'Track';
+                  return {
+                    ...prev,
+                    title: `${rName} Problem Statement — ${trackPart}`,
+                    releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
+                    deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
+                    remainingHours: durationStr,
+                    durationStr: durationStr
+                  };
+                });
+              }
+            }).catch(err => console.error("Failed to load rounds:", err));
+          }
+        }).catch(err => console.error(err));
+      });
+    });
 
     // Real-time listener
     const handleStorage = (e) => {
@@ -390,7 +405,7 @@ const Workspace = () => {
             <div className="panel-header">
               <h3 className="panel-title"><Users size={18} /> Team Members ({(teamData && teamData.members) ? teamData.members.length : 0}/5)</h3>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || 'A1B2C3'}</strong></span>
+                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`}</strong></span>
                 <button 
                   onClick={() => navigate('/participant/team-management')}
                   style={{ fontSize: '13px', color: 'var(--primary)', padding: 0, background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}

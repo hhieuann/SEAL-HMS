@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Search, Filter, Users, Star, TrendingUp, Code, Zap, Globe, Shield, ChevronRight, X, ExternalLink, Monitor, Trophy } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 
 const ICONS = [
   <Zap size={24} color="#3b82f6" />,
@@ -43,25 +42,37 @@ const PerformingTeams = () => {
         }
 
         const teamsList = rawTeams.data || rawTeams;
-        const enriched = (Array.isArray(teamsList) ? teamsList : []).map((team, i) => {
-          const trackInfo = teamTrackMap[team.name];
-          return {
-            id: team.id,
-            name: team.name,
-            project: team.project || '(No submission yet)',
-            track: trackInfo ? trackInfo.trackName : 'Not assigned',
-            trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
-            status: team.status || 'Active',
-            score: team.score ?? null,
-            members: team.members ? team.members.length : 0,
-            membersList: team.members || [],
-            icon: ICONS[i % ICONS.length],
-            inviteCode: team.inviteCode || 'N/A',
-          };
-        });
+        const mappedTeams = Array.isArray(teamsList) ? teamsList : [];
 
-        setTeams(enriched);
-        setLoading(false);
+        // Fetch members for each team concurrently
+        const membersPromises = mappedTeams.map(team => 
+          teamService.getMembers(team.id).then(res => res.data || []).catch(() => [])
+        );
+
+        Promise.all(membersPromises).then(allMembers => {
+          const enriched = mappedTeams.map((team, i) => {
+            const trackInfo = teamTrackMap[team.name];
+            const teamMembers = allMembers[i];
+            const activeMembers = teamMembers.filter(m => m.status !== 'INVITED');
+
+            return {
+              id: team.id,
+              name: team.name,
+              project: team.project || '(No submission yet)',
+              track: trackInfo ? trackInfo.trackName : 'Not assigned',
+              trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
+              status: team.status || 'Active',
+              score: team.score ?? null,
+              members: activeMembers.length,
+              membersList: activeMembers,
+              icon: ICONS[i % ICONS.length],
+              inviteCode: team.inviteCode || 'N/A',
+            };
+          });
+
+          setTeams(enriched);
+          setLoading(false);
+        });
       }).catch(err => {
         console.error("Failed to load real teams", err);
         setLoading(false);

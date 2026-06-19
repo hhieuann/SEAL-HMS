@@ -11,6 +11,11 @@ export const eventService = {
     return response.data;
   },
 
+  getEventRounds: async (eventId) => {
+    const response = await apiClient.get(`/api/v1/events/${eventId}/rounds`);
+    return response.data;
+  },
+
   createEventBatch: async (eventData) => {
     const response = await apiClient.post('/api/v1/events', eventData);
     return response.data;

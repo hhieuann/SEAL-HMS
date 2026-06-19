@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import { teamService } from '../../api/teamService';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
@@ -178,23 +177,6 @@ const RoundTransition = () => {
 
   const activeTrackData = trackStandings.find(t => t.id === activeTrack);
 
-  const handleRandomizeScores = async () => {
-    if (!activeTrackData || !event || !event.rounds) return;
-    const roundId = String(event.rounds[currentRoundIndex].id);
-    const key = `scores_${roundId}`;
-    const allScores = JSON.parse(localStorage.getItem(key) || '{}');
-    
-    activeTrackData.teams.forEach(t => {
-      if (t.teamId) {
-        if (!allScores[t.teamId]) allScores[t.teamId] = {};
-        allScores[t.teamId]['mock_judge_1'] = { total: Math.floor(Math.random() * 50) + 50 }; // 50-100
-      }
-    });
-    
-    localStorage.setItem(key, JSON.stringify(allScores));
-    window.location.reload();
-  };
-
   return (
     <>
       <div className="page-header">
@@ -209,9 +191,6 @@ const RoundTransition = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button onClick={handleRandomizeScores} className="btn btn-secondary" style={{ background: 'var(--bg-active)' }}>
-            🎲 Random Scores (Demo)
-          </button>
           <button className="btn btn-secondary">Export Results CSV</button>
           <button
             onClick={handleLock}

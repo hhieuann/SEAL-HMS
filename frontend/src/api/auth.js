@@ -5,19 +5,57 @@ const PARTICIPANT_KEYS = ['p_hasJoinedEvent', 'p_hasTeam', 'p_teamInviteCode', '
 export const authApi = {
   login: async (email, password) => {
     try {
-      const response = await apiClient.post('http://localhost:8080/api/v1/auth/login', { email, password });
-      const { token, role, accountId, email: returnedEmail } = response.data.data; // ApiResponse format
+      const response = await apiClient.post('/api/v1/auth/login', { email, password });
+      const { token, role, accountId, email: returnedEmail } = response.data.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('userRole', role);
       localStorage.setItem('userEmail', returnedEmail || email);
       
-      // Real backend now returns the accountId
       if (accountId) {
-          localStorage.setItem('accountId', accountId);
-          localStorage.setItem('userId', accountId); // Fallback for old code
+        localStorage.setItem('accountId', accountId);
+        localStorage.setItem('userId', accountId);
       } else {
-          localStorage.setItem('accountId', role === 'ADMIN' ? '2' : '1');
+        // Workaround: BE does not return accountId in login response.
+        // Fetch accounts list and match by email to resolve the real accountId.
+        try {
+          const accountsRes = await apiClient.get('/api/v1/accounts?status=ACTIVE');
+          const accounts = accountsRes.data?.data || [];
+          const matched = accounts.find(a => a.email === (returnedEmail || email));
+          if (matched) {
+            localStorage.setItem('accountId', matched.id);
+            localStorage.setItem('userId', matched.id);
+          }
+        } catch (e) {
+          // If accounts endpoint is not accessible (e.g. participant role), try PENDING too
+          try {
+            const accountsRes = await apiClient.get('/api/v1/accounts?status=PENDING');
+            const accounts = accountsRes.data?.data || [];
+            const matched = accounts.find(a => a.email === (returnedEmail || email));
+            if (matched) {
+              localStorage.setItem('accountId', matched.id);
+              localStorage.setItem('userId', matched.id);
+            }
+          } catch (e2) {
+            // TEMPORARY: hardcoded email→id map for local testing only.
+            // DELETE THIS when BE includes accountId in the login response.
+            const knownAccounts = {
+              'admin@seal-hms.local': 1,
+              'staff@seal-hms.local': 2,
+              'test@test.com': 3,
+              'steve23121993@gmail.com': 4,
+              'test1@gmail.com': 5,
+              'test2@gmail.com': 6,
+            };
+            const resolvedId = knownAccounts[returnedEmail || email];
+            if (resolvedId) {
+              localStorage.setItem('accountId', resolvedId);
+              localStorage.setItem('userId', resolvedId);
+            } else {
+              console.warn('Could not resolve accountId — BE login response missing accountId field.');
+            }
+          }
+        }
       }
       
       return { token, role, accountId };
@@ -28,7 +66,13 @@ export const authApi = {
 
   register: async (email, password, role = 'STUDENT') => {
     try {
-      const response = await apiClient.post('http://localhost:8080/api/v1/auth/register', { email, password, role });
+      const response = await apiClient.post('/api/v1/auth/register', { email, password, role });
+      // The register API returns the ID (unlike the login API). Store it immediately so new accounts work!
+      const data = response.data?.data || {};
+      if (data.id) {
+        localStorage.setItem('accountId', data.id);
+        localStorage.setItem('userId', data.id);
+      }
       return response.data;
     } catch (err) {
       throw err;

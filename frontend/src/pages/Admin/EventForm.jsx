@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Calendar, Target, Plus, X, AlertTriangle, Save, AlertCircle } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 
 const EventForm = () => {
   const navigate = useNavigate();
@@ -29,45 +28,56 @@ const EventForm = () => {
   // Load mock data if edit mode
   useEffect(() => {
     if (isEditMode) {
-      // Mock data for editing SEAL SP26
-      setFormData({
-        name: 'SEAL Hackathon Spring 2026',
-        type: 'Hackathon',
-        status: 'ongoing',
-        startDate: '2026-04-11',
-        endDate: '2026-04-12',
-        description: 'Mastering Domain-Specific AI RAG Systems',
-        subTopics: [
-          { id: 1, name: 'Legal Document RAG System', desc: 'Build a specialized RAG system for legal documents, contracts, and regulations.' },
-          { id: 2, name: 'Medical Knowledge RAG', desc: 'Medical knowledge retrieval system from specialized documents, assisting diagnosis.' },
-          { id: 3, name: 'E-commerce Product RAG', desc: 'RAG for product data, reviews, and smart shopping consultation.' },
-          { id: 4, name: 'Educational Content RAG', desc: 'Learning support system with in-depth educational content retrieval.' },
-          { id: 5, name: 'Financial Report RAG', desc: 'Analyze and retrieve financial reports, stocks, and market data.' },
-          { id: 6, name: 'Technical Documentation RAG', desc: 'RAG for technical docs, API docs, and software development guides.' }
-        ],
-        rounds: [
-          { 
-            id: 1, name: 'Qualifying Round', status: 'planned', start: '2026-04-11T09:00', end: '2026-04-11T16:00', 
-            criteria: [
-              { id: 1, name: 'Domain Accuracy and Relevance', weight: 30 },
-              { id: 2, name: 'Agentic RAG Architecture & Algorithms', weight: 30 },
-              { id: 3, name: 'Idea & Presentation', weight: 15 },
-              { id: 4, name: 'Execution & Creativity', weight: 15 },
-              { id: 5, name: 'UX & Interactive Interface', weight: 10 }
-            ] 
-          },
-          { 
-            id: 2, name: 'Finals', status: 'planned', start: '2026-04-12T08:00', end: '2026-04-12T15:00', 
-            criteria: [
-              { id: 6, name: 'Data Processing & Retrieval Quality', weight: 30 },
-              { id: 7, name: 'Reliability & Anti-hallucination', weight: 20 },
-              { id: 8, name: 'Agent Thinking & Multi-layer Processing', weight: 20 },
-              { id: 9, name: 'Practicality & Operational Efficiency', weight: 20 },
-              { id: 10, name: 'Scalability & Creativity', weight: 10 }
-            ] 
-          }
-        ]
-      });
+      const loadEvent = async () => {
+        try {
+          const { eventService } = await import('../../api/eventService.js');
+          const { trackService } = await import('../../api/trackService.js');
+          
+          const eventRes = await eventService.getEventDetails(eventId);
+          const rawEvent = eventRes.data;
+          if (!rawEvent) return;
+
+          const roundsRes = await eventService.getEventRounds(eventId);
+          const rawRounds = roundsRes.data || [];
+
+          const tracksRes = await trackService.getTracksByEvent(eventId);
+          const tracks = tracksRes.data || [];
+          const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || []));
+          const allTopics = await Promise.all(topicsPromises);
+          const subTopics = allTopics.flat().map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
+
+          setFormData({
+            name: rawEvent.name || '',
+            type: rawEvent.type || 'Hackathon',
+            status: rawEvent.status?.toLowerCase() || 'planned',
+            startDate: rawEvent.startDate || '',
+            endDate: rawEvent.endDate || '',
+            description: rawEvent.description || '',
+            subTopics: subTopics,
+            rounds: rawRounds.map(r => {
+              let startStr = r.startTime;
+              if (Array.isArray(startStr)) {
+                startStr = `${startStr[0]}-${String(startStr[1]).padStart(2, '0')}-${String(startStr[2]).padStart(2, '0')}T${String(startStr[3] || 0).padStart(2, '0')}:${String(startStr[4] || 0).padStart(2, '0')}`;
+              }
+              let endStr = r.endTime;
+              if (Array.isArray(endStr)) {
+                endStr = `${endStr[0]}-${String(endStr[1]).padStart(2, '0')}-${String(endStr[2]).padStart(2, '0')}T${String(endStr[3] || 0).padStart(2, '0')}:${String(endStr[4] || 0).padStart(2, '0')}`;
+              }
+              return { 
+                id: r.id, 
+                name: r.name, 
+                status: r.status?.toLowerCase() || 'planned', 
+                start: startStr || '', 
+                end: endStr || '', 
+                criteria: [] // Pending BE support for criteria API
+              };
+            })
+          });
+        } catch (e) {
+          console.error("Failed to load event for editing:", e);
+        }
+      };
+      loadEvent();
     }
   }, [eventId, isEditMode]);
 
@@ -118,13 +128,33 @@ const EventForm = () => {
       const response = await eventService.createEventBatch(requestData);
       console.log("Real API saved event:", response);
 
-      // (Optional) 3. Create Criteria sequentially since backend Batch doesn't support Criteria yet
-      // This is slightly tricky without knowing exact returned round IDs, 
-      // so for now we just navigate to dashboard and let Admin add criteria later if needed.
-
-      localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData)); // Keep for frontend mock fallback in other pages
-      // response is ApiResponse format, so actual entity is in response.data
       const createdEventId = response.data?.id || 1;
+
+      // FIX: Backend Batch API drops topics! We must manually save them.
+      if (formData.subTopics && formData.subTopics.length > 0) {
+        try {
+          const { trackService } = await import('../../api/trackService.js');
+          const tracksRes = await trackService.getTracksByEvent(createdEventId);
+          const tracks = tracksRes.data || [];
+          let generalTrack = tracks.find(t => t.name === 'General Track');
+          
+          if (!generalTrack) {
+             const newTrack = await trackService.createTrack(createdEventId, { name: 'General Track', description: 'Default track for the event' });
+             generalTrack = newTrack.data;
+          }
+
+          if (generalTrack && generalTrack.id) {
+             for (const topic of formData.subTopics) {
+                await trackService.createTopic(generalTrack.id, { name: topic.name, description: topic.desc });
+             }
+          }
+        } catch(topicErr) {
+           console.error("Failed to create topics sequentially", topicErr);
+        }
+      }
+
+      localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData)); 
+      
       navigate(`/admin/event/${createdEventId}/dashboard`);
     } catch (err) {
       console.error(err);
