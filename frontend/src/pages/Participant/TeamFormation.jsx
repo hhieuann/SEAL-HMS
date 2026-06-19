@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import './Workspace.css';
 
 const TeamFormation = () => {
@@ -29,19 +28,20 @@ const TeamFormation = () => {
 
     try {
       const { teamService } = await import('../../api/teamService.js');
-      // Using eventId=1 and leaderAccountId=1 for Phase 1 integration since auth is not fully set up
-      const eventId = 1; 
+      const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
+      const leaderAccountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
       const response = await teamService.createTeam(eventId, { 
         name: teamName, 
-        leaderAccountId: 1 
+        leaderAccountId,
       });
       
-      // Backend createTeam might not return inviteCode immediately if we haven't implemented it in DB,
-      // but let's assume it returns { id, name, inviteCode } or we generate a dummy one for now
-      const teamResponseData = response.data || response; // Support both wrapped and unwrapped just in case
-      localStorage.setItem('p_teamInviteCode', teamResponseData.inviteCode || 'CODE123');
-      localStorage.setItem('myTeamName', teamResponseData.name || teamName);
-      localStorage.setItem('p_teamId', teamResponseData.id || '1');
+      // The API returns { success: true, data: { id, name, ... } }
+      // teamService returns the full response.data block.
+      const teamResponseData = response.data || response; 
+      const realData = teamResponseData.data || teamResponseData; // Extract inner data
+      localStorage.setItem('p_teamInviteCode', realData.inviteCode || `SEAL${realData.id}`);
+      localStorage.setItem('myTeamName', realData.name || teamName);
+      localStorage.setItem('p_teamId', realData.id || '1');
       localStorage.setItem('p_hasJoinedEvent', 'true');
       localStorage.setItem('p_hasTeam', 'true');
       localStorage.setItem('p_isLeader', 'true');
@@ -59,19 +59,29 @@ const TeamFormation = () => {
   const handleJoinTeam = async (e) => {
     e.preventDefault();
     setError('');
-    const inviteCode = e.target[0].value;
+    const inviteCode = e.target[0].value.trim();
     setIsSubmitting(true);
 
     try {
-      const currentUser = localStorage.getItem('userEmail') || 'Current User';
-      await mockService.joinTeam(inviteCode, currentUser);
+      const { teamService } = await import('../../api/teamService.js');
+      const accountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
       
+      const teamIdMatch = inviteCode.match(/^SEAL(\d+)$/i);
+      if (!teamIdMatch) throw new Error('Invalid invite code. Ensure you use the exact code provided by your leader (e.g. SEAL6)');
+      
+      const teamId = parseInt(teamIdMatch[1]);
+
+      // Use real backend API to send an invite request
+      await teamService.inviteMember(teamId, { accountId });
+      
+      // User is now in 'INVITED' status. They must wait for the leader to accept.
       localStorage.setItem('p_hasJoinedEvent', 'true');
       localStorage.setItem('p_hasTeam', 'true'); // Pending state
+      localStorage.setItem('p_teamInviteCode', inviteCode.toUpperCase());
       
       setActiveTab('waiting');
     } catch (err) {
-      setError(err.message || 'Failed to send request');
+      setError(err.response?.data?.message || err.message || 'Failed to join team');
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
     } finally {

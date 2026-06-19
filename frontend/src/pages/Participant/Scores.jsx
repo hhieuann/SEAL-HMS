@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Trophy, Star, Award, MessageSquare, Target, TrendingUp, Medal, Clock, AlertCircle } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import './Workspace.css';
 
 const Scores = () => {
@@ -24,8 +23,14 @@ const Scores = () => {
         const teamId = localStorage.getItem('p_teamId');
         if (!teamId) { setLoading(false); return; }
 
-        const eventsRes = await mockService.getEvents();
+        const { eventService } = await import('../../api/eventService');
+        const eventsRes = await eventService.getEvents();
         const evt = eventsRes.data[0];
+        
+        if (evt) {
+          const roundsRes = await eventService.getEventRounds(evt.id);
+          evt.rounds = roundsRes.data || [];
+        }
         setEvent(evt);
         
         const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
@@ -33,123 +38,28 @@ const Scores = () => {
         const round = evt?.rounds?.[roundIdx];
         setCurrentRound(round);
 
-        const teamRes = await mockService.getTeamDetails(teamId);
-        const myTeam = teamRes.data;
-        setTeamData(myTeam);
+        // Fetch team details (if we had a real public endpoint for it)
+        // For now, we simulate basic team data from localStorage so the UI doesn't crash
+        const teamName = localStorage.getItem('p_teamName') || 'My Team';
+        setTeamData({ id: teamId, name: teamName });
 
         if (!round) { setLoading(false); return; }
 
-        const roundId = round.id || String(roundIdx);
-        const allScoresRes = await mockService.getAllScores(roundId);
-        const allScores = allScoresRes.data || {};
-
-        // Calculate my team's detailed scores
-        const myJudgesScores = allScores[teamId] ? Object.values(allScores[teamId]) : [];
-        if (myJudgesScores.length > 0) {
-          // Average total
-          const totalAvg = myJudgesScores.reduce((s, j) => s + (j.total || 0), 0) / myJudgesScores.length;
-          setMyScore(Math.round(totalAvg * 10) / 10);
-
-          // Average criteria
-          const cAvg = {};
-          round.criteria?.forEach(c => {
-            const key = c.id || c.name;
-            let sum = 0;
-            myJudgesScores.forEach(j => {
-              sum += (j.criteriaScores?.[key] || 0);
-            });
-            cAvg[key] = Math.round((sum / myJudgesScores.length) * 10) / 10;
-          });
-          setCriteriaAvg(cAvg);
-
-          // Feedbacks
-          const fbs = myJudgesScores.filter(j => j.feedback?.trim()).map(j => ({
-            judgeId: j.judgeId,
-            text: j.feedback
-          }));
-          setFeedbacks(fbs);
+        // Placeholder for future backend Leaderboard / Scores API
+        setMyScore(0);
+        setCriteriaAvg({});
+        setFeedbacks([]);
+        setLeaderboard([]);
+        
+        if (roundIdx > 0) {
+          setIsFinals(true);
+          setTrackName('Finals');
+        } else {
+          setTrackName('Current Track');
         }
 
-        // Leaderboard Logic
-        const trackDrawStr = localStorage.getItem('trackDraw');
-        const teamsRes = await mockService.getTeams();
-        const teamsList = teamsRes.data;
-
-        if (trackDrawStr) {
-          const drawn = JSON.parse(trackDrawStr);
-          
-          let foundTrack = null;
-          
-          // Rebuild all standings
-          drawn.forEach((track) => {
-            const teamEntries = (track.teams || []).map(teamName => {
-              const teamObj = teamsList.find(t => t.name === teamName);
-              const tId = teamObj?.id;
-              const judgeEntries = tId && allScores[tId] ? Object.values(allScores[tId]) : [];
-              const avgScore = judgeEntries.length > 0
-                ? Math.round((judgeEntries.reduce((s, j) => s + (j.total || 0), 0) / judgeEntries.length) * 10) / 10
-                : null;
-              return { team: teamName, teamId: tId, score: avgScore, university: teamObj?.university || 'Unknown' };
-            });
-
-            teamEntries.sort((a, b) => {
-              if (a.score === null && b.score === null) return 0;
-              if (a.score === null) return 1;
-              if (b.score === null) return -1;
-              return b.score - a.score;
-            });
-
-            const cutoff = 2;
-            const ranked = teamEntries.map((entry, idx) => {
-              const rank = idx + 1;
-              let status = idx < cutoff ? 'Promoted' : 'Eliminated';
-              return { ...entry, rank, status };
-            });
-
-            if (ranked.find(r => r.teamId == teamId)) {
-              foundTrack = {
-                name: `${track.name}${track.subTopic ? ' — ' + track.subTopic.name : ''}`,
-                teams: ranked
-              };
-            }
-          });
-
-          // If finals, gather all teams who have scores
-          if (roundIdx > 0) {
-            setIsFinals(true);
-            setTrackName('Finals');
-            
-            const allFinalists = [];
-            teamsList.forEach(t => {
-               const jE = allScores[t.id] ? Object.values(allScores[t.id]) : [];
-               if (jE.length > 0) {
-                  const avg = Math.round((jE.reduce((s, j) => s + (j.total || 0), 0) / jE.length) * 10) / 10;
-                  allFinalists.push({ team: t.name, teamId: t.id, score: avg, university: t.university || 'Unknown' });
-               } else if (foundTrack && foundTrack.teams.find(rt => rt.teamId == t.id && rt.status === 'Promoted')) {
-                  // Keep them in list with null score if they advanced but not scored yet
-                  allFinalists.push({ team: t.name, teamId: t.id, score: null, university: t.university || 'Unknown' });
-               }
-            });
-            allFinalists.sort((a, b) => {
-              if (a.score === null && b.score === null) return 0;
-              if (a.score === null) return 1;
-              if (b.score === null) return -1;
-              return b.score - a.score;
-            });
-            const rankedFinals = allFinalists.map((entry, idx) => {
-               let status = idx < 3 ? 'Winner' : 'Participant';
-               return { ...entry, rank: idx + 1, status };
-            });
-            setLeaderboard(rankedFinals);
-          } else {
-            if (foundTrack) {
-              setTrackName(foundTrack.name);
-              setLeaderboard(foundTrack.teams);
-            }
-          }
-        }
       } catch (e) {
-        console.error(e);
+        console.error("Failed to load scores data:", e);
       } finally {
         setLoading(false);
       }

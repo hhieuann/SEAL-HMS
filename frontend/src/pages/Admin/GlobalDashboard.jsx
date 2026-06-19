@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Users, FolderKanban, ShieldCheck, ArrowRight, Activity, Code, Calendar, Server, Settings, Mail, UserPlus, Database, PieChart, CheckCircle2 } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 import './EventDashboard.css';
 
 const GlobalDashboard = () => {

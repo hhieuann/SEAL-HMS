@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
-import { mockService } from '../../api/mockService';
+import { eventService } from '../../api/eventService';
 import './JudgePanel.css';
 
 const JudgePanel = () => {
@@ -27,8 +27,12 @@ const JudgePanel = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const eventsRes = await mockService.getEvents();
+        const eventsRes = await eventService.getEvents();
         const evt = eventsRes?.data?.[0] || null;
+        if (evt) {
+          const roundsRes = await eventService.getEventRounds(evt.id);
+          evt.rounds = roundsRes.data || [];
+        }
         setEvent(evt);
 
         const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
