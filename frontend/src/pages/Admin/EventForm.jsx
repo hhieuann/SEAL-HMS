@@ -24,6 +24,9 @@ const EventForm = () => {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const [initialTopics, setInitialTopics] = useState([]);
+  const [initialRounds, setInitialRounds] = useState([]);
 
   // Load mock data if edit mode
   useEffect(() => {
@@ -46,6 +49,7 @@ const EventForm = () => {
           const allTopics = await Promise.all(topicsPromises);
           const subTopics = allTopics.flat().map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
 
+          setInitialTopics(subTopics);
           setFormData({
             name: rawEvent.name || '',
             type: rawEvent.type || 'Hackathon',
@@ -73,6 +77,7 @@ const EventForm = () => {
               };
             })
           });
+          setInitialRounds(rawRounds.map(r => ({ id: r.id })));
         } catch (e) {
           console.error("Failed to load event for editing:", e);
         }
@@ -125,57 +130,96 @@ const EventForm = () => {
 
       // 2. Call Create or Update API
       const { eventService } = await import('../../api/eventService.js');
+      const { trackService } = await import('../../api/trackService.js');
       let response;
+      
       if (isEditMode) {
         response = await eventService.updateEvent(eventId, requestData);
-        // Explicitly update existing rounds since updateEvent ignores them
-        for (const fr of formData.rounds) {
-          if (fr.id && fr.id < 1000000000) {
-            try {
-              await eventService.updateRound(fr.id, {
-                name: fr.name,
-                startTime: fr.start || null,
-                endTime: fr.end || null,
-                promotionTopN: 10
-              });
-            } catch (err) {
-              console.error("Failed to update round", fr.id, err);
-            }
+        
+        // --- ROUNDS SYNC ---
+        const currentRoundIds = formData.rounds.map(r => r.id);
+        
+        // 1. Delete removed rounds
+        for (const ir of initialRounds) {
+          if (!currentRoundIds.includes(ir.id)) {
+             try { await eventService.deleteRound(ir.id); } catch(e) { console.error('Failed to delete round', e); }
           }
         }
+        
+        // 2. Update existing & Create new rounds
+        for (const fr of formData.rounds) {
+          const roundPayload = {
+            name: fr.name,
+            startTime: fr.start || null,
+            endTime: fr.end || null,
+            promotionTopN: 10
+          };
+          if (fr.id && fr.id < 1000000000) {
+            try { await eventService.updateRound(fr.id, roundPayload); } catch(e) { console.error('Failed to update round', e); }
+          } else {
+            try { await eventService.createRound(eventId, roundPayload); } catch(e) { console.error('Failed to create round', e); }
+          }
+        }
+
+        // --- TOPICS SYNC ---
+        const tracksRes = await trackService.getTracksByEvent(eventId);
+        let generalTrack = tracksRes.data?.find(t => t.name === 'General Track');
+        if (!generalTrack) {
+           const newTrack = await trackService.createTrack(eventId, { name: 'General Track', description: 'Default track for the event' });
+           generalTrack = newTrack.data;
+        }
+
+        if (generalTrack && generalTrack.id) {
+           const currentTopicIds = formData.subTopics.map(t => t.id);
+           
+           // 1. Delete removed topics
+           for (const it of initialTopics) {
+             if (!currentTopicIds.includes(it.id)) {
+                try { await trackService.deleteTopic(it.id); } catch(e) { console.error('Failed to delete topic', e); }
+             }
+           }
+           
+           // 2. Update existing & Create new topics
+           for (const ft of formData.subTopics) {
+             if (ft.id && ft.id < 1000000000) {
+                try { await trackService.updateTopic(ft.id, { name: ft.name, description: ft.desc }); } catch(e) { console.error('Failed to update topic', e); }
+             } else {
+                try { await trackService.createTopic(generalTrack.id, { name: ft.name, description: ft.desc }); } catch(e) { console.error('Failed to create topic', e); }
+             }
+           }
+        }
+        
       } else {
         response = await eventService.createEventBatch(requestData);
-      }
-      console.log("Real API saved event:", response);
+        const savedEventId = response.data?.id || eventId;
 
-      const savedEventId = response.data?.id || eventId;
+        // FIX: Backend Batch API drops topics! We must manually save them for new events.
+        if (formData.subTopics && formData.subTopics.length > 0) {
+          try {
+            const tracksRes = await trackService.getTracksByEvent(savedEventId);
+            let generalTrack = tracksRes.data?.find(t => t.name === 'General Track');
+            
+            if (!generalTrack) {
+               const newTrack = await trackService.createTrack(savedEventId, { name: 'General Track', description: 'Default track for the event' });
+               generalTrack = newTrack.data;
+            }
 
-      // FIX: Backend Batch API drops topics! We must manually save them.
-      if (formData.subTopics && formData.subTopics.length > 0) {
-        try {
-          const { trackService } = await import('../../api/trackService.js');
-          const tracksRes = await trackService.getTracksByEvent(savedEventId);
-          const tracks = tracksRes.data || [];
-          let generalTrack = tracks.find(t => t.name === 'General Track');
-          
-          if (!generalTrack) {
-             const newTrack = await trackService.createTrack(savedEventId, { name: 'General Track', description: 'Default track for the event' });
-             generalTrack = newTrack.data;
+            if (generalTrack && generalTrack.id) {
+               for (const topic of formData.subTopics) {
+                  await trackService.createTopic(generalTrack.id, { name: topic.name, description: topic.desc });
+               }
+            }
+          } catch(topicErr) {
+             console.error("Failed to create topics sequentially", topicErr);
           }
-
-          if (generalTrack && generalTrack.id) {
-             for (const topic of formData.subTopics) {
-                await trackService.createTopic(generalTrack.id, { name: topic.name, description: topic.desc });
-             }
-          }
-        } catch(topicErr) {
-           console.error("Failed to create topics sequentially", topicErr);
         }
       }
 
+      console.log("Event saved successfully");
+      const finalEventId = isEditMode ? eventId : (response.data?.id || eventId);
+
       localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData)); 
-      
-      navigate(`/admin/event/${savedEventId}/dashboard`);
+      navigate(`/admin/event/${finalEventId}/dashboard`);
     } catch (err) {
       console.error(err);
       setError('Failed to create event with real API');
