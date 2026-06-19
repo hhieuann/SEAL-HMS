@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
+import { authApi } from '../../api/auth';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -17,41 +18,35 @@ const Login = () => {
     david: { name: 'David Kim', type: 'expert', roles: ['Mentor'], avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     
     const email = e.target[0].value;
     const password = e.target[1].value;
 
-    // Fail Case Simulation: Incorrect password for demo account
-    if (email === 'demo@seal.vn' && password !== 'demo1234') {
-      setError('Invalid email or password. Please try again.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
-    // Unhappy Case Simulation: If user explicitly types 'error' in email
-    if (email.includes('error')) {
-      setError('Invalid email or password. Please try again.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const user = accounts[accountId];
+    try {
+      // Call real backend API
+      const { role } = await authApi.login(email, password);
+      
+      // Giả lập lưu currentUser để tương thích giao diện cũ
+      const user = accounts[accountId] || accounts['participant'];
       localStorage.setItem('currentUser', JSON.stringify(user));
 
-      if (user.type === 'admin') navigate('/admin/dashboard');
-      else if (user.type === 'expert') navigate('/expert/dashboard');
+      // Navigate based on actual role returned from Spring Boot
+      if (role === 'ADMIN') navigate('/admin/dashboard');
+      else if (role === 'JUDGE' || role === 'MENTOR') navigate('/expert/dashboard');
       else navigate('/participant');
       
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid email or password.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+    } finally {
       setIsSubmitting(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -76,23 +71,13 @@ const Login = () => {
       )}
       
       <form onSubmit={handleLogin} className="auth-form">
-        <div className="form-group">
-          <label>Email Address</label>
-          <input type="email" placeholder="demo@seal.vn" defaultValue="demo@seal.vn" style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
+        <div className="form-floating">
+          <input type="email" id="email" placeholder=" " style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
+          <label htmlFor="email">Email Address</label>
         </div>
-        <div className="form-group">
-          <label>Password</label>
-          <input type="password" placeholder="••••••••" defaultValue="demo1234" />
-        </div>
-        <div className="form-group">
-          <label>Simulate Account (Demo)</label>
-          <select className="form-select" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            <option value="sarah">Sarah Nguyen (Dual Role: Judge & Mentor)</option>
-            <option value="alan">Alan Turing (Judge Only)</option>
-            <option value="david">David Kim (Mentor Only)</option>
-            <option value="admin">System Admin</option>
-            <option value="participant">Participant (Team)</option>
-          </select>
+        <div className="form-floating">
+          <input type="password" id="password" placeholder=" " />
+          <label htmlFor="password">Password</label>
         </div>
         <button type="submit" className="btn btn-primary full-width mt-4" disabled={isSubmitting}>
           {isSubmitting ? 'Authenticating...' : 'Login'}
