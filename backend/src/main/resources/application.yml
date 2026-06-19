@@ -4,7 +4,7 @@ spring:
   config:
     import: "optional:file:./.env.properties"
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seal_hms}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seal_hms}?options=-c%20TimeZone=UTC
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
   jpa:

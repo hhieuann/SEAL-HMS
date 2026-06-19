@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Plus, ChevronDown, ChevronUp, Edit2, Trash2, Settings, Target, Check } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 
 const EventsConfig = () => {
   const navigate = useNavigate();
@@ -10,31 +9,53 @@ const EventsConfig = () => {
 
   useEffect(() => {
     import('../../api/eventService.js').then(({ eventService }) => {
-      eventService.getEvents().then(res => {
-        // ApiResponse format: { message: "...", data: [...] }
-        const eventList = res.data || [];
-        if (eventList.length > 0) {
-          const mappedEvents = eventList.map(rawEvent => ({
-            ...rawEvent,
-            subTopics: rawEvent.tracks?.flatMap(t => t.topics || []) || [],
-            rounds: (rawEvent.rounds || []).map(r => {
-              let startStr = r.startTime;
-              if (Array.isArray(startStr)) {
-                const [y, m, d, h, min, s] = startStr;
-                startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
+      import('../../api/trackService.js').then(({ trackService }) => {
+        eventService.getEvents().then(async res => {
+          const eventList = res.data || [];
+          if (eventList.length > 0) {
+            
+            // Concurrently fetch rounds and topics for every event
+            const enrichedEvents = await Promise.all(eventList.map(async rawEvent => {
+              try {
+                // Fetch rounds
+                const roundsRes = await eventService.getEventRounds(rawEvent.id);
+                const fetchedRounds = roundsRes.data || [];
+                
+                // Fetch tracks and their topics
+                const tracksRes = await trackService.getTracksByEvent(rawEvent.id);
+                const tracks = tracksRes.data || [];
+                const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || []));
+                const allTopicsArrays = await Promise.all(topicsPromises);
+                const fetchedTopics = allTopicsArrays.flat();
+
+                return {
+                  ...rawEvent,
+                  subTopics: fetchedTopics,
+                  rounds: fetchedRounds.map(r => {
+                    let startStr = r.startTime;
+                    if (Array.isArray(startStr)) {
+                      const [y, m, d, h, min, s] = startStr;
+                      startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
+                    }
+                    let endStr = r.endTime;
+                    if (Array.isArray(endStr)) {
+                      const [y, m, d, h, min, s] = endStr;
+                      endStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
+                    }
+                    return { ...r, start: startStr, end: endStr };
+                  })
+                };
+              } catch (e) {
+                console.error("Failed to enrich event data", e);
+                return { ...rawEvent, subTopics: [], rounds: [] };
               }
-              let endStr = r.endTime;
-              if (Array.isArray(endStr)) {
-                const [y, m, d, h, min, s] = endStr;
-                endStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
-              }
-              return { ...r, start: startStr, end: endStr };
-            })
-          }));
-          setEvents(mappedEvents);
-          setExpandedEvent(mappedEvents[0].id);
-        }
-      }).catch(err => console.error("Failed to load real events:", err));
+            }));
+
+            setEvents(enrichedEvents);
+            setExpandedEvent(enrichedEvents[0].id);
+          }
+        }).catch(err => console.error("Failed to load real events:", err));
+      });
     });
   }, []);
 

@@ -4,7 +4,6 @@ import { Shuffle, CheckCircle, AlertCircle, ChevronRight, Users, Tag, Lock, Unlo
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { trackService } from '../../api/trackService';
-import { mockService } from '../../api/mockService';
 
 const TrackDraw = () => {
   const navigate = useNavigate();
@@ -37,15 +36,20 @@ const TrackDraw = () => {
           return;
         }
 
-        // Mock subTopics if the backend doesn't provide them yet (Phase 1 limitation)
-        let realSubTopics = activeEvent.tracks?.flatMap(t => t.topics || []) || [];
+        let realSubTopics = [];
+        try {
+           const tracksRes = await trackService.getTracksByEvent(parsedEventId);
+           const tracks = tracksRes.data || [];
+           const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(res => res.data || []));
+           const allTopics = await Promise.all(topicsPromises);
+           realSubTopics = allTopics.flat();
+        } catch (e) {
+           console.error("Failed to load tracks/topics", e);
+        }
+
         if (realSubTopics.length === 0) {
-          realSubTopics = [
-            { id: 1, name: 'AI & Data Science', desc: 'Build intelligent systems' },
-            { id: 2, name: 'Fintech & Blockchain', desc: 'Disrupt financial services' },
-            { id: 3, name: 'Green Tech', desc: 'Sustainable solutions' },
-            { id: 4, name: 'EdTech', desc: 'Education technology' }
-          ];
+          setIsConfigured(false);
+          return;
         }
 
         setSubTopics(realSubTopics);
@@ -57,29 +61,42 @@ const TrackDraw = () => {
 
         const drawResStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
         if (drawResStr && localStorage.getItem(`trackDrawConfirmed_${parsedEventId}`) === 'true') {
-          setTracks(JSON.parse(drawResStr));
-          setConfirmed(true);
-          setTopicDrawn(true);
-          setTeamsAssigned(true);
-          setUnassignedTeams([]);
-        } else {
-          const trackColors = [
-            { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
-            { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
-            { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
-            { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
-          ];
-
-          const initTracks = realSubTopics.map((st, i) => ({
-            id: `T${i}`, 
-            name: `Track ${String.fromCharCode(65 + i)}`, 
-            ...trackColors[i % trackColors.length], 
-            subTopic: null, 
-            teams: [] 
-          }));
-          setTracks(initTracks);
-          setUnassignedTeams(realTeams);
+          const savedTracks = JSON.parse(drawResStr);
+          // Cross-check: only restore if the saved teams actually exist in DB
+          const savedTeamIds = savedTracks.flatMap(t => t.teams.map(tm => tm.id)).filter(Boolean);
+          const realTeamIds = realTeams.map(t => t.id);
+          const isStale = savedTeamIds.length > 0 && !savedTeamIds.some(id => realTeamIds.includes(id));
+          
+          if (isStale) {
+            // Stale cache from a different event — clear it
+            localStorage.removeItem(`trackDraw_${parsedEventId}`);
+            localStorage.removeItem(`trackDrawConfirmed_${parsedEventId}`);
+          } else {
+            setTracks(savedTracks);
+            setConfirmed(true);
+            setTopicDrawn(true);
+            setTeamsAssigned(true);
+            setUnassignedTeams([]);
+            return;
+          }
         }
+        
+        const trackColors = [
+          { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
+          { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
+          { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
+          { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
+        ];
+
+        const initTracks = realSubTopics.map((st, i) => ({
+          id: `T${i}`, 
+          name: `Track ${String.fromCharCode(65 + i)}`, 
+          ...trackColors[i % trackColors.length], 
+          subTopic: null, 
+          teams: [] 
+        }));
+        setTracks(initTracks);
+        setUnassignedTeams(realTeams);
 
       } catch (err) {
         console.error(err);
@@ -176,8 +193,7 @@ const TrackDraw = () => {
       }
 
       setConfirmed(true);
-      // Still save locally for quick display on UI reload
-      mockService.saveTrackDraw(targetEventId, tracks);
+      // Backend automatically persists the track assignments now
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {

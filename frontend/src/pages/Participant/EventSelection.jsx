@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info } from 'lucide-react';
-import { mockService } from '../../api/mockService';
 
 // Simulate: has the track draw been completed by Admin?
 const DRAW_DONE = localStorage.getItem('trackDraw') !== null;
@@ -15,14 +14,13 @@ const EventSelection = () => {
   const [totalTeams, setTotalTeams] = useState(0);
   const [registeredEventId, setRegisteredEventId] = useState(null);
   const [registeringEventId, setRegisteringEventId] = useState(null);
+  const [hasTeam, setHasTeam] = useState(localStorage.getItem('p_hasTeam') === 'true');
 
   useEffect(() => {
     import('../../api/eventService.js').then(({ eventService }) => {
       eventService.getEvents().then(res => {
         const mappedEvents = (res.data || []).map(evt => {
-          const localStateStr = localStorage.getItem(`eventMockState_${evt.id}`);
-          const localState = localStateStr ? JSON.parse(localStateStr) : { registrationOpen: true };
-          return { ...evt, registrationOpen: localState.registrationOpen };
+          return { ...evt, registrationOpen: evt.registrationOpen !== false }; // Default true unless explicitly false in API
         });
         setEvents(mappedEvents);
       });
@@ -30,6 +28,12 @@ const EventSelection = () => {
     import('../../api/teamService.js').then(({ teamService }) => {
       teamService.getTeamsByEvent(1).then(res => setTotalTeams(res.data?.length || 0)).catch(() => setTotalTeams(0));
     });
+    
+    const handleStateUpdate = () => {
+      setHasTeam(localStorage.getItem('p_hasTeam') === 'true');
+    };
+    window.addEventListener('participant_state_updated', handleStateUpdate);
+    return () => window.removeEventListener('participant_state_updated', handleStateUpdate);
   }, []);
 
   const handleRegister = (eventId) => {
@@ -98,7 +102,7 @@ const EventSelection = () => {
                 {/* Action Area */}
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
                   {isJoinedThisEvent ? (
-                    !localStorage.getItem('p_hasTeam') ? (
+                    !hasTeam ? (
                       <div style={{ padding: '20px 24px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
                         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Users size={22} color="var(--primary)" />
@@ -210,7 +214,7 @@ const EventSelection = () => {
                 {/* Action Area for Upcoming */}
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '24px' }}>
                   {isJoinedThisEvent ? (
-                    !localStorage.getItem('p_hasTeam') ? (
+                    !hasTeam ? (
                       <div style={{ padding: '20px 24px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
                         <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <Users size={22} color="var(--primary)" />
