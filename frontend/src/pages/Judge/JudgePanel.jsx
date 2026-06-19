@@ -1,315 +1,424 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ExternalLink, Play, FileText, Code, LayoutGrid, AlertTriangle, CheckCircle, AlertCircle, Shield, BookOpen, Target } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw } from 'lucide-react';
+import { teamService } from '../../api/teamService';
+import { scoreService, submissionService, criterionService } from '../../api/scoreService';
+import { mockService } from '../../api/mockService';
 import './JudgePanel.css';
 
-const DEFAULT_RUBRICS = {
-  qualifying: {
-    label: 'Qualifying Round',
-    labelEn: 'Qualifying Round',
-    color: 'var(--primary)',
-    criteria: [
-      { key: 'domainAccuracy', label: 'Domain Accuracy & Relevance', labelVi: 'Domain Accuracy & Relevance', weight: '30%', max: 30, placeholder: 'Evaluate accuracy and relevance to the specific domain...' },
-      { key: 'ragArch', label: 'Agentic RAG Architecture', labelVi: 'Agentic RAG Architecture', weight: '30%', max: 30, placeholder: 'Comment on RAG system architecture and algorithms...' },
-      { key: 'ideaPresentation', label: 'Idea & Presentation', labelVi: 'Idea & Presentation', weight: '15%', max: 15, placeholder: 'Evaluate creativity and presentation quality...' },
-      { key: 'execution', label: 'Execution & Creativity', labelVi: 'Execution & Creativity', weight: '15%', max: 15, placeholder: 'Comment on feasibility and creativity of the solution...' },
-      { key: 'ux', label: 'UX & Interactive Interface', labelVi: 'UX & Interactive Interface', weight: '10%', max: 10, placeholder: 'Evaluate UX and interactive interface...' },
-    ]
-  },
-  finals: {
-    label: 'Finals',
-    labelEn: 'Finals',
-    color: 'var(--warning)',
-    criteria: [
-      { key: 'dataQuality', label: 'Data Processing & Retrieval Quality', labelVi: 'Data Processing & Retrieval Quality', weight: '30%', max: 30, placeholder: 'Evaluate data processing and retrieval pipeline quality...' },
-      { key: 'reliability', label: 'Reliability & Anti-hallucination', labelVi: 'Reliability & Anti-hallucination', weight: '20%', max: 20, placeholder: 'Comment on accuracy and anti-hallucination mechanisms...' },
-      { key: 'agentThinking', label: 'Agent Thinking & Multi-layer', labelVi: 'Agent Thinking & Multi-layer', weight: '20%', max: 20, placeholder: 'Evaluate reasoning and multi-layer processing capability...' },
-      { key: 'practicality', label: 'Practicality & Operational Efficiency', labelVi: 'Practicality & Operational Efficiency', weight: '20%', max: 20, placeholder: 'Comment on practicality and operational efficiency...' },
-      { key: 'scalability', label: 'Scalability & Creativity', labelVi: 'Scalability & Creativity', weight: '10%', max: 10, placeholder: 'Evaluate scalability potential and breakthrough creativity...' },
-    ]
-  }
-};
-
-const initScores = (rubric) => Object.fromEntries(rubric.criteria.map(c => [c.key, Math.floor(c.max * 0.7)]));
-
-const submissions = [
-  { id: 1, name: 'NullPointerException', track: 'Track B', subTopic: 'Medical Knowledge RAG', status: 'pending', letter: 'N', color: '#8b5cf6' },
-  { id: 2, name: 'BeaconAnalytics', track: 'Track B', subTopic: 'Medical Knowledge RAG', status: 'scored', score: 92, letter: 'B', color: '#3b82f6' },
-  { id: 3, name: 'CircuitCare', track: 'Track B', subTopic: 'Medical Knowledge RAG', status: 'in-review', letter: 'C', color: '#10b981' },
-  { id: 4, name: 'DataSculpt', track: 'Track B', subTopic: 'Medical Knowledge RAG', status: 'flagged', letter: 'D', color: '#ef4444' },
-];
-
 const JudgePanel = () => {
-  const navigate = useNavigate();
-  const [rubrics, setRubrics] = useState(DEFAULT_RUBRICS);
-  const [activeProject, setActiveProject] = useState(1);
-  const [round, setRound] = useState('qualifying');
-  const [scores, setScores] = useState({ qualifying: initScores(DEFAULT_RUBRICS.qualifying), finals: initScores(DEFAULT_RUBRICS.finals) });
-  const [submitError, setSubmitError] = useState('');
-  const [submitShaking, setSubmitShaking] = useState(false);
-  const [submitToast, setSubmitToast] = useState(false);
+  const [teams, setTeams] = useState([]);
+  const [event, setEvent] = useState(null);
+  const [currentRound, setCurrentRound] = useState(null);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const [criteria, setCriteria] = useState([]);
+  const [submissions, setSubmissions] = useState({});     // teamId -> submission
+  const [existingScores, setExistingScores] = useState({}); // teamId -> scores array
+  const [loading, setLoading] = useState(true);
+
+  const [activeTeamId, setActiveTeamId] = useState(null);
+  const [scores, setScores] = useState({});   // criterionId -> value
+  const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitToast, setSubmitToast] = useState('');
+  const [submitError, setSubmitError] = useState('');
+
+  const judgeAccountId = parseInt(localStorage.getItem('userId') || '1');
 
   useEffect(() => {
-    const savedConfig = localStorage.getItem('event_settings_seal_sp26');
-    if (savedConfig) {
+    const load = async () => {
       try {
-        const parsed = JSON.parse(savedConfig);
-        if (parsed.rounds && parsed.rounds.length > 0) {
-          const loadedRubrics = {};
-          
-          if (parsed.rounds[0]) {
-            loadedRubrics.qualifying = {
-              label: parsed.rounds[0].name || 'Qualifying Round',
-              labelEn: 'Qualifying Round',
-              color: 'var(--primary)',
-              criteria: parsed.rounds[0].criteria.map((c, i) => ({
-                key: `q_crit_${i}`, label: c.name, labelVi: c.name, weight: `${c.weight}%`, max: c.weight, placeholder: `Evaluate ${c.name}...`
-              }))
-            };
+        const eventsRes = await mockService.getEvents();
+        const evt = eventsRes?.data?.[0] || null;
+        setEvent(evt);
+
+        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+        setCurrentRoundIndex(roundIdx);
+        const round = evt?.rounds?.[roundIdx] || null;
+        setCurrentRound(round);
+
+        if (!evt || !round) return;
+
+        // Load real teams from backend
+        const teamsData = await teamService.getTeamsByEvent(1);
+        const teamsList = teamsData?.data || teamsData || [];
+        const approvedTeams = teamsList.filter(t =>
+          ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)
+        );
+        setTeams(approvedTeams);
+
+        if (approvedTeams.length > 0) {
+          setActiveTeamId(approvedTeams[0].id);
+
+          // Load criteria for this round
+          try {
+            const criteriaRes = await criterionService.getCriteria(round.id);
+            const criteriaList = criteriaRes?.data || [];
+            setCriteria(criteriaList);
+          } catch {
+            setCriteria([]);
           }
-          
-          if (parsed.rounds[1]) {
-            loadedRubrics.finals = {
-              label: parsed.rounds[1].name || 'Finals',
-              labelEn: 'Finals',
-              color: 'var(--warning)',
-              criteria: parsed.rounds[1].criteria.map((c, i) => ({
-                key: `f_crit_${i}`, label: c.name, labelVi: c.name, weight: `${c.weight}%`, max: c.weight, placeholder: `Evaluate ${c.name}...`
-              }))
-            };
-          } else if (parsed.rounds[0]) {
-            loadedRubrics.finals = { ...loadedRubrics.qualifying, label: 'Finals (Backup)' };
-          }
-          
-          setRubrics(loadedRubrics);
-          setScores({
-            qualifying: initScores(loadedRubrics.qualifying),
-            finals: initScores(loadedRubrics.finals)
-          });
+
+          // Load submissions & existing scores for all teams
+          const subMap = {};
+          const scoresMap = {};
+          await Promise.all(approvedTeams.map(async (team) => {
+            try {
+              const subRes = await submissionService.getSubmission(round.id, team.id);
+              if (subRes?.data) subMap[team.id] = subRes.data;
+
+              // Try fetching scores for this submission
+              if (subRes?.data?.id) {
+                const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, judgeAccountId);
+                if (scoresRes?.data?.length) scoresMap[team.id] = scoresRes.data;
+              }
+            } catch {
+              // Team hasn't submitted yet — that's fine
+            }
+          }));
+          setSubmissions(subMap);
+          setExistingScores(scoresMap);
+
+          // Init scores for first team
+          initScores(approvedTeams[0].id, scoresMap);
         }
       } catch (e) {
-        console.error("Failed to parse settings", e);
+        console.error('JudgePanel load error:', e);
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+    load();
   }, []);
 
-  const rubric = rubrics[round];
-  const currentScores = scores[round] || {};
-  const total = Object.values(currentScores).reduce((a, b) => a + (Number(b) || 0), 0);
-  const maxTotal = rubric ? rubric.criteria.reduce((a, c) => a + c.max, 0) : 100;
-
-  const setScore = (key, val) => {
-    setScores(prev => ({ ...prev, [round]: { ...prev[round], [key]: val } }));
+  const initScores = (teamId, scoresMap) => {
+    const existing = scoresMap[teamId];
+    if (existing && existing.length > 0) {
+      const init = {};
+      existing.forEach(s => { init[s.criterionId] = parseFloat(s.score); });
+      setScores(init);
+      setFeedback(existing[0]?.comment || '');
+    } else {
+      setScores({});
+      setFeedback('');
+    }
   };
 
-  const handleSubmitScore = () => {
+  const handleSelectTeam = (teamId) => {
+    setActiveTeamId(teamId);
     setSubmitError('');
-    if (total === 0) {
-      setSubmitError('No scores assigned. Please adjust the sliders before submitting.');
-      setSubmitShaking(true); setTimeout(() => setSubmitShaking(false), 500); return;
-    }
-    if (total < 10) {
-      setSubmitError(`Total score is only ${total}/${maxTotal}. Please review all criteria.`);
-      setSubmitShaking(true); setTimeout(() => setSubmitShaking(false), 500); return;
-    }
-    setIsSubmitting(true);
-    setTimeout(() => { setIsSubmitting(false); setSubmitToast(true); setTimeout(() => setSubmitToast(false), 3000); }, 1500);
+    initScores(teamId, existingScores);
   };
+
+  const computeTotal = () => {
+    return Object.values(scores).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+  };
+
+  const handleSubmitScore = async () => {
+    const total = computeTotal();
+    if (total <= 0) { setSubmitError('Please enter scores before submitting.'); return; }
+    if (!criteria.length) { setSubmitError('No criteria defined for this round. Ask admin to add criteria first.'); return; }
+
+    const submission = submissions[activeTeamId];
+    if (!submission) { setSubmitError('This team has no submission yet. You can score via in-person assessment but a submission must exist.'); return; }
+
+    setSubmitError('');
+    setIsSubmitting(true);
+    try {
+      const scoreItems = Object.entries(scores).map(([criterionId, value]) => ({
+        criterionId: parseInt(criterionId),
+        score: parseFloat(value),
+        comment: feedback,
+      }));
+
+      const result = await scoreService.gradeSubmission(submission.id, judgeAccountId, scoreItems);
+      const newScores = result?.data || [];
+
+      setExistingScores(prev => ({ ...prev, [activeTeamId]: newScores }));
+      setSubmitToast(`✓ Score submitted: ${total.toFixed(1)} pts for ${activeTeam?.name}`);
+      setTimeout(() => setSubmitToast(''), 3500);
+    } catch (e) {
+      setSubmitError('Failed to submit score. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const activeTeam = teams.find(t => t.id === activeTeamId);
+  const activeSubmission = submissions[activeTeamId];
+  const myScoresForActiveTeam = existingScores[activeTeamId];
+  const total = computeTotal();
+  const maxTotal = criteria.reduce((s, c) => s + (parseFloat(c.maxScore) || 0), 0) || 100;
+
+  if (loading) {
+    return (
+      <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <Clock size={40} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <p>Loading judge panel...</p>
+      </div>
+    );
+  }
+
+  if (!currentRound) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <h2 style={{ marginBottom: '8px' }}>No Active Round</h2>
+        <p>There is no active round to judge right now.</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div className="judge-panel-container animate-fade-in">
+    <div className="animate-fade-in">
+      <div className="page-header">
+        <div>
+          <h1>Judge Panel</h1>
+          <p className="subtitle">
+            {event?.name || 'Hackathon'} — {currentRound.name}
+            {currentRoundIndex > 0 && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>🏆 FINALS</span>}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
+          <Star size={15} /> Scoring Open
+        </div>
+      </div>
 
-        {/* Column 1: Submission List */}
-        <div className="judge-col-left glass-panel">
-          <div className="jp-header">
-            <h3>Submissions</h3>
-            <button className="btn btn-secondary btn-sm">Refresh</button>
-          </div>
-          <div className="jp-search">
-            <Search size={16} color="var(--text-secondary)" />
-            <input type="text" placeholder="Search teams..." />
-          </div>
+      {criteria.length === 0 && (
+        <div style={{ padding: '14px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '12px', marginBottom: '20px', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '14px' }}>
+          <AlertCircle size={18} color="var(--warning)" />
+          <span><strong>No criteria defined</strong> for this round. Ask the admin to set up scoring criteria in the <strong>Criteria Manager</strong> first.</span>
+        </div>
+      )}
 
-          {/* Round Toggle */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border-color)' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Scoring Round</div>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button onClick={() => setRound('qualifying')} style={{ flex: 1, padding: '7px', borderRadius: '8px', border: '1px solid', fontSize: '12px', cursor: 'pointer', fontWeight: round === 'qualifying' ? '700' : '400', background: round === 'qualifying' ? 'rgba(59,130,246,0.15)' : 'transparent', borderColor: round === 'qualifying' ? 'rgba(59,130,246,0.5)' : 'var(--border-color)', color: round === 'qualifying' ? 'var(--primary)' : 'var(--text-secondary)' }}>
-                <Shield size={12} style={{ display: 'inline', marginRight: '4px' }} />Qualifying
-              </button>
-              <button onClick={() => setRound('finals')} style={{ flex: 1, padding: '7px', borderRadius: '8px', border: '1px solid', fontSize: '12px', cursor: 'pointer', fontWeight: round === 'finals' ? '700' : '400', background: round === 'finals' ? 'rgba(245,158,11,0.15)' : 'transparent', borderColor: round === 'finals' ? 'rgba(245,158,11,0.5)' : 'var(--border-color)', color: round === 'finals' ? 'var(--warning)' : 'var(--text-secondary)' }}>
-                <BookOpen size={12} style={{ display: 'inline', marginRight: '4px' }} />Finals
-              </button>
-            </div>
+      <div className="judge-layout" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: '20px', alignItems: 'start' }}>
+        {/* Column 1: Team List */}
+        <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-subtle)' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700' }}>Teams ({teams.length})</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{currentRound.name}</p>
           </div>
-
-          <div className="submission-list">
-            {submissions.map(sub => (
-              <div key={sub.id} className={`sub-item ${activeProject === sub.id ? 'active' : ''}`} onClick={() => setActiveProject(sub.id)}>
-                <div className="sub-avatar" style={{ background: sub.color }}>{sub.letter}</div>
-                <div className="sub-info">
-                  <h4>{sub.name}</h4>
-                  <p>{sub.track} • {sub.subTopic}</p>
-                </div>
-                <div className="sub-status">
-                  {sub.status === 'scored' && <span className="text-success fw-bold">{sub.score}</span>}
-                  {sub.status === 'pending' && <span className="text-primary fw-bold">Pending</span>}
-                  {sub.status === 'in-review' && <span className="text-warning fw-bold">In Review</span>}
-                  {sub.status === 'flagged' && <span className="text-danger fw-bold">Flagged</span>}
-                </div>
+          <div style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+            {teams.length === 0 ? (
+              <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                No approved teams yet.
               </div>
-            ))}
-          </div>
-          <div className="session-notes">
-            <h4>Session Notes</h4>
-            <textarea placeholder="Quick notes for this session..." className="notes-input" />
+            ) : teams.map(team => {
+              const hasSubmission = !!submissions[team.id];
+              const scored = (existingScores[team.id]?.length || 0) > 0;
+              return (
+                <div
+                  key={team.id}
+                  onClick={() => handleSelectTeam(team.id)}
+                  style={{
+                    padding: '14px 20px', cursor: 'pointer', borderBottom: '1px solid var(--border-color)',
+                    background: activeTeamId === team.id ? 'rgba(245,158,11,0.08)' : 'transparent',
+                    borderLeft: activeTeamId === team.id ? '3px solid var(--primary)' : '3px solid transparent',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '14px' }}>{team.name}</div>
+                    {scored
+                      ? <CheckCircle size={14} color="var(--success)" style={{ flexShrink: 0 }} />
+                      : hasSubmission
+                        ? <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--warning)', flexShrink: 0, marginTop: '3px' }} />
+                        : <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--bg-active)', flexShrink: 0, marginTop: '3px' }} />
+                    }
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    {team.trackId ? `Track ID: ${team.trackId}` : 'No track assigned'}
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: hasSubmission ? 'rgba(16,185,129,0.1)' : 'var(--bg-hover)', color: hasSubmission ? 'var(--success)' : 'var(--text-secondary)', fontWeight: '600' }}>
+                      {hasSubmission ? 'Submitted' : 'No submission'}
+                    </span>
+                    {scored && (
+                      <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(245,158,11,0.1)', color: 'var(--primary)', fontWeight: '600' }}>
+                        Scored
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        {/* Column 2: Project Details */}
-        <div className="judge-col-mid glass-panel">
-          <div className="project-header">
-            <div className="ph-left">
-              <h2>NullPointerException — Medical Knowledge RAG</h2>
-              <div className="ph-meta">
-                <span className="track-tag" style={{ background: 'rgba(139,92,246,0.1)', color: 'var(--accent-1)', border: '1px solid rgba(139,92,246,0.3)' }}>Track B</span>
-                <span style={{ background: 'rgba(20,184,166,0.1)', color: 'var(--accent-3)', border: '1px solid rgba(20,184,166,0.3)', padding: '3px 10px', borderRadius: '6px', fontSize: '12px' }}>📋 Medical Knowledge RAG</span>
-                <span>Submitted: Apr 12, 2026 • 13:48</span>
+        {/* Column 2: Project Detail */}
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          {!activeTeam ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Select a team to view details</div>
+          ) : (
+            <>
+              <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '4px' }}>{activeTeam.name}</h2>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                  {activeTeam.trackId ? `Track #${activeTeam.trackId}` : 'No track assigned'} · Status: {activeTeam.status}
+                </div>
               </div>
-            </div>
-            <a href="https://github.com/nullpointer/medical-rag" target="_blank" rel="noreferrer" className="btn btn-primary" style={{ textDecoration: 'none' }}>
-              <Play size={16} /> View Submission
-            </a>
-          </div>
 
-          <div className="project-grid">
-            <div className="pg-left">
-              <div className="project-img-wrapper">
-                <img src="https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80" alt="Medical RAG System" className="project-preview" />
-                <div className="img-overlay"><Play size={24} /></div>
-              </div>
-            </div>
-            <div className="pg-right">
-              <div className="meta-box"><label>Tech Stack</label><span>LangGraph · OpenAI SDK · Pinecone · FastAPI · React</span></div>
-              <div className="meta-box"><label>Framework</label><span>Agentic RAG + Ragas Evaluation</span></div>
-              <div className="meta-box"><label>Contact</label><a href="mailto:team@null.ai" className="text-primary">team@null.ai</a></div>
-            </div>
-          </div>
+              {activeSubmission ? (
+                <>
+                  <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>{activeSubmission.submissionName || 'Unnamed Project'}</h3>
+                  <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7', marginBottom: '20px' }}>
+                    {activeSubmission.description || 'No description provided.'}
+                  </p>
+                  {activeSubmission.techStackName && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tech Stack</div>
+                      <div style={{ fontSize: '13px' }}>{activeSubmission.techStackName}</div>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {activeSubmission.githubUrl && (
+                      <a href={activeSubmission.githubUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-primary)', textDecoration: 'none' }}>
+                        <GitBranch size={16} /><span style={{ flex: 1, fontSize: '13px' }}>GitHub Repository</span><ChevronRight size={14} color="var(--text-secondary)" />
+                      </a>
+                    )}
+                    {activeSubmission.demoUrl && (
+                      <a href={activeSubmission.demoUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px', color: 'var(--primary)', textDecoration: 'none' }}>
+                        <Globe size={16} /><span style={{ flex: 1, fontSize: '13px' }}>Live Demo</span><ChevronRight size={14} />
+                      </a>
+                    )}
+                    {activeSubmission.slideUrl && (
+                      <a href={activeSubmission.slideUrl} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-primary)', textDecoration: 'none' }}>
+                        <FileText size={16} /><span style={{ flex: 1, fontSize: '13px' }}>Presentation Slides</span><ChevronRight size={14} color="var(--text-secondary)" />
+                      </a>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-subtle)', borderRadius: '12px' }}>
+                  <AlertCircle size={32} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
+                  <p>This team has not submitted yet.</p>
+                  <p style={{ fontSize: '12px', marginTop: '4px' }}>You can still score them based on in-person evaluation once their submission exists.</p>
+                </div>
+              )}
 
-          <div className="project-section">
-            <h3>Project Description</h3>
-            <p className="project-desc">
-              A domain-specific RAG system for medical literature that enables healthcare professionals to query complex medical knowledge bases with high accuracy. The system integrates hallucination detection using Ragas evaluation framework, multi-hop reasoning for complex medical queries, and real-time retrieval from PubMed and custom clinical databases. Built with LangGraph for agent orchestration and Pinecone for vector storage.
-            </p>
-          </div>
-          <div className="project-section">
-            <h3>Project Links</h3>
-            <div className="attachments-grid">
-              <a href="https://github.com/nullpointer/medical-rag" target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="attachment-card" style={{ cursor: 'pointer' }}>
-                  <div className="att-icon doc"><Code size={24} /></div>
-                  <span className="att-name">GitHub Repo</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>github.com/nullpointer/medical-rag</span>
+              {myScoresForActiveTeam && myScoresForActiveTeam.length > 0 && (
+                <div style={{ marginTop: '20px', padding: '14px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <CheckCircle size={16} color="var(--success)" />
+                    <span style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '600' }}>
+                      You already scored this team: <strong>{myScoresForActiveTeam.reduce((s, x) => s + parseFloat(x.score || 0), 0).toFixed(1)} pts total</strong>
+                    </span>
+                  </div>
+                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {myScoresForActiveTeam.map((s, i) => (
+                      <span key={i} style={{ fontSize: '11px', padding: '2px 8px', background: 'var(--bg-subtle)', borderRadius: '6px', color: 'var(--text-secondary)' }}>
+                        {s.criterionName}: <strong>{s.score}</strong>/{s.maxScore}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </a>
-              <a href="https://www.canva.com/design/abc123/view" target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="attachment-card" style={{ cursor: 'pointer' }}>
-                  <div className="att-icon pdf"><FileText size={24} /></div>
-                  <span className="att-name">Presentation Slide</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>canva.com/design/abc123</span>
-                </div>
-              </a>
-              <a href="https://medical-rag-demo.vercel.app" target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="attachment-card" style={{ cursor: 'pointer' }}>
-                  <div className="att-icon img"><LayoutGrid size={24} /></div>
-                  <span className="att-name">Live Demo</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>medical-rag-demo.vercel.app</span>
-                </div>
-              </a>
-            </div>
-          </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Column 3: Scoring Rubric */}
-        <div className="judge-col-right glass-panel">
-          <div className="rubric-header">
-            <div>
-              <h3>Scoring Rubric</h3>
-              <span className="sub-text" style={{ color: rubric.color }}>{rubric.label} • SEAL SP26</span>
-            </div>
-            <div className="total-score-box" style={{ borderColor: rubric.color, background: `${rubric.color}15` }}>
-              <span className="total-label">Total</span>
-              <span className="total-value" style={{ color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--warning)' : 'var(--danger)' }}>{total}</span>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>/{maxTotal}</span>
-            </div>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Target size={18} color="var(--primary)" /> Scoring Rubric
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{currentRound.name}</p>
 
-          <div className="rubric-body">
-            {rubric.criteria.map(c => (
-              <div key={c.key} className="score-item">
-                <div className="score-header">
-                  <div>
-                    <h4 style={{ fontSize: '13px' }}>{c.labelVi}</h4>
-                    <span className="weight-tag" style={{ background: `${rubric.color}15`, color: rubric.color, border: `1px solid ${rubric.color}40` }}>Weight: {c.weight}</span>
-                  </div>
-                  <span className="range-text">0 – {c.max}</span>
-                </div>
-                <div className="slider-container">
-                  <input type="number" className="score-input" value={currentScores[c.key]} onChange={e => setScore(c.key, Math.min(c.max, Math.max(0, Number(e.target.value))))} min="0" max={c.max} />
-                  <input type="range" className="score-slider" value={currentScores[c.key]} onChange={e => setScore(c.key, Number(e.target.value))} min="0" max={c.max}
-                    style={{ accentColor: rubric.color }} />
-                  <span className="current-score" style={{ color: rubric.color }}>{currentScores[c.key]}</span>
-                </div>
-                <input type="text" className="comment-input" placeholder={c.placeholder} />
+            {criteria.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {criteria.map((c) => {
+                  const val = scores[c.id] ?? 0;
+                  const max = parseFloat(c.maxScore) || 10;
+                  return (
+                    <div key={c.id}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: '600' }}>{c.name}</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input
+                            type="number" min="0" max={max} step="0.5" value={val}
+                            onChange={e => {
+                              const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
+                              setScores(p => ({ ...p, [c.id]: v }));
+                            }}
+                            style={{ width: '56px', padding: '4px 8px', textAlign: 'center', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', outline: 'none' }}
+                          />
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ {max}</span>
+                        </div>
+                      </div>
+                      <input
+                        type="range" min="0" max={max} step="0.5" value={val}
+                        onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
+                        style={{ width: '100%', accentColor: 'var(--primary)' }}
+                      />
+                      <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
+                        <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            ) : (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                No criteria configured for this round.<br />
+                <span style={{ fontSize: '12px' }}>Ask an admin to add criteria.</span>
+              </p>
+            )}
+
+            <div style={{ marginTop: '24px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>Feedback (Optional)</label>
+              <textarea
+                value={feedback}
+                onChange={e => setFeedback(e.target.value)}
+                placeholder="Write your constructive feedback here..."
+                rows={3}
+                style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
+              />
+            </div>
           </div>
 
-          <div className="rubric-footer">
+          {/* Total + Submit */}
+          <div className="glass-panel" style={{ padding: '20px', border: `1px solid ${total >= maxTotal * 0.8 ? 'rgba(16,185,129,0.3)' : total >= maxTotal * 0.5 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.2)'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>Total Score</span>
+              <span style={{ fontSize: '32px', fontWeight: '900', color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--primary)' : 'var(--warning)' }}>
+                {total.toFixed(1)}
+                <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: '400' }}>/{maxTotal}</span>
+              </span>
+            </div>
+
             {submitError && (
-              <div className={submitShaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '12px', animation: submitShaking ? 'shake 0.4s ease-in-out' : 'none' }}>
-                <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>{submitError}</span>
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '13px', color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={14} /> {submitError}
               </div>
             )}
-            <div className="action-buttons">
-              <button className="btn btn-secondary flex-1">Save Draft</button>
-              <button className="btn btn-primary flex-1" onClick={handleSubmitScore} disabled={isSubmitting}
-                style={{ 
-                  background: round === 'finals' ? 'linear-gradient(135deg, var(--warning), var(--danger))' : 'var(--primary)',
-                  boxShadow: '0 0 20px rgba(59,130,246,0.4)'
-                }}>
-                {isSubmitting ? 'Submitting...' : 'Submit Score'}
-              </button>
-            </div>
-            <div className="footer-meta">
-              <button className="btn-text text-danger" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px' }}>
-                <AlertTriangle size={14} /> Flag for review
-              </button>
-              <span className="auto-save">Auto-saved 2 min ago</span>
-            </div>
+
+            <button
+              onClick={handleSubmitScore}
+              disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission}
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
+            >
+              {isSubmitting
+                ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
+                : myScoresForActiveTeam?.length
+                  ? <><CheckCircle size={16} /> Update Score</>
+                  : <><Star size={16} /> Submit Score</>
+              }
+            </button>
           </div>
         </div>
       </div>
 
       {submitToast && (
         <div className="animate-fade-in" style={{ position: 'fixed', bottom: '24px', right: '24px', background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 999 }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(16,185,129,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <CheckCircle size={18} color="var(--success)" />
-          </div>
+          <CheckCircle size={20} color="var(--success)" />
           <div>
             <div style={{ fontWeight: '600', fontSize: '14px' }}>Score Submitted!</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{rubric.label} • {total}/{maxTotal} — NullPointerException</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{submitToast}</div>
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
-      `}</style>
-    </>
+    </div>
   );
 };
 
