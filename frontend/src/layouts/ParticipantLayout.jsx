@@ -15,7 +15,7 @@ const ParticipantLayout = () => {
     if (isReady) return; // Already set, skip
 
     const accountId = parseInt(localStorage.getItem('accountId'));
-    const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
+    const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
 
     const rehydrate = async () => {
       try {
@@ -40,7 +40,7 @@ const ParticipantLayout = () => {
               localStorage.setItem('p_teamId', team.id);
               localStorage.setItem('myTeamName', team.name);
               localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
-              localStorage.setItem('p_selectedEventId', eventId);
+              localStorage.setItem('p_eventId', eventId);
               localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
               setIsReady(true);
               window.dispatchEvent(new Event('participant_state_updated'));
