@@ -28,7 +28,7 @@ const TeamFormation = () => {
 
     try {
       const { teamService } = await import('../../api/teamService.js');
-      const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
+      const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
       const leaderAccountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
       const response = await teamService.createTeam(eventId, { 
         name: teamName, 
