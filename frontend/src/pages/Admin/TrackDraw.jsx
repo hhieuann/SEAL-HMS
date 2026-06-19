@@ -54,7 +54,7 @@ const TrackDraw = () => {
 
         setSubTopics(realSubTopics);
 
-        const validTeams = (teamsRes.data || []).filter(t => ['REGISTERED', 'APPROVED', 'CONFIRMED'].includes(t.status));
+        const validTeams = (teamsRes.data || []).filter(t => ['CREATED', 'REGISTERED', 'APPROVED', 'CONFIRMED'].includes(t.status));
         const realTeams = validTeams.map(t => ({ id: t.id, name: t.name })); // Keep objects for ID usage
         setActiveTeamsList(realTeams);
         setIsConfigured(true);
@@ -193,6 +193,9 @@ const TrackDraw = () => {
       }
 
       setConfirmed(true);
+      localStorage.setItem(`trackDrawConfirmed_${targetEventId}`, 'true');
+      localStorage.setItem(`trackDraw_${targetEventId}`, JSON.stringify(tracks));
+      
       // Backend automatically persists the track assignments now
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
