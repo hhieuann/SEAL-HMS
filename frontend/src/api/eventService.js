@@ -36,6 +36,11 @@ export const eventService = {
     return response.data;
   },
 
+  updateRoundStatus: async (id, status) => {
+    const response = await apiClient.patch(`/api/v1/rounds/${id}/status`, { status });
+    return response.data;
+  },
+
   createRound: async (eventId, roundData) => {
     const response = await apiClient.post(`/api/v1/events/${eventId}/rounds`, roundData);
     return response.data;
