@@ -33,16 +33,26 @@ const MySubmission = () => {
     const load = async () => {
       try {
         const tId = localStorage.getItem('p_teamId') || localStorage.getItem('userId');
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-
         // Load event from real API
         const eventIdStr = localStorage.getItem('p_eventId') || '1';
         const eventRes = await eventService.getEventDetails(eventIdStr);
         const evt = eventRes?.data || null;
         setEvent(evt);
 
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+
+        const round = evt?.rounds?.[activeRoundIdx] || null;
         setCurrentRound(round);
 
         // Load existing submission
@@ -78,6 +88,8 @@ const MySubmission = () => {
   }, []);
 
   const validate = () => {
+    const tId = localStorage.getItem('p_teamId');
+    if (!tId || tId === 'undefined') return 'You must join or create a team before submitting.';
     if (!formData.projectName.trim()) return 'Project name is required.';
     if (!formData.repoUrl.trim()) return 'GitHub repository URL is required.';
     if (formData.repoUrl.toLowerCase().includes('drive.google.com')) return 'Google Drive links are not accepted. Please use GitHub.';
@@ -127,7 +139,7 @@ const MySubmission = () => {
     setError('');
   };
 
-  const isLocked = currentRound?.status === 'locked' || currentRound?.status === 'completed';
+  const isLocked = currentRound?.status !== 'ACTIVE';
 
   if (loading) {
     return (
@@ -241,9 +253,11 @@ const MySubmission = () => {
           ) : (
             /* ── Form State ── */
             <div className="glass-panel" style={{ padding: '32px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
-                {isLocked ? '🔒 Round Locked — View Only' : 'Submit Your Project'}
-              </h2>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
+                  {isLocked 
+                    ? (currentRound?.status === 'CREATED' ? '🔒 Submission Closed (Round Not Started)' : '🔒 Round Locked – View Only') 
+                    : 'Submit Your Project'}
+                </h2>
 
               {error && (
                 <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', color: '#ef4444', fontSize: '13px' }}>
@@ -374,7 +388,9 @@ const MySubmission = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               {isLocked ? <Lock size={16} color="var(--danger)" /> : <Clock size={16} color="var(--primary)" />}
               <span style={{ fontSize: '13px', fontWeight: '600', color: isLocked ? 'var(--danger)' : 'var(--primary)' }}>
-                {isLocked ? 'Submission Closed' : 'Deadline'}
+                {isLocked 
+                  ? (currentRound?.status === 'CREATED' ? 'Round Not Started' : 'Submission Closed') 
+                  : 'Deadline'}
               </span>
             </div>
             <div style={{ fontSize: '16px', fontWeight: '700' }}>
