@@ -128,6 +128,16 @@ public class TeamService {
         return mapToResponse(teamRepository.save(team));
     }
 
+    /** Assign a specific track to a team (used by Admin after FE spin animation). */
+    @Transactional
+    public TeamResponse assignTrack(Long teamId, Long trackId) {
+        Team team = findTeamEntityById(teamId);
+        Track track = trackRepository.findById(trackId)
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
+        team.setTrack(track);
+        return mapToResponse(teamRepository.save(team));
+    }
+
     private Team findTeamEntityById(Long id) {
         return teamRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + id));

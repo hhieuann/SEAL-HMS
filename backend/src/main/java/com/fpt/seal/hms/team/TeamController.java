@@ -51,4 +51,11 @@ public class TeamController {
         TeamResponse updated = teamService.updateTeamStatus(id, request.getStatus());
         return ResponseEntity.ok(ApiResponse.ok("Team status updated successfully", updated));
     }
+    @PatchMapping("/teams/{id}/assign-track")
+    public ResponseEntity<ApiResponse<TeamResponse>> assignTrack(
+            @PathVariable Long id,
+            @RequestParam Long trackId) {
+        TeamResponse updated = teamService.assignTrack(id, trackId);
+        return ResponseEntity.ok(ApiResponse.ok("Track assigned successfully", updated));
+    }
 }
