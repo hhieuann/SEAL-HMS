@@ -32,9 +32,10 @@ const PerformingTeams = () => {
         if (trackDrawStr) {
           const drawn = JSON.parse(trackDrawStr);
           drawn.forEach(track => {
-            (track.teams || []).forEach(teamName => {
+            (track.teams || []).forEach(teamObj => {
+              const teamName = typeof teamObj === 'string' ? teamObj : teamObj.name;
               teamTrackMap[teamName] = {
-                trackName: `${track.name}${track.subTopic ? ' — ' + track.subTopic.name : ''}`,
+                trackName: `${track.name}${track.subTopic ? ' - ' + track.subTopic.name : ''}`,
                 trackColor: track.color || 'var(--primary)',
               };
             });
