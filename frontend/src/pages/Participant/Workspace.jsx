@@ -159,8 +159,17 @@ const Workspace = () => {
             eventService.getEventRounds(evt.id).then(roundRes => {
               const rounds = roundRes.data || [];
               if (rounds.length > 0) {
-                const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-                const round = rounds[roundIdx] || rounds[0];
+                let activeRoundIdx = 0;
+                let lastStartedIdx = -1;
+                for (let i = rounds.length - 1; i >= 0; i--) {
+                  if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                    lastStartedIdx = i;
+                    break;
+                  }
+                }
+                activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+                
+                const round = rounds[activeRoundIdx] || rounds[0];
                 const rName = round.name || 'Main Event';
                 setCurrentRoundName(rName);
 
