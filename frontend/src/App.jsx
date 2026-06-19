@@ -15,6 +15,7 @@ import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import TrackDraw from './pages/Admin/TrackDraw';
+import CriteriaManager from './pages/Admin/CriteriaManager';
 import LandingPage from './pages/LandingPage';
 import AuthLayout from './layouts/AuthLayout';
 import Login from './pages/Auth/Login';
@@ -25,6 +26,7 @@ import ExpertDashboard from './pages/Auth/ExpertDashboard';
 import ParticipantLayout from './layouts/ParticipantLayout';
 import EventSelection from './pages/Participant/EventSelection';
 import TeamFormation from './pages/Participant/TeamFormation';
+import TeamManagement from './pages/Participant/TeamManagement';
 import Workspace from './pages/Participant/Workspace';
 import MySubmission from './pages/Participant/MySubmission';
 import Scores from './pages/Participant/Scores';
@@ -65,11 +67,12 @@ function App() {
         </Route>
 
         {/* Participant Routes */}
-        <Route path="/participant" element={<ProtectedRoute allowedTypes={['participant']}><ParticipantLayout /></ProtectedRoute>}>
+        <Route path="/participant" element={<ProtectedRoute allowedRoles={['STUDENT']}><ParticipantLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="events" replace />} />
           <Route path="events" element={<EventSelection />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="team-formation" element={<TeamFormation />} />
+          <Route path="team-management" element={<TeamManagement />} />
           <Route path="workspace" element={<Workspace />} />
           <Route path="submission" element={<MySubmission />} />
           <Route path="scores" element={<Scores />} />
@@ -79,7 +82,7 @@ function App() {
         </Route>
 
         {/* Admin/Coordinator Routes */}
-        <Route path="/admin" element={<ProtectedRoute allowedTypes={['admin']}><AdminLayout /></ProtectedRoute>}>
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<GlobalDashboard />} />
           <Route path="events">
@@ -101,13 +104,14 @@ function App() {
             <Route path="analytics" element={<AnalyticsLog />} />
             <Route path="broadcast" element={<AdminBroadcast />} />
             <Route path="track-draw" element={<TrackDraw />} />
+            <Route path="criteria" element={<CriteriaManager />} />
           </Route>
         </Route>
 
         {/* Judge Routes */}
-        <Route path="/expert/dashboard" element={<ProtectedRoute allowedTypes={['expert']}><ExpertDashboard /></ProtectedRoute>} />
+        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR']}><ExpertDashboard /></ProtectedRoute>} />
         
-        <Route path="/judge" element={<ProtectedRoute allowedTypes={['expert']}><JudgeLayout /></ProtectedRoute>}>
+        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
           <Route path="history" element={<ScoringHistory />} />
@@ -115,7 +119,7 @@ function App() {
         </Route>
 
         {/* Mentor Routes */}
-        <Route path="/mentor" element={<ProtectedRoute allowedTypes={['expert']}><MentorLayout /></ProtectedRoute>}>
+        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['MENTOR']}><MentorLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />

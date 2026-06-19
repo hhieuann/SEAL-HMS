@@ -1,17 +1,63 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users } from 'lucide-react';
+import { authApi } from '../api/auth';
+import { teamService } from '../api/teamService';
 import './ParticipantLayout.css';
 
 const ParticipantLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isReady = localStorage.getItem('p_hasTeam') === 'true';
+  const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
+
+  // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
+  useEffect(() => {
+    if (isReady) return; // Already set, skip
+
+    const accountId = parseInt(localStorage.getItem('accountId'));
+    const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
+
+    const rehydrate = async () => {
+      try {
+        const teamsRes = await teamService.getTeamsByEvent(eventId);
+        const teams = teamsRes.data || [];
+        for (const team of teams) {
+          try {
+            const membersRes = await teamService.getMembers(team.id);
+            const members = membersRes.data || [];
+            const userEmail = localStorage.getItem('userEmail');
+            const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
+            if (isMember) {
+              const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
+              
+              if (!accountId && me.accountId) {
+                localStorage.setItem('accountId', me.accountId);
+                localStorage.setItem('userId', me.accountId);
+              }
+              
+              localStorage.setItem('p_hasTeam', 'true');
+              localStorage.setItem('p_hasJoinedEvent', 'true');
+              localStorage.setItem('p_teamId', team.id);
+              localStorage.setItem('myTeamName', team.name);
+              localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
+              localStorage.setItem('p_selectedEventId', eventId);
+              localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
+              setIsReady(true);
+              window.dispatchEvent(new Event('participant_state_updated'));
+              break;
+            }
+          } catch (e) { /* skip team if members fetch fails */ }
+        }
+      } catch (e) {
+        console.error('Failed to re-hydrate participant state:', e);
+      }
+    };
+
+    rehydrate();
+  }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('p_hasJoinedEvent');
-    localStorage.removeItem('p_hasTeam');
-    navigate('/login');
+    authApi.logout();
   };
 
   const LockedItem = ({ icon, label }) => (
@@ -72,6 +118,10 @@ const ParticipantLayout = () => {
 
             {isReady ? (
               <>
+                <NavLink to="/participant/team-management" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Users size={20} />
+                  <span>My Team</span>
+                </NavLink>
                 <NavLink to="/participant/workspace" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Briefcase size={20} />
                   <span>Team Workspace</span>

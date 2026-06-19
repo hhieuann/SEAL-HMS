@@ -1,14 +1,97 @@
-import React from 'react';
-import { Trophy, Star, Award, MessageSquare, Target, TrendingUp, Medal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, Star, Award, MessageSquare, Target, TrendingUp, Medal, Clock, AlertCircle } from 'lucide-react';
 import './Workspace.css';
 
 const Scores = () => {
+  const [loading, setLoading] = useState(true);
+  const [event, setEvent] = useState(null);
+  const [currentRound, setCurrentRound] = useState(null);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const [teamData, setTeamData] = useState(null);
+  
+  const [myScore, setMyScore] = useState(0);
+  const [criteriaAvg, setCriteriaAvg] = useState({});
+  const [feedbacks, setFeedbacks] = useState([]);
+  
+  const [trackName, setTrackName] = useState('');
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [isFinals, setIsFinals] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const teamId = localStorage.getItem('p_teamId');
+        if (!teamId) { setLoading(false); return; }
+
+        const { eventService } = await import('../../api/eventService');
+        const eventsRes = await eventService.getEvents();
+        const evt = eventsRes.data[0];
+        
+        if (evt) {
+          const roundsRes = await eventService.getEventRounds(evt.id);
+          evt.rounds = roundsRes.data || [];
+        }
+        setEvent(evt);
+        
+        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+        setCurrentRoundIndex(roundIdx);
+        const round = evt?.rounds?.[roundIdx];
+        setCurrentRound(round);
+
+        // Fetch team details (if we had a real public endpoint for it)
+        // For now, we simulate basic team data from localStorage so the UI doesn't crash
+        const teamName = localStorage.getItem('p_teamName') || 'My Team';
+        setTeamData({ id: teamId, name: teamName });
+
+        if (!round) { setLoading(false); return; }
+
+        // Placeholder for future backend Leaderboard / Scores API
+        setMyScore(0);
+        setCriteriaAvg({});
+        setFeedbacks([]);
+        setLeaderboard([]);
+        
+        if (roundIdx > 0) {
+          setIsFinals(true);
+          setTrackName('Finals');
+        } else {
+          setTrackName('Current Track');
+        }
+
+      } catch (e) {
+        console.error("Failed to load scores data:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <Clock size={40} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <p>Loading scores...</p>
+      </div>
+    );
+  }
+
+  if (!teamData) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <h2 style={{ marginBottom: '8px' }}>No Team Found</h2>
+        <p>You must join a team to see scores.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in" style={{ padding: '0 20px', maxWidth: '1000px', margin: '0 auto' }}>
       <div className="page-header" style={{ marginBottom: '32px' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Scores & Results</h1>
-          <p className="subtitle">Track: Track B - Medical Knowledge RAG | Phase: Qualifying Round</p>
+          <p className="subtitle">{trackName ? `Track: ${trackName} | ` : ''}Phase: {currentRound?.name}</p>
         </div>
         <div style={{ textAlign: 'right' }}>
            <div className="status-badge open" style={{ display: 'inline-block', fontSize: '14px', padding: '6px 16px', borderRadius: '20px' }}>
@@ -23,48 +106,34 @@ const Scores = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={20} color="var(--primary)" /> Your Team Score</h2>
             <div style={{ background: '#F8FAFC', padding: '8px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <span style={{ fontSize: '28px', fontWeight: '800', color: 'var(--success)' }}>89.5</span>
-              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/100</span>
+              <span style={{ fontSize: '28px', fontWeight: '800', color: myScore > 0 ? 'var(--success)' : 'var(--text-secondary)' }}>{myScore > 0 ? myScore : '—'}</span>
+              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c)=>s+c.weight,0)||100}</span>
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                <span>Innovation & Creativity</span>
-                <strong>22 / 25</strong>
-              </div>
-              <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '88%', height: '100%', background: 'var(--primary)' }}></div>
-              </div>
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                <span>Technical Complexity</span>
-                <strong>25 / 30</strong>
-              </div>
-              <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '83%', height: '100%', background: 'var(--accent-1)' }}></div>
-              </div>
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                <span>UX/UI & Usability</span>
-                <strong>18 / 20</strong>
-              </div>
-              <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '90%', height: '100%', background: 'var(--success)' }}></div>
-              </div>
-            </div>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
-                <span>Business Potential</span>
-                <strong>24.5 / 25</strong>
-              </div>
-              <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: '98%', height: '100%', background: 'var(--warning)' }}></div>
-              </div>
-            </div>
+            {currentRound?.criteria?.map((c, i) => {
+              const key = c.id || c.name;
+              const val = criteriaAvg[key] || 0;
+              const max = c.weight;
+              const pct = max > 0 ? (val / max) * 100 : 0;
+              const colors = ['var(--primary)', 'var(--accent-1)', 'var(--success)', 'var(--warning)'];
+              const color = colors[i % colors.length];
+              return (
+                <div key={i}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
+                    <span>{c.name}</span>
+                    <strong>{val} / {max}</strong>
+                  </div>
+                  <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: color }}></div>
+                  </div>
+                </div>
+              );
+            })}
+            {(!currentRound?.criteria || currentRound.criteria.length === 0) && (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No criteria found.</div>
+            )}
           </div>
         </div>
 
@@ -72,19 +141,23 @@ const Scores = () => {
         <div className="glass-panel" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
           <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}><MessageSquare size={20} color="var(--accent-2)" /> Judges' Feedback</h2>
           
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', borderLeft: '3px solid var(--primary)' }}>
-              <p style={{ fontSize: '14px', lineHeight: '1.6', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-                "Excellent architecture and use of modern AI models. The business model is highly viable. However, to win the final round, the team needs to optimize the database read speed and polish the mobile responsiveness of the Dashboard."
-              </p>
-              <div style={{ marginTop: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>— Judge Alan Turing (Lead AI Engineer)</div>
-            </div>
-            <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', borderLeft: '3px solid var(--accent-1)' }}>
-              <p style={{ fontSize: '14px', lineHeight: '1.6', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-                "The pitch deck was very convincing. Great teamwork! Pay attention to edge cases in user input."
-              </p>
-              <div style={{ marginTop: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>— Judge Ada Lovelace</div>
-            </div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', maxHeight: '300px' }}>
+            {feedbacks.length > 0 ? feedbacks.map((fb, i) => {
+              const colors = ['var(--primary)', 'var(--accent-1)', 'var(--warning)'];
+              const color = colors[i % colors.length];
+              return (
+                <div key={i} style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', borderLeft: `3px solid ${color}` }}>
+                  <p style={{ fontSize: '14px', lineHeight: '1.6', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                    "{fb.text}"
+                  </p>
+                  <div style={{ marginTop: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>— {fb.judgeId.replace('@gmail.com','').toUpperCase()}</div>
+                </div>
+              );
+            }) : (
+              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                No feedback provided yet.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -92,68 +165,73 @@ const Scores = () => {
       {/* Leaderboard Section */}
       <div className="glass-panel" style={{ padding: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}><Trophy size={24} color="var(--warning)" /> Track B Leaderboard</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981' }}></div>
-            Top 2 advance to Final Round
+          <h2 style={{ fontSize: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}><Trophy size={24} color="var(--warning)" /> {isFinals ? 'Finals Leaderboard' : `${trackName} Leaderboard`}</h2>
+          {!isFinals && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981' }}></div>
+              Top 2 advance to {event?.rounds?.[currentRoundIndex + 1]?.name || 'Next Round'}
+            </div>
+          )}
+        </div>
+
+        {leaderboard.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Leaderboard not available yet.</div>
+        ) : (
+          <div className="table-container" style={{ overflowX: 'auto' }}>
+            <table className="data-table" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                  <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Rank</th>
+                  <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
+                  <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>University</th>
+                  <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Total Score</th>
+                  <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((team, idx) => {
+                  const isMe = team.teamId == teamData?.id;
+                  const isTop3 = isFinals && team.rank <= 3;
+                  const isPromoted = !isFinals && team.rank <= 2;
+                  
+                  let rankDisplay = team.rank;
+                  if (team.rank === 1) rankDisplay = <div className="rank-badge gold" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#000', fontWeight: 'bold' }}>1</div>;
+                  else if (team.rank === 2) rankDisplay = <div className="rank-badge silver" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #cbd5e1, #94a3b8)', color: '#000', fontWeight: 'bold' }}>2</div>;
+                  else if (team.rank === 3) rankDisplay = <div className="rank-badge bronze" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f87171, #b91c1c)', color: '#fff', fontWeight: 'bold' }}>3</div>;
+
+                  return (
+                    <tr key={idx} style={{ 
+                      background: isMe ? 'rgba(59,130,246,0.05)' : (isPromoted || isTop3) ? 'rgba(16, 185, 129, 0.03)' : 'transparent', 
+                      borderBottom: '1px solid var(--border-color)',
+                      borderLeft: isMe ? '3px solid var(--primary)' : '3px solid transparent'
+                    }}>
+                      <td style={{ padding: '16px', fontWeight: '600', paddingLeft: typeof rankDisplay === 'number' ? '24px' : '16px' }}>
+                        {rankDisplay}
+                      </td>
+                      <td style={{ padding: '16px', fontWeight: '600', color: isMe ? 'var(--primary)' : 'inherit' }}>
+                        {team.team} {isMe && '(You)'}
+                      </td>
+                      <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>{team.university}</td>
+                      <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>{team.score ?? '—'}</td>
+                      <td style={{ padding: '16px' }}>
+                        {isFinals ? (
+                          team.rank === 1 ? <span style={{ padding: '4px 12px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>Champion 🏆</span> :
+                          team.rank === 2 ? <span style={{ padding: '4px 12px', background: 'rgba(148, 163, 184, 0.2)', color: '#64748b', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>Runner-up 🥈</span> :
+                          team.rank === 3 ? <span style={{ padding: '4px 12px', background: 'rgba(185, 28, 28, 0.2)', color: '#b91c1c', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>2nd Runner-up 🥉</span> :
+                          <span style={{ padding: '4px 12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', fontSize: '12px', fontWeight: '500' }}>Finalist</span>
+                        ) : (
+                          isPromoted 
+                            ? <span style={{ padding: '4px 12px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}><TrendingUp size={14}/> Promoted</span>
+                            : <span style={{ padding: '4px 12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', fontSize: '12px', fontWeight: '500', width: 'fit-content' }}>Eliminated</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <div className="table-container" style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Rank</th>
-                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
-                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>University</th>
-                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Total Score</th>
-                <th style={{ padding: '16px', color: 'var(--text-secondary)', fontWeight: '500' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Top 3 - Promoted */}
-              <tr style={{ background: 'rgba(16, 185, 129, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
-                <td style={{ padding: '16px' }}><div className="rank-badge gold" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#000', fontWeight: 'bold' }}>1</div></td>
-                <td style={{ padding: '16px', fontWeight: '600' }}>DeepMind Innovators</td>
-                <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>MIT</td>
-                <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>95.0</td>
-                <td style={{ padding: '16px' }}><span style={{ padding: '4px 12px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}><TrendingUp size={14}/> Promoted</span></td>
-              </tr>
-              
-              <tr style={{ background: 'rgba(16, 185, 129, 0.05)', borderBottom: '1px solid var(--border-color)', borderLeft: '3px solid var(--primary)' }}>
-                <td style={{ padding: '16px' }}><div className="rank-badge silver" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #cbd5e1, #94a3b8)', color: '#000', fontWeight: 'bold' }}>2</div></td>
-                <td style={{ padding: '16px', fontWeight: '600', color: 'var(--primary)' }}>NullPointerException (You)</td>
-                <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>FPT University</td>
-                <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>89.5</td>
-                <td style={{ padding: '16px' }}><span style={{ padding: '4px 12px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}><TrendingUp size={14}/> Promoted</span></td>
-              </tr>
-
-              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <td style={{ padding: '16px' }}><div className="rank-badge bronze" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #f87171, #b91c1c)', color: '#fff', fontWeight: 'bold' }}>3</div></td>
-                <td style={{ padding: '16px', fontWeight: '600' }}>Byte Me</td>
-                <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>Stanford</td>
-                <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>88.0</td>
-                <td style={{ padding: '16px' }}><span style={{ padding: '4px 12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', fontSize: '12px', fontWeight: '500', width: 'fit-content' }}>Eliminated</span></td>
-              </tr>
-
-              {/* Not Promoted */}
-              <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                <td style={{ padding: '16px', fontWeight: '600', paddingLeft: '24px' }}>4</td>
-                <td style={{ padding: '16px', fontWeight: '500' }}>404 Brain Not Found</td>
-                <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>RMIT</td>
-                <td style={{ padding: '16px', fontWeight: '600', color: 'var(--text-secondary)' }}>85.5</td>
-                <td style={{ padding: '16px' }}><span style={{ padding: '4px 12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', fontSize: '12px', fontWeight: '500', width: 'fit-content' }}>Eliminated</span></td>
-              </tr>
-              <tr>
-                <td style={{ padding: '16px', fontWeight: '600', paddingLeft: '24px' }}>5</td>
-                <td style={{ padding: '16px', fontWeight: '500' }}>Syntax Terrors</td>
-                <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>HUST</td>
-                <td style={{ padding: '16px', fontWeight: '600', color: 'var(--text-secondary)' }}>82.0</td>
-                <td style={{ padding: '16px' }}><span style={{ padding: '4px 12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', borderRadius: '12px', fontSize: '12px', fontWeight: '500', width: 'fit-content' }}>Eliminated</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        )}
       </div>
     </div>
   );

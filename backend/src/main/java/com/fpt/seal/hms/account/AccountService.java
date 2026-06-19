@@ -6,6 +6,8 @@ import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import com.fpt.seal.hms.student.Student;
+import com.fpt.seal.hms.student.StudentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,7 @@ public class AccountService {
 
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StudentRepository studentRepository;
 
     @Transactional
     public Account register(String email, String rawPassword, Role role) {
@@ -36,7 +39,16 @@ public class AccountService {
         account.setPassword(passwordEncoder.encode(rawPassword));
         account.setRole(assignedRole);
         account.setStatus(AccountStatus.PENDING); // admin/staff activate later
-        return accountRepository.save(account);
+        
+        Account savedAccount = accountRepository.save(account);
+        
+        if (savedAccount.getRole() == Role.STUDENT) {
+            Student student = new Student();
+            student.setAccount(savedAccount);
+            studentRepository.save(student);
+        }
+        
+        return savedAccount;
     }
 
     @Transactional(readOnly = true)

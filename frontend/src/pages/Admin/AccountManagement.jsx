@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2 } from 'lucide-react';
+import { adminApi } from '../../api/adminApi';
 
 const AccountManagement = () => {
   const [tab, setTab] = useState('pending');
@@ -10,19 +11,63 @@ const AccountManagement = () => {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
 
-  const [pendingList, setPendingList] = useState([
-    { id: 101, name: 'Nguyen Van An', email: 'an.nguyen@fpt.edu.vn', studentId: 'SE160123', campus: 'Hanoi', proof: 'Student ID (.pdf)', registered: '2 hours ago' },
-    { id: 102, name: 'Tran Thi Bich', email: 'bichtran@fpt.edu.vn', studentId: 'SS170456', campus: 'Ho Chi Minh', proof: 'FAP Screenshot (.jpg)', registered: '3 hours ago' },
-    { id: 103, name: 'Le Minh Duc', email: 'duclm@fpt.edu.vn', studentId: 'SA180789', campus: 'Da Nang', proof: 'Student ID (.png)', registered: '5 hours ago' },
-  ]);
+  const [pendingList, setPendingList] = useState([]);
+  const [activeList, setActiveList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [processingId, setProcessingId] = useState(null);
+  const [showRejectModal, setShowRejectModal] = useState(null); // Lưu ID của account cần reject
 
-  const [activeList, setActiveList] = useState([
-    { id: 1, name: 'Hoang Nam', email: 'nam.hoang@fpt.edu.vn', role: 'Participant', status: 'active', joined: 'May 18, 2026' },
-    { id: 4, name: 'Dr. Pham Quoc Hung', email: 'hung.pham@gmail.com', role: 'Judge', status: 'active', joined: 'May 10, 2026' },
-    { id: 5, name: 'Sarah Nguyen', email: 'sarah@seal.vn', role: 'Mentor', status: 'active', joined: 'May 10, 2026' },
-    { id: 6, name: 'Alan Turing', email: 'alan@seal.vn', role: 'Judge', status: 'active', joined: 'May 12, 2026' },
-    { id: 7, name: 'Ada Lovelace', email: 'ada@seal.vn', role: 'Judge', status: 'suspended', joined: 'May 12, 2026' },
-  ]);
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const [pending, active] = await Promise.all([
+        adminApi.getPendingAccounts(),
+        adminApi.getActiveAccounts()
+      ]);
+      setPendingList(pending);
+      setActiveList(active);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleApprove = async (id) => {
+    setProcessingId(id);
+    try {
+      await adminApi.approveAccount(id);
+      loadData(); // Tải lại danh sách
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleRejectClick = (id) => {
+    setShowRejectModal(id);
+  };
+
+  const confirmReject = async () => {
+    if (!showRejectModal) return;
+    const id = showRejectModal;
+    setShowRejectModal(null); // Đóng modal ngay lập tức
+    setProcessingId(id);
+    
+    try {
+      await adminApi.rejectAccount(id);
+      loadData(); // Tải lại danh sách
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setProcessingId(null);
+    }
+  };
 
   const handleCreateAccount = (e) => {
     e.preventDefault();
@@ -126,8 +171,18 @@ const AccountManagement = () => {
                 <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.registered}</td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button style={{ padding: '6px 12px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', color: 'var(--success)', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}><CheckCircle size={14} /> Approve</button>
-                    <button style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}><XCircle size={14} /> Reject</button>
+                    <button 
+                      onClick={() => handleApprove(u.id)}
+                      disabled={processingId === u.id}
+                      style={{ padding: '6px 12px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', color: 'var(--success)', fontSize: '12px', cursor: processingId === u.id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600', opacity: processingId === u.id ? 0.5 : 1 }}>
+                      {processingId === u.id ? <Loader2 size={14} className="spin" /> : <CheckCircle size={14} />} Approve
+                    </button>
+                    <button 
+                      onClick={() => handleRejectClick(u.id)}
+                      disabled={processingId === u.id}
+                      style={{ padding: '6px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', fontSize: '12px', cursor: processingId === u.id ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600', opacity: processingId === u.id ? 0.5 : 1 }}>
+                      <XCircle size={14} /> Reject
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -165,7 +220,14 @@ const AccountManagement = () => {
               </tr>
             ))}
             
-            {((tab === 'pending' && filteredPending.length === 0) || (tab === 'active' && filteredActive.length === 0)) && (
+            {isLoading ? (
+              <tr>
+                <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  <Loader2 size={24} className="spin" style={{ margin: '0 auto', display: 'block', marginBottom: '8px' }} />
+                  Loading accounts...
+                </td>
+              </tr>
+            ) : ((tab === 'pending' && filteredPending.length === 0) || (tab === 'active' && filteredActive.length === 0)) && (
               <tr>
                 <td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                   No accounts found.
@@ -181,12 +243,12 @@ const AccountManagement = () => {
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={() => setShowCreateModal(false)} />
           
-          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '500px', background: 'rgba(15,23,42,0.95)', border: '1px solid var(--border-color)', borderRadius: '24px', padding: '32px', boxShadow: '0 24px 60px rgba(0,0,0,0.5)' }}>
-            <button className="btn-icon" onClick={() => setShowCreateModal(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'var(--bg-hover)' }}>
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '500px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '24px', padding: '32px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
+            <button className="btn-icon" onClick={() => setShowCreateModal(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'var(--bg-subtle)' }}>
               <X size={20} />
             </button>
 
-            <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Create Expert Account</h2>
+            <h2 style={{ fontSize: '24px', marginBottom: '8px', color: 'var(--text-primary)' }}>Create Expert Account</h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Issue a new account for Mentors or Judges directly.</p>
 
             {/* Error Message UI */}
@@ -208,17 +270,17 @@ const AccountManagement = () => {
             <form onSubmit={handleCreateAccount} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Full Name</label>
-                <input type="text" placeholder="e.g. Dr. Nguyen Van A" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white', outline: 'none' }} />
+                <input type="text" placeholder="e.g. Dr. Nguyen Van A" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none' }} />
               </div>
               
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Email Address</label>
-                <input type="email" placeholder="email@example.com" value={newAccount.email} onChange={e => setNewAccount({...newAccount, email: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-hover)', border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', color: 'white', outline: 'none' }} />
+                <input type="email" placeholder="email@example.com" value={newAccount.email} onChange={e => setNewAccount({...newAccount, email: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', color: 'var(--text-primary)', outline: 'none' }} />
               </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Assign Role</label>
-                <select value={newAccount.role} onChange={e => setNewAccount({...newAccount, role: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'white', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
+                <select value={newAccount.role} onChange={e => setNewAccount({...newAccount, role: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
                   <option value="Judge" style={{ color: 'black' }}>Judge</option>
                   <option value="Mentor" style={{ color: 'black' }}>Mentor</option>
                   <option value="Admin" style={{ color: 'black' }}>Admin</option>
@@ -230,7 +292,7 @@ const AccountManagement = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button type="button" style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setShowCreateModal(false)}>Cancel</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={isCreating}>
                   <Save size={18} /> {isCreating ? 'Processing...' : 'Issue Account'}
                 </button>
@@ -247,6 +309,31 @@ const AccountManagement = () => {
               80% { transform: translateX(6px); }
             }
           `}</style>
+        </div>
+      )}
+
+      {/* Reject Confirmation Modal */}
+      {showRejectModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} onClick={() => setShowRejectModal(null)} />
+          
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '400px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '24px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--danger)' }}>
+              <AlertCircle size={24} />
+            </div>
+            
+            <h3 style={{ fontSize: '18px', marginBottom: '8px', color: 'var(--text-primary)' }}>Reject Account</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to reject this registration? The user will be notified via email and must re-upload their verification proof.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button style={{ flex: 1, padding: '10px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setShowRejectModal(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--danger)', borderColor: 'var(--danger)', padding: '10px' }} onClick={confirmReject}>
+                Yes, Reject
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

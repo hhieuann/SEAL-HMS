@@ -39,6 +39,6 @@ public class AuthController {
             throw new BusinessException("Invalid email or password");
         }
         String token = jwtService.generateToken(account.getEmail(), account.getRole().name());
-        return ApiResponse.ok(new AuthResponse(token, account.getRole().name()));
+        return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId()));
     }
 }

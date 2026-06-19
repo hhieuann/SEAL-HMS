@@ -1,24 +1,17 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation, Link } from 'react-router-dom';
 
-const ProtectedRoute = ({ allowedTypes, children }) => {
+const ProtectedRoute = ({ allowedRoles, children }) => {
   const location = useLocation();
-  const userStr = localStorage.getItem('currentUser');
-  let userType = null;
-  
-  if (userStr) {
-    try {
-      const user = JSON.parse(userStr);
-      userType = user.type;
-    } catch (e) {}
-  }
+  const token = localStorage.getItem('token');
+  const userRole = localStorage.getItem('userRole');
 
-  if (!userStr) {
+  if (!token) {
     // Not logged in, redirect to login
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedTypes && !allowedTypes.includes(userType)) {
+  if (allowedRoles && !allowedRoles.includes(userRole)) {
     // Logged in but role not allowed -> 403 Forbidden
     return <Navigate to="/403" replace />;
   }
