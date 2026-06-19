@@ -1,35 +1,68 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle } from 'lucide-react';
+import { authApi } from '../../api/auth';
 
 const Register = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [proofPreview, setProofPreview] = useState(null);
   const navigate = useNavigate();
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
 
-    // Unhappy Case Simulation: Email contains "error" or "exist"
-    if (e.target[2].value.includes('error') || e.target[2].value.includes('exist')) {
-      setError('This FPT Email is already registered on the system.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
+    // Nếu chưa chọn file ảnh (bỏ qua cho dễ test)
+    // if (!proofFile) {
+    //   setError('Please upload your Student ID or FAP Screenshot.');
+    //   setShaking(true);
+    //   setTimeout(() => setShaking(false), 500);
+    //   return;
+    // }
+
+    const email = e.target[0].value; // First Name
+    // Trong thực tế sẽ gom cả họ tên, email, pass, file... để gửi lên server bằng FormData
+    const fptEmail = document.getElementById('fptEmail').value;
+    const password = document.getElementById('regPassword').value;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    try {
+      // Gọi lên Spring Boot Backend API
+      await authApi.register(fptEmail, password, 'STUDENT');
+      
       setSuccess('Account created successfully! Redirecting...');
       setTimeout(() => {
-        navigate('/registration-success');
+        navigate('/login');
       }, 1500);
-    }, 1000);
+    } catch (err) {
+      console.error('Registration Error:', err);
+      const errorDetail = err.response?.data?.message || err.message || JSON.stringify(err);
+      const debugUrl = err.config ? `${err.config.baseURL || ''}${err.config.url}` : 'unknown url';
+      setError(`Registration failed: ${errorDetail} (${debugUrl})`);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProofFile(file);
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (event) => setProofPreview(event.target.result);
+        reader.readAsDataURL(file);
+      } else {
+        setProofPreview(null);
+      }
+    }
   };
 
   return (
@@ -69,49 +102,65 @@ const Register = () => {
       
       <form onSubmit={handleRegister} className="auth-form">
         <div className="form-row">
-          <div className="form-group">
-            <label>First Name</label>
-            <input type="text" placeholder="John" defaultValue="Sarah" required />
+          <div className="form-floating">
+            <input type="text" id="firstName" placeholder=" " required />
+            <label htmlFor="firstName">First Name</label>
           </div>
-          <div className="form-group">
-            <label>Last Name</label>
-            <input type="text" placeholder="Doe" defaultValue="Connor" required />
+          <div className="form-floating">
+            <input type="text" id="lastName" placeholder=" " required />
+            <label htmlFor="lastName">Last Name</label>
           </div>
         </div>
-        <div className="form-group">
-          <label>FPT Email Address</label>
-          <input type="email" placeholder="example@fpt.edu.vn" defaultValue="sarah.connor@fpt.edu.vn" required pattern=".+@fpt\.edu\.vn" title="Must be a valid @fpt.edu.vn email" style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
-          <small style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '6px', display: 'block' }}>* Only @fpt.edu.vn emails are allowed.</small>
+        <div className="form-floating">
+          <input type="email" id="fptEmail" placeholder=" " required style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
+          <label htmlFor="fptEmail">Email Address</label>
         </div>
-        <div className="form-group">
-          <label>Password</label>
-          <input type="password" placeholder="Create a strong password" defaultValue="password123" required />
+        <div className="form-floating">
+          <input type="password" id="regPassword" placeholder=" " required minLength="6" />
+          <label htmlFor="regPassword">Password (Min 6 chars)</label>
         </div>
         <div className="form-row" style={{ marginTop: '16px' }}>
-          <div className="form-group">
-            <label>Student ID</label>
-            <input type="text" placeholder="e.g. SE160123" defaultValue="SE170999" required />
+          <div className="form-floating">
+            <input type="text" id="studentId" placeholder=" " required />
+            <label htmlFor="studentId">Student ID</label>
           </div>
-          <div className="form-group">
-            <label>Campus</label>
-            <select required defaultValue="Hanoi" className="fpt-select" style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
-              <option value="" style={{ color: 'black' }}>Select Campus</option>
+          <div className="form-floating">
+            <select id="campus" required defaultValue="" className="form-select" style={{ width: '100%', padding: '20px 16px 8px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
+              <option value="" disabled style={{ color: 'black' }}></option>
               <option value="Hanoi" style={{ color: 'black' }}>Hanoi (Hoa Lac)</option>
               <option value="Ho Chi Minh" style={{ color: 'black' }}>Ho Chi Minh</option>
               <option value="Da Nang" style={{ color: 'black' }}>Da Nang</option>
               <option value="Can Tho" style={{ color: 'black' }}>Can Tho</option>
               <option value="Quy Nhon" style={{ color: 'black' }}>Quy Nhon</option>
             </select>
+            <label htmlFor="campus">Campus</label>
           </div>
         </div>
         <div className="form-group" style={{ marginTop: '16px' }}>
           <label>Verification Proof (Student ID or FAP Screenshot)</label>
-          <div style={{ padding: '20px', border: '1px dashed var(--border-color)', borderRadius: '8px', background: 'var(--bg-subtle)', textAlign: 'center' }}>
-            <input type="file" id="proof" accept="image/*,.pdf" required style={{ display: 'none' }} />
-            <label htmlFor="proof" style={{ cursor: 'pointer', color: 'var(--primary)', fontWeight: '600', display: 'inline-block' }}>
-              Click to upload file
-            </label>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>Accepted formats: JPG, PNG, PDF (Max 5MB)</div>
+          <div style={{ padding: proofPreview ? '10px' : '20px', border: '1px dashed var(--border-color)', borderRadius: '8px', background: 'var(--bg-subtle)', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+            <input type="file" id="proof" accept="image/*,.pdf" onChange={handleFileChange} style={{ display: 'none' }} />
+            
+            {proofPreview ? (
+              <div style={{ position: 'relative', width: '100%', height: '160px' }}>
+                <img src={proofPreview} alt="Proof preview" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: '4px' }} />
+                <label htmlFor="proof" style={{ position: 'absolute', bottom: '8px', right: '8px', background: 'rgba(0,0,0,0.7)', color: 'white', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px' }}>
+                  Change File
+                </label>
+              </div>
+            ) : proofFile ? (
+               <div style={{ padding: '20px' }}>
+                 <div style={{ color: 'var(--primary)', fontWeight: '600', marginBottom: '8px' }}>{proofFile.name}</div>
+                 <label htmlFor="proof" style={{ cursor: 'pointer', fontSize: '13px', textDecoration: 'underline' }}>Change File</label>
+               </div>
+            ) : (
+              <>
+                <label htmlFor="proof" style={{ cursor: 'pointer', color: 'var(--primary)', fontWeight: '600', display: 'inline-block' }}>
+                  Click to upload file
+                </label>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>Accepted formats: JPG, PNG, PDF (Max 5MB)</div>
+              </>
+            )}
           </div>
         </div>
         <button type="submit" className="btn btn-primary full-width mt-4" disabled={isSubmitting}>
