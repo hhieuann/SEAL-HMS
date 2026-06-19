@@ -35,9 +35,19 @@ const JudgePanel = () => {
         }
         setEvent(evt);
 
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+        const round = evt?.rounds?.[activeRoundIdx] || null;
         setCurrentRound(round);
 
         if (!evt || !round) return;

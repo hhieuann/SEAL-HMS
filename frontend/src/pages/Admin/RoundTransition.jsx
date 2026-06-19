@@ -28,7 +28,18 @@ const RoundTransition = () => {
         const evt = eventRes.data;
         setEvent(evt);
 
-        const savedRoundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+        const rounds = evt.rounds || [];
+        let savedRoundIdx = 0;
+        if (rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = rounds.length - 1; i >= 0; i--) {
+            if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          savedRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
         setCurrentRoundIndex(savedRoundIdx);
         const round = evt.rounds?.[savedRoundIdx];
         const roundId = round?.id || String(savedRoundIdx);
@@ -61,11 +72,12 @@ const RoundTransition = () => {
         if (trackDrawStr) {
           const drawn = JSON.parse(trackDrawStr);
           const standings = drawn.map((track, i) => {
-            const teamEntries = (track.teams || []).map(teamName => {
-              const teamObj = teamsList.find(t => t.name === teamName);
-              const teamId = teamObj?.id;
+            const teamEntries = (track.teams || []).map(teamItem => {
+              const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
+              const teamObj = teamsList.find(t => t.name === teamNameStr);
+              const teamId = teamObj?.id || (typeof teamItem === 'object' ? teamItem.id : undefined);
               const score = (teamId && dbScoreMap[teamId] != null) ? dbScoreMap[teamId] : null;
-              return { team: teamName, teamId, score };
+              return { team: teamNameStr, teamId, score };
             });
 
             // Sort by score desc (null scores go to bottom)
@@ -143,7 +155,7 @@ const RoundTransition = () => {
   );
   const allTiesResolved = tiebreakerTeams.every(t => resolvedTies[t.team]);
 
-  const handleLock = () => {
+  const handleLock = async () => {
     if (tiebreakerTeams.length > 0 && !allTiesResolved) {
       setLockError(true);
       setLockShaking(true);
@@ -151,27 +163,49 @@ const RoundTransition = () => {
       return;
     }
     setLockError(false);
-    setConfirmed(true);
-    setLockToast(true);
-    if (!isLastRound) {
-      // Build next round track draw (only keep advanced teams)
-      const nextRoundDraw = trackStandings.map(track => {
-        const advancedTeams = track.teams
-          .filter(t => t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass'))
-          .map(t => t.team);
-        return { ...track, teams: advancedTeams };
-      });
-      localStorage.setItem('trackDraw', JSON.stringify(nextRoundDraw));
-      localStorage.setItem('currentRoundIndex', String(currentRoundIndex + 1));
-      
-      setTimeout(() => {
+    
+    try {
+      const currentRoundObj = rounds[currentRoundIndex];
+      // If the current round hasn't started yet, we START it.
+      if (currentRoundObj.status === 'CREATED' || currentRoundObj.status?.toLowerCase() === 'planned') {
+        await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
         window.location.reload();
-      }, 1500);
-    } else {
-      setTimeout(() => setLockToast(false), 4000);
-      setTimeout(() => {
-        setShowCelebration(true);
-      }, 500);
+        return;
+      }
+
+      setConfirmed(true);
+      setLockToast(true);
+      
+      await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
+
+      if (!isLastRound) {
+        // Build next round track draw (only keep advanced teams)
+        const nextRoundDraw = trackStandings.map(track => {
+          const advancedTeams = track.teams
+            .filter(t => t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass'))
+            .map(t => t.team);
+          return { ...track, teams: advancedTeams };
+        });
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(nextRoundDraw));
+        
+        const nextRoundObj = rounds[currentRoundIndex + 1];
+        if (nextRoundObj) {
+           await eventService.updateRoundStatus(nextRoundObj.id, 'ACTIVE');
+        }
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setTimeout(() => setLockToast(false), 4000);
+        setTimeout(() => {
+          setShowCelebration(true);
+        }, 500);
+      }
+    } catch (err) {
+       console.error("Error updating round status", err);
+       alert("Failed to update round status");
     }
   };
 
@@ -192,25 +226,27 @@ const RoundTransition = () => {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary">Export Results CSV</button>
-          <button
-            onClick={handleLock}
-            disabled={confirmed}
-            className="btn btn-primary"
-            style={{
-              background: confirmed ? 'rgba(16,185,129,0.3)' : lockError ? 'var(--danger)' : isLastRound ? 'var(--success)' : 'var(--primary)',
-              cursor: confirmed ? 'not-allowed' : 'pointer',
-              gap: '8px',
-              animation: lockShaking ? 'shake 0.4s ease-in-out' : 'none',
-              padding: '10px 24px'
-            }}
-          >
-            {confirmed
-              ? <><CheckCircle size={16} /> {isLastRound ? 'Event Finalized' : `Advanced to ${nextRound?.name}`}</>
-              : isLastRound
-                ? <><Trophy size={16} /> Finalize & End Event</>
-                : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
-            }
-          </button>
+            <button
+              onClick={handleLock}
+              disabled={confirmed}
+              className="btn btn-primary"
+              style={{
+                background: confirmed ? 'rgba(16,185,129,0.3)' : lockError ? 'var(--danger)' : isLastRound && currentRound?.status !== 'CREATED' && currentRound?.status?.toLowerCase() !== 'planned' ? 'var(--success)' : 'var(--primary)',
+                cursor: confirmed ? 'not-allowed' : 'pointer',
+                gap: '8px',
+                animation: lockShaking ? 'shake 0.4s ease-in-out' : 'none',
+                padding: '10px 24px'
+              }}
+            >
+              {confirmed
+                ? <><CheckCircle size={16} /> {isLastRound ? 'Event Finalized' : `Advanced to ${nextRound?.name}`}</>
+                : (currentRound?.status === 'CREATED' || currentRound?.status?.toLowerCase() === 'planned')
+                  ? <><ArrowRight size={16} /> Start {currentRound?.name || 'Round'}</>
+                  : isLastRound
+                    ? <><Trophy size={16} /> Finalize & End Event</>
+                    : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
+              }
+            </button>
         </div>
       </div>
 
