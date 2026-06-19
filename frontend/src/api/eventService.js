@@ -34,5 +34,15 @@ export const eventService = {
   updateRound: async (id, roundData) => {
     const response = await apiClient.put(`/api/v1/rounds/${id}`, roundData);
     return response.data;
+  },
+
+  createRound: async (eventId, roundData) => {
+    const response = await apiClient.post(`/api/v1/events/${eventId}/rounds`, roundData);
+    return response.data;
+  },
+
+  deleteRound: async (id) => {
+    const response = await apiClient.delete(`/api/v1/rounds/${id}`);
+    return response.data;
   }
 };
