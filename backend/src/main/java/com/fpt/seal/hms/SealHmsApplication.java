@@ -8,9 +8,11 @@ import java.util.TimeZone;
 @SpringBootApplication
 public class SealHmsApplication {
     public static void main(String[] args) {
-        // Force a valid IANA zone before any DB connection. Some Windows installs report
-        // the JVM default as the deprecated alias "Asia/Saigon", which PostgreSQL 18
-        // rejects on connect ("invalid value for parameter TimeZone").
+        // Must run before any DB connection. The PostgreSQL JDBC driver sends the JVM
+        // default timezone in the connection startup packet; some Windows installs report
+        // it as the deprecated alias "Asia/Saigon", which PostgreSQL 18 rejects outright
+        // (before it ever reads the URL's ?options=TimeZone). Forcing a valid IANA zone
+        // here is the only fix that works at that stage.
         TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
         SpringApplication.run(SealHmsApplication.class, args);
     }
