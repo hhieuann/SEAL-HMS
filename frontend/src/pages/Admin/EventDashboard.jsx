@@ -1,21 +1,149 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Lock } from 'lucide-react';
+import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Lock, Calendar, Target } from 'lucide-react';
+import { mockService } from '../../api/mockService';
 import './EventDashboard.css';
 
 const EventDashboard = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
-  
+  const [event, setEvent] = useState(null);
+  const [teams, setTeams] = useState([]);
+
+  const mapEventResponse = (rawEvent) => {
+    if (!rawEvent) return null;
+    
+    // Restore mock state for properties not in backend
+    const localStateStr = localStorage.getItem(`eventMockState_${rawEvent.id}`);
+    const localState = localStateStr ? JSON.parse(localStateStr) : { registrationOpen: true, registrationDeadline: '' };
+
+    return {
+      ...rawEvent,
+      registrationOpen: localState.registrationOpen,
+      registrationDeadline: localState.registrationDeadline,
+      subTopics: rawEvent.tracks?.flatMap(t => t.topics || []) || [],
+      rounds: (rawEvent.rounds || []).map(r => {
+        let startStr = r.startTime;
+        if (Array.isArray(startStr)) {
+          const [y, m, d, h, min, s] = startStr;
+          startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
+        }
+        let endStr = r.endTime;
+        if (Array.isArray(endStr)) {
+          const [y, m, d, h, min, s] = endStr;
+          endStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
+        }
+        return { ...r, start: startStr, end: endStr };
+      })
+    };
+  };
+
+  useEffect(() => {
+    import('../../api/eventService.js').then(({ eventService }) => {
+      // Use the eventId from the URL or fallback to fetching all events and picking the first
+      if (eventId && eventId !== 'seal-sp26') {
+        eventService.getEventDetails(eventId).then(res => {
+          setEvent(mapEventResponse(res.data));
+        }).catch(err => console.error(err));
+      } else {
+        eventService.getEvents().then(res => {
+          if (res.data && res.data.length > 0) {
+            setEvent(mapEventResponse(res.data[0]));
+          }
+        }).catch(err => console.error(err));
+      }
+    });
+
+    import('../../api/teamService.js').then(({ teamService }) => {
+      teamService.getTeamsByEvent(eventId === 'seal-sp26' ? 1 : (eventId || 1))
+        .then(res => setTeams(res.data || []))
+        .catch(err => console.error(err));
+    });
+  }, [eventId]);
+
+  const handleUpdateEvent = async (updates) => {
+    try {
+      const { eventService } = await import('../../api/eventService.js');
+      
+      // Sync Registration Open/Deadline to Backend via updateEvent
+      if (updates.registrationOpen !== undefined || updates.registrationDeadline !== undefined) {
+        
+        const formatLocalDate = (dateVal) => {
+          if (!dateVal) return null;
+          if (Array.isArray(dateVal)) {
+            return `${dateVal[0]}-${String(dateVal[1]).padStart(2, '0')}-${String(dateVal[2]).padStart(2, '0')}`;
+          }
+          return dateVal; // String
+        };
+
+        const payload = { 
+          name: event.name, 
+          type: event.type, 
+          startDate: formatLocalDate(event.startDate), 
+          endDate: formatLocalDate(event.endDate), 
+          description: event.description,
+          registrationOpen: updates.registrationOpen !== undefined ? updates.registrationOpen : event.registrationOpen,
+          registrationDeadline: updates.registrationDeadline !== undefined ? updates.registrationDeadline : event.registrationDeadline
+        };
+        const res = await eventService.updateEvent(event.id, payload);
+        
+        // Save local mock state
+        localStorage.setItem(`eventMockState_${event.id}`, JSON.stringify({
+           registrationOpen: payload.registrationOpen,
+           registrationDeadline: payload.registrationDeadline
+        }));
+        
+        const mapped = mapEventResponse(res.data);
+        mapped.registrationOpen = payload.registrationOpen;
+        mapped.registrationDeadline = payload.registrationDeadline;
+        setEvent(mapped);
+        return;
+      }
+
+      // For Phase 1, we just update status if present. Deep updates to rounds are not supported in basic update API yet.
+      if (updates.status) {
+        const res = await eventService.updateEventStatus(event.id, updates.status);
+        setEvent(mapEventResponse(res.data));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRoundDateChange = (roundId, field, value) => {
+    const updatedRounds = event.rounds.map(r => 
+      r.id === roundId ? { ...r, [field]: value } : r
+    );
+    setEvent({ ...event, rounds: updatedRounds });
+    // handleUpdateEvent({ rounds: updatedRounds }); // Commented out for Phase 1 as deep updates aren't supported yet
+  };
+
+  if (!event) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <h2 style={{ marginBottom: '8px' }}>No Event Found</h2>
+        <p style={{ marginBottom: '24px' }}>Create an event first to view the dashboard.</p>
+        <button className="btn btn-primary" onClick={() => navigate('/admin/events/create')}>Create Event</button>
+      </div>
+    );
+  }
+
+  const currentRound = event.rounds && event.rounds.length > 0 ? event.rounds[0] : null;
+  const totalTeams = teams.length;
+  const totalTopics = event.subTopics ? event.subTopics.length : 0;
+  const totalRounds = event.rounds ? event.rounds.length : 0;
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div>
-          <h1>System Overview</h1>
-          <p className="subtitle">Track the status of SEAL Hackathon Spring 2026</p>
+          <h1>{event.name || 'System Overview'}</h1>
+          <p className="subtitle">{event.description || `Track the status of your hackathon`}</p>
         </div>
         <div className="status-indicator">
-          <span className="dot live"></span> Ongoing (Qualifying Round)
+          <span className="dot live"></span>
+          {event.status || 'Ongoing'}{currentRound ? ` — ${currentRound.name}` : ''}
         </div>
       </div>
 
@@ -24,159 +152,229 @@ const EventDashboard = () => {
           <div className="stat-icon gradient-1"><Users size={24} /></div>
           <div className="stat-details">
             <h3>Total Teams</h3>
-            <p className="stat-value">124</p>
-            <p className="stat-trend positive"><ArrowUp size={14} /> 12% vs last season</p>
+            <p className="stat-value">{totalTeams}</p>
+            <p className="stat-trend neutral">{totalTeams === 0 ? 'No teams yet' : `${totalTeams} team(s) registered`}</p>
           </div>
         </div>
         <div className="stat-card glass-panel">
-          <div className="stat-icon gradient-2"><FileCode2 size={24} /></div>
+          <div className="stat-icon gradient-2"><Target size={24} /></div>
           <div className="stat-details">
-            <h3>Pending Reviews</h3>
-            <p className="stat-value">45</p>
-            <p className="stat-trend neutral">Deadline: 23:59 today</p>
+            <h3>Sub-topics</h3>
+            <p className="stat-value">{totalTopics}</p>
+            <p className="stat-trend neutral">{totalTopics === 0 ? 'None configured' : `${totalTopics} topic(s)`}</p>
           </div>
         </div>
         <div className="stat-card glass-panel">
           <div className="stat-icon gradient-3"><CheckSquare size={24} /></div>
           <div className="stat-details">
-            <h3>Scored Submissions</h3>
-            <p className="stat-value">82%</p>
-            <p className="stat-trend warning">7 judges pending</p>
+            <h3>Rounds</h3>
+            <p className="stat-value">{totalRounds}</p>
+            <p className="stat-trend neutral">{totalRounds === 0 ? 'No rounds yet' : `${totalRounds} round(s) configured`}</p>
           </div>
         </div>
         <div className="stat-card glass-panel">
           <div className="stat-icon gradient-4"><AlertTriangle size={24} /></div>
           <div className="stat-details">
-            <h3>Violations & Reports</h3>
-            <p className="stat-value">2</p>
-            <p className="stat-trend negative">Action required</p>
+            <h3>Event Type</h3>
+            <p className="stat-value" style={{ fontSize: '20px' }}>{event.type || 'Hackathon'}</p>
+            <p className="stat-trend neutral">{event.startDate} → {event.endDate || 'TBD'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Event Management Controls */}
+      <div className="glass-panel" style={{ marginTop: '24px', marginBottom: '24px', padding: '24px' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Lock size={20} color="var(--primary)" /> Event Management Controls
+        </h2>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+          {/* Registration Lock */}
+          <div>
+            <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Registration Settings</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>Registration Status</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Open or close team registrations</div>
+                </div>
+                <button 
+                  onClick={() => handleUpdateEvent({ registrationOpen: !event.registrationOpen })}
+                  className={`btn ${event.registrationOpen ? 'btn-success' : 'btn-secondary'}`}
+                  style={{ padding: '6px 12px', fontSize: '13px' }}
+                >
+                  {event.registrationOpen ? 'Open' : 'Closed'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)' }}>Registration Deadline</label>
+                <input 
+                  type="datetime-local" 
+                  value={event.registrationDeadline || ''}
+                  onChange={e => handleUpdateEvent({ registrationDeadline: e.target.value })}
+                  style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '8px 12px', borderRadius: '8px', outline: 'none' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Round Time Management */}
+          <div>
+            <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Round Time Management</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', maxHeight: '200px', overflowY: 'auto' }}>
+              {event.rounds && event.rounds.length > 0 ? event.rounds.map((round) => (
+                <div key={round.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
+                  <div style={{ fontWeight: '500', fontSize: '13px' }}>{round.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input 
+                      type="time" 
+                      value={round.start || ''} 
+                      onChange={e => handleRoundDateChange(round.id, 'start', e.target.value)}
+                      title="Start Time"
+                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
+                    />
+                    <span style={{ color: 'var(--text-secondary)' }}>→</span>
+                    <input 
+                      type="time" 
+                      value={round.end || ''} 
+                      onChange={e => handleRoundDateChange(round.id, 'end', e.target.value)}
+                      title="End Time"
+                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
+                    />
+                  </div>
+                </div>
+              )) : (
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No rounds configured</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="dashboard-bottom-grid">
+        {/* Teams Panel */}
         <div className="panel glass-panel">
           <div className="panel-header">
-            <h2>Top Performing Teams</h2>
+            <h2>Registered Teams</h2>
             <button className="btn btn-text" onClick={() => navigate(`/admin/event/${eventId}/teams`)}>View all <ArrowRight size={16}/></button>
           </div>
-          <div className="table-container">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Rank</th>
-                  <th>Team</th>
-                  <th>Track</th>
-                  <th>Avg Score</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><div className="rank-badge gold">1</div></td>
-                  <td><strong>DeepMind Innovators</strong><br/><small>4 members</small></td>
-                  <td>Track A - AI Agent</td>
-                  <td><span className="score-text">95.0</span></td>
-                  <td><span className="status-tag status-success">Scored</span></td>
-                </tr>
-                <tr>
-                  <td><div className="rank-badge silver">2</div></td>
-                  <td><strong>EduNova</strong><br/><small>4 members</small></td>
-                  <td>Track C - EduTech</td>
-                  <td><span className="score-text">96.0</span></td>
-                  <td><span className="status-tag status-success">Scored</span></td>
-                </tr>
-                <tr>
-                  <td><div className="rank-badge bronze">3</div></td>
-                  <td><strong>NullPointerException</strong><br/><small>3 members</small></td>
-                  <td>Track B - Medical RAG</td>
-                  <td><span className="score-text">89.5</span></td>
-                  <td><span className="status-tag status-success">Scored</span></td>
-                </tr>
-                <tr>
-                  <td><div className="rank-badge" style={{ background: 'var(--bg-active)', color: 'white' }}>4</div></td>
-                  <td><strong>CodeCraft</strong><br/><small>3 members</small></td>
-                  <td>Track A - AI Agent</td>
-                  <td><span className="score-text">91.0</span></td>
-                  <td><span className="status-tag status-warning">In Progress (2/3)</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {teams.length === 0 ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <Users size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+              <p>No teams registered yet.</p>
+            </div>
+          ) : (
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Team</th>
+                    <th>Members</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teams.slice(0, 5).map((team, i) => (
+                    <tr key={team.id}>
+                      <td><div className="rank-badge" style={{ background: i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : 'var(--bg-active)', color: 'white' }}>{i + 1}</div></td>
+                      <td><strong>{team.name}</strong><br/><small>{team.inviteCode}</small></td>
+                      <td>{team.members ? team.members.length : 0} / 5</td>
+                      <td><span className="status-tag status-success">Active</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
+        {/* Rounds & Timeline */}
         <div className="panel glass-panel">
           <div className="panel-header">
-            <h2>Event Timeline</h2>
+            <h2>Rounds Timeline</h2>
           </div>
-          <div className="timeline">
-            <div className="timeline-item completed">
-              <div className="timeline-dot"></div>
-              <div className="timeline-content">
-                <h4>Registration & Team Formation</h4>
-                <p>Closed on May 10, 2026</p>
-              </div>
+          {event.rounds && event.rounds.length > 0 ? (
+            <div className="timeline">
+              {event.rounds.map((round, i) => (
+                <div key={round.id || i} className={`timeline-item ${i === 0 ? 'active' : ''}`}>
+                  <div className={`timeline-dot ${i === 0 ? 'pulse-dot' : ''}`}></div>
+                  <div className="timeline-content">
+                    <h4>{round.name}</h4>
+                    <p>
+                      {round.start && round.end ? `${round.start} → ${round.end}` : 'Dates TBD'}
+                      {round.criteria && round.criteria.length > 0 ? ` · ${round.criteria.length} criteria` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="timeline-item completed">
-              <div className="timeline-dot"></div>
-              <div className="timeline-content">
-                <h4>Qualifying Round - Submissions</h4>
-                <p>Approved 120/124 teams</p>
-              </div>
+          ) : (
+            <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <p>No rounds configured yet.</p>
+              <button className="btn btn-secondary" style={{ marginTop: '12px' }} onClick={() => navigate('/admin/events/create')}>
+                Configure Rounds
+              </button>
             </div>
-            <div className="timeline-item active">
-              <div className="timeline-dot pulse-dot"></div>
-              <div className="timeline-content">
-                <h4>Final Round - Judging</h4>
-                <p>Judges are evaluating projects</p>
-              </div>
-            </div>
-            <div className="timeline-item">
-              <div className="timeline-dot"></div>
-              <div className="timeline-content">
-                <h4>Winner Announcement</h4>
-                <p>Expected: May 22, 2026</p>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Activity Log */}
-      <div className="glass-panel" style={{ marginTop: '28px', padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid var(--border-color)' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Activity size={20} color="var(--accent-3)" /> Recent Activity
+      {/* Sub-topics Section */}
+      {event.subTopics && event.subTopics.length > 0 && (
+        <div className="glass-panel" style={{ marginTop: '28px', padding: '24px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Target size={20} color="var(--warning)" /> Sub-topics
           </h2>
-          <button className="btn btn-text" style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>View full audit log <ArrowRight size={14} /></button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+            {event.subTopics.map((st, i) => (
+              <div key={st.id || i} style={{ padding: '16px', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '12px' }}>
+                <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--warning)', marginBottom: '6px' }}>{st.name}</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{st.desc || 'No description.'}</div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
 
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {[
-            { icon: <CheckSquare size={15} />, color: 'var(--success)', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.25)', user: 'Judge Alan Turing', action: 'submitted final score for', target: 'NullPointerException', detail: '89.5 / 100 — AI Track', time: '2 min ago' },
-            { icon: <UserPlus size={15} />, color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.25)', user: 'Coordinator', action: 'approved account for', target: 'Nguyen Van An', detail: 'Participant — FPT University', time: '15 min ago' },
-            { icon: <AlertTriangle size={15} />, color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.25)', user: 'Coordinator', action: 'applied penalty to', target: 'DataSculpt', detail: '-5 pts — Late submission (12 min)', time: '1 hour ago' },
-            { icon: <MessageSquare size={15} />, color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.25)', user: 'Mentor Sarah Nguyen', action: 'resolved ticket from', target: 'ByteStrike', detail: '"How to deploy backend to AWS?"', time: '2 hours ago' },
-            { icon: <Ban size={15} />, color: 'var(--danger)', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.25)', user: 'Coordinator', action: 'disqualified team', target: 'ByteStrike', detail: 'Code plagiarism detected (92% similarity)', time: '1 day ago' },
-            { icon: <Lock size={15} />, color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.25)', user: 'Coordinator', action: 'published results for', target: 'Qualifying Round', detail: 'Scores now visible to all participants', time: '1 day ago' },
-          ].map((item, i, arr) => (
-            <div key={i} style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', padding: '14px 0', borderBottom: i < arr.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-              <div style={{ width: '34px', height: '34px', minWidth: '34px', borderRadius: '10px', background: item.bg, border: `1px solid ${item.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color }}>
-                {item.icon}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: '14px', lineHeight: '1.5', marginBottom: '2px' }}>
-                  <strong>{item.user}</strong>
-                  <span style={{ color: 'var(--text-secondary)', fontWeight: '400' }}> {item.action} </span>
-                  <strong style={{ color: item.color }}>{item.target}</strong>
-                </p>
-                <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{item.detail}</p>
-              </div>
-              <span style={{ fontSize: '12px', color: 'var(--bg-active)', whiteSpace: 'nowrap' }}>{item.time}</span>
-            </div>
-          ))}
+      {/* Scoring Criteria per Round */}
+      {event.rounds && event.rounds.some(r => r.criteria && r.criteria.length > 0) && (
+        <div className="glass-panel" style={{ marginTop: '20px', padding: '24px' }}>
+          <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Activity size={20} color="var(--accent-3)" /> Scoring Criteria by Round
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {event.rounds.map((round, ri) => (
+              round.criteria && round.criteria.length > 0 && (
+                <div key={round.id || ri}>
+                  <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-primary)' }}>
+                    {round.name}
+                    <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--text-secondary)', marginLeft: '8px' }}>
+                      ({round.start} → {round.end})
+                    </span>
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+                    {round.criteria.map((c, ci) => (
+                      <div key={ci} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                            <Target size={13} color="var(--primary)" />
+                            <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
+                          </div>
+                          <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{c.weight}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
