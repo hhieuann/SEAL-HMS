@@ -37,8 +37,9 @@ const MySubmission = () => {
         setCurrentRoundIndex(roundIdx);
 
         // Load event from real API
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes?.data?.[0] || null;
+        const eventIdStr = localStorage.getItem('p_eventId') || '1';
+        const eventRes = await eventService.getEventDetails(eventIdStr);
+        const evt = eventRes?.data || null;
         setEvent(evt);
 
         const round = evt?.rounds?.[roundIdx] || null;
