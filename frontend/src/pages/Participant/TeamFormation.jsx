@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
-import './Workspace.css'; // Reuse some general styles
+import { mockService } from '../../api/mockService';
+import './Workspace.css';
 
 const TeamFormation = () => {
   const navigate = useNavigate();
@@ -20,58 +21,62 @@ const TeamFormation = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleCreateTeam = (e) => {
+  const handleCreateTeam = async (e) => {
     e.preventDefault();
     setError('');
     const teamName = e.target[0].value;
-    
-    if (teamName.toLowerCase().includes('error') || teamName.toLowerCase().includes('exist')) {
-      setError('This team name is already taken.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
     setIsSubmitting(true);
-    setTimeout(() => {
-      // Add team to global pool for Admin to draw
-      const stored = localStorage.getItem('registeredTeams');
-      const teams = stored ? JSON.parse(stored) : [];
-      if (!teams.includes(teamName)) {
-        teams.push(teamName);
-        localStorage.setItem('registeredTeams', JSON.stringify(teams));
-      }
+
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      // Using eventId=1 and leaderAccountId=1 for Phase 1 integration since auth is not fully set up
+      const eventId = 1; 
+      const response = await teamService.createTeam(eventId, { 
+        name: teamName, 
+        leaderAccountId: 1 
+      });
       
-      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-      localStorage.setItem('p_teamInviteCode', inviteCode);
-      
-      localStorage.setItem('myTeamName', teamName);
+      // Backend createTeam might not return inviteCode immediately if we haven't implemented it in DB,
+      // but let's assume it returns { id, name, inviteCode } or we generate a dummy one for now
+      const teamResponseData = response.data || response; // Support both wrapped and unwrapped just in case
+      localStorage.setItem('p_teamInviteCode', teamResponseData.inviteCode || 'CODE123');
+      localStorage.setItem('myTeamName', teamResponseData.name || teamName);
+      localStorage.setItem('p_teamId', teamResponseData.id || '1');
       localStorage.setItem('p_hasJoinedEvent', 'true');
       localStorage.setItem('p_hasTeam', 'true');
-      setIsSubmitting(false);
+      localStorage.setItem('p_isLeader', 'true');
+      
       setActiveTab('success_create');
-    }, 1500);
+    } catch (err) {
+      setError(err.message || 'Failed to create team');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleJoinTeam = (e) => {
+  const handleJoinTeam = async (e) => {
     e.preventDefault();
     setError('');
     const inviteCode = e.target[0].value;
+    setIsSubmitting(true);
 
-    if (inviteCode.toLowerCase().includes('error') || inviteCode === '000000') {
-      setError('Invalid invite code. Please check again.');
+    try {
+      const currentUser = localStorage.getItem('userEmail') || 'Current User';
+      await mockService.joinTeam(inviteCode, currentUser);
+      
+      localStorage.setItem('p_hasJoinedEvent', 'true');
+      localStorage.setItem('p_hasTeam', 'true'); // Pending state
+      
+      setActiveTab('waiting');
+    } catch (err) {
+      setError(err.message || 'Failed to send request');
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      localStorage.setItem('p_hasJoinedEvent', 'true');
-      localStorage.setItem('p_hasTeam', 'true');
+    } finally {
       setIsSubmitting(false);
-      setActiveTab('waiting');
-    }, 1500);
+    }
   };
 
   return (
@@ -131,8 +136,8 @@ const TeamFormation = () => {
             </p>
           </div>
 
-          <button className="btn btn-primary" style={{ padding: '14px 36px', fontSize: '15px', fontWeight: '600', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#ffffff', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)' }} onClick={() => navigate('/participant/workspace')}>
-            Go to Workspace <ArrowRight size={18} style={{ marginLeft: '8px' }} />
+          <button className="btn btn-primary" style={{ padding: '14px 36px', fontSize: '15px', fontWeight: '600', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#ffffff', boxShadow: '0 4px 15px rgba(99, 102, 241, 0.4)' }} onClick={() => navigate('/participant/team-management')}>
+            Manage Team <ArrowRight size={18} style={{ marginLeft: '8px' }} />
           </button>
         </div>
       ) : activeTab === 'waiting' ? (
