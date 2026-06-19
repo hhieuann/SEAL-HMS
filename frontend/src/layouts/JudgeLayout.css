@@ -90,6 +90,9 @@
 
 .judge-main-content {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 32px 40px;
   position: relative;
 }
+

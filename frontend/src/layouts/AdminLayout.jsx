@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle } from 'lucide-react';
+import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle, Target } from 'lucide-react';
+import { authApi } from '../api/auth';
 
 import './AdminLayout.css';
 
@@ -121,7 +122,7 @@ const AdminLayout = () => {
               <div style={{ fontSize: '13px', fontWeight: '600' }}>Coordinator</div>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Administrator</div>
             </div>
-            <button className="btn-icon" onClick={() => navigate('/login')} title="Logout" style={{ marginLeft: '8px', color: 'white', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+            <button className="btn-icon" onClick={() => authApi.logout()} title="Logout" style={{ marginLeft: '8px', color: 'white', background: 'transparent', border: 'none', cursor: 'pointer' }}>
               <LogOut size={16} />
             </button>
           </div>
@@ -201,6 +202,9 @@ const AdminLayout = () => {
                 <p className="nav-section-title">TOURNAMENT OPS</p>
                 <NavLink to={`/admin/event/${eventId}/track-draw`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Shuffle size={20} /><span>Track Draw</span>
+                </NavLink>
+                <NavLink to={`/admin/event/${eventId}/criteria`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Target size={20} /><span>Criteria Manager</span>
                 </NavLink>
                 <NavLink to={`/admin/event/${eventId}/courtroom`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Scale size={20} /><span>The Courtroom</span>

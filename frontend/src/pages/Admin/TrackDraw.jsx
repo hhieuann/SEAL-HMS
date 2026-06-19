@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Shuffle, CheckCircle, AlertCircle, ChevronRight, Users, Tag, Lock, Unlock, RefreshCw, ArrowRight, Target } from 'lucide-react';
-
-const allTeams = [
-  'NullPointerException', 'BeaconAnalytics', 'CircuitCare', 'DataSculpt',
-  'Byte Me', '404 Brain Not Found', 'CodeCraft', 'AlphaStack',
-  'DeepMind Innovators', 'ByteStrike', 'InnovatAI', 'QuantumLeap',
-  'TechNova', 'DevForce', 'CloudNine', 'PixelPusher',
-  'SynthAI', 'NexGen', 'CipherPeak', 'LogicLabs',
-  'NeuralNomads', 'AgentX', 'VectorDB', 'PromptEngineers',
-];
+import { eventService } from '../../api/eventService';
+import { teamService } from '../../api/teamService';
+import { trackService } from '../../api/trackService';
 
 const TrackDraw = () => {
   const navigate = useNavigate();
+  const { eventId } = useParams();
   const [isConfigured, setIsConfigured] = useState(true);
   const [subTopics, setSubTopics] = useState([]);
   const [tracks, setTracks] = useState([]);
@@ -21,42 +16,94 @@ const TrackDraw = () => {
   const [activeTeamsList, setActiveTeamsList] = useState([]);
   const [topicDrawn, setTopicDrawn] = useState(false);
   const [teamsAssigned, setTeamsAssigned] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const parsedInitEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+  const [confirmed, setConfirmed] = useState(() => localStorage.getItem(`trackDrawConfirmed_${parsedInitEventId}`) === 'true');
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
-    // HARDCODED FOR FIGMA DEMO
-    const demoTeams = allTeams;
-    setActiveTeamsList(demoTeams);
-    setUnassignedTeams(demoTeams);
+    const fetchData = async () => {
+      try {
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        const eventRes = await eventService.getEventDetails(parsedEventId);
+        const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
+        
+        let activeEvent = eventRes.data;
+        if (!activeEvent) {
+          setIsConfigured(false);
+          return;
+        }
 
-    const hardcodedSubTopics = [
-      { id: 't1', name: 'AI Agent & Workflow', desc: 'Build multi-task Agents' },
-      { id: 't2', name: 'Medical Knowledge RAG', desc: 'Anti-hallucination medical RAG' },
-      { id: 't3', name: 'EduTech Personalization', desc: 'Personalized education' },
-      { id: 't4', name: 'Smart Blockchain Analytics', desc: 'On-chain analytics' }
-    ];
-    setSubTopics(hardcodedSubTopics);
-    
-    const trackColors = [
-      { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
-      { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
-      { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
-      { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
-    ];
+        let realSubTopics = [];
+        try {
+           const tracksRes = await trackService.getTracksByEvent(parsedEventId);
+           const tracks = tracksRes.data || [];
+           const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(res => res.data || []));
+           const allTopics = await Promise.all(topicsPromises);
+           realSubTopics = allTopics.flat();
+        } catch (e) {
+           console.error("Failed to load tracks/topics", e);
+        }
 
-    const initTracks = [
-      { id: 'T0', name: 'Track A', ...trackColors[0], subTopic: null, teams: [] },
-      { id: 'T1', name: 'Track B', ...trackColors[1], subTopic: null, teams: [] },
-      { id: 'T2', name: 'Track C', ...trackColors[2], subTopic: null, teams: [] },
-      { id: 'T3', name: 'Track D', ...trackColors[3], subTopic: null, teams: [] }
-    ];
-    
-    setTracks(initTracks);
-    setIsConfigured(true);
+        if (realSubTopics.length === 0) {
+          setIsConfigured(false);
+          return;
+        }
+
+        setSubTopics(realSubTopics);
+
+        const validTeams = (teamsRes.data || []).filter(t => ['CREATED', 'REGISTERED', 'APPROVED', 'CONFIRMED'].includes(t.status));
+        const realTeams = validTeams.map(t => ({ id: t.id, name: t.name })); // Keep objects for ID usage
+        setActiveTeamsList(realTeams);
+        setIsConfigured(true);
+
+        const drawResStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
+        if (drawResStr && localStorage.getItem(`trackDrawConfirmed_${parsedEventId}`) === 'true') {
+          const savedTracks = JSON.parse(drawResStr);
+          // Cross-check: only restore if the saved teams actually exist in DB
+          const savedTeamIds = savedTracks.flatMap(t => t.teams.map(tm => tm.id)).filter(Boolean);
+          const realTeamIds = realTeams.map(t => t.id);
+          const isStale = savedTeamIds.length > 0 && !savedTeamIds.some(id => realTeamIds.includes(id));
+          
+          if (isStale) {
+            // Stale cache from a different event — clear it
+            localStorage.removeItem(`trackDraw_${parsedEventId}`);
+            localStorage.removeItem(`trackDrawConfirmed_${parsedEventId}`);
+          } else {
+            setTracks(savedTracks);
+            setConfirmed(true);
+            setTopicDrawn(true);
+            setTeamsAssigned(true);
+            setUnassignedTeams([]);
+            return;
+          }
+        }
+        
+        const trackColors = [
+          { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
+          { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
+          { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
+          { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
+        ];
+
+        const initTracks = realSubTopics.map((st, i) => ({
+          id: `T${i}`, 
+          name: `Track ${String.fromCharCode(65 + i)}`, 
+          ...trackColors[i % trackColors.length], 
+          subTopic: null, 
+          teams: [] 
+        }));
+        setTracks(initTracks);
+        setUnassignedTeams(realTeams);
+
+      } catch (err) {
+        console.error(err);
+        setIsConfigured(false);
+      }
+    };
+    fetchData();
   }, []);
 
   const triggerError = (msg) => {
@@ -65,12 +112,13 @@ const TrackDraw = () => {
     setTimeout(() => setShaking(false), 500);
   };
 
-  // Step 1: Fixed assign sub-topics to tracks for Demo
   const handleDrawTopics = () => {
     setDrawing(true);
     setError('');
     setTimeout(() => {
-      setTracks(prev => prev.map((t, i) => ({ ...t, subTopic: subTopics[i % subTopics.length] })));
+      // Shuffle subTopics
+      let shuffled = [...subTopics].sort(() => 0.5 - Math.random());
+      setTracks(prev => prev.map((t, i) => ({ ...t, subTopic: shuffled[i % shuffled.length] })));
       setTopicDrawn(true);
       setDrawing(false);
     }, 1200);
@@ -81,25 +129,20 @@ const TrackDraw = () => {
     setTracks(prev => prev.map(t => ({ ...t, subTopic: null })));
   };
 
-  // Step 2: Fixed assign teams to tracks for Demo
+  // Step 2: Random assign teams to tracks
   const handleAssignTeams = () => {
     setDrawing(true);
     setError('');
     
-    // Sort so NullPointerException is in Track B (index 1)
-    const fixedTeams = [...unassignedTeams];
-    const nullIdx = fixedTeams.indexOf('NullPointerException');
-    if (nullIdx > -1) {
-      fixedTeams.splice(nullIdx, 1);
-    }
-    const perTrack = Math.ceil(fixedTeams.length / tracks.length);
-    
     setTimeout(() => {
+      // Shuffle teams randomly
+      let shuffledTeams = [...unassignedTeams].sort(() => 0.5 - Math.random());
+      const numTracks = tracks.length;
+      if (numTracks === 0) return;
+      
       const updated = tracks.map((t, i) => {
-        let teamsForThisTrack = fixedTeams.slice(i * perTrack, Math.min((i + 1) * perTrack, fixedTeams.length));
-        if (i === 1) { // Track B
-          teamsForThisTrack = ['NullPointerException', ...teamsForThisTrack];
-        }
+        // Distribute teams evenly
+        const teamsForThisTrack = shuffledTeams.filter((_, idx) => idx % numTracks === i);
         return { ...t, teams: teamsForThisTrack };
       });
       
@@ -113,30 +156,82 @@ const TrackDraw = () => {
   const handleResetTeams = () => {
     setTeamsAssigned(false);
     setTracks(prev => prev.map(t => ({ ...t, teams: [] })));
-    setUnassignedTeams(allTeams);
+    setUnassignedTeams(activeTeamsList);
   };
 
   // Final confirm
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!topicDrawn) { triggerError('Sub-topics have not been drawn for Tracks.'); return; }
     if (!teamsAssigned || unassignedTeams.length > 0) { triggerError('There are teams not assigned to a Track.'); return; }
-    setConfirmed(true);
-    localStorage.setItem('trackDraw', JSON.stringify(tracks));
-    setToast('Draw results have been confirmed and published!');
-    setTimeout(() => setToast(''), 3000);
+    
+    setDrawing(true);
+    try {
+      const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      for (const track of tracks) {
+        // 1. Create track in DB
+        const trackPayload = { trackName: track.name };
+        let dbTrack;
+        try {
+          const created = await trackService.createTrack(targetEventId, trackPayload);
+          dbTrack = created.data;
+        } catch (e) {
+          // If already exists or error, try fetching or skip gracefully for demo
+          const existing = await trackService.getTracksByEvent(eventId);
+          dbTrack = existing.data?.find(t => t.name === track.name);
+          if (!dbTrack) throw e;
+        }
+
+        // 2. Assign teams to track in DB
+        if (dbTrack && dbTrack.id) {
+          track.id = dbTrack.id; // update client id
+          for (const team of track.teams) {
+            if (team.id) {
+              await teamService.assignTrack(team.id, dbTrack.id);
+            }
+          }
+        }
+      }
+
+      setConfirmed(true);
+      localStorage.setItem(`trackDrawConfirmed_${targetEventId}`, 'true');
+      localStorage.setItem(`trackDraw_${targetEventId}`, JSON.stringify(tracks));
+      
+      // Backend automatically persists the track assignments now
+      setToast('Draw results have been confirmed and published to the Database!');
+      setTimeout(() => setToast(''), 3000);
+    } catch (e) {
+      triggerError('Failed to save to database: ' + (e?.response?.data?.message || e.message));
+      setDrawing(false);
+    }
+  };
+
+  const handleResetDraw = () => {
+    if (!window.confirm('Reset the draw? This will clear all track assignments and allow a new draw.')) return;
+    const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+    localStorage.removeItem(`trackDraw_${targetEventId}`);
+    localStorage.removeItem(`trackDrawConfirmed_${targetEventId}`);
+    setConfirmed(false);
+    setTopicDrawn(false);
+    setTeamsAssigned(false);
+    setTracks(prev => prev.map(t => ({ ...t, subTopic: null, teams: [] })));
+    setUnassignedTeams(activeTeamsList);
   };
 
   return (
     <div className="animate-fade-in">
-      {/* Header */}
       <div className="page-header">
         <div>
           <h1>Track Draw</h1>
-          <p className="subtitle">SEAL Hackathon Spring 2026 — Day 1 (11/04/2026)</p>
+          <p className="subtitle">SEAL Hackathon Spring 2026</p>
         </div>
         {confirmed && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontWeight: '600', fontSize: '14px' }}>
-            <Lock size={16} /> Confirmed & Published
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontWeight: '600', fontSize: '14px' }}>
+              <Lock size={16} /> Confirmed & Published
+            </div>
+            <button onClick={handleResetDraw} className="btn btn-secondary" style={{ padding: '8px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+              Reset Draw
+            </button>
           </div>
         )}
       </div>
@@ -155,29 +250,31 @@ const TrackDraw = () => {
       ) : (
         <>
           {/* Step indicator */}
-          <div style={{ display: 'flex', gap: '0', marginBottom: '32px' }}>
-            {[
-              { n: 1, label: 'Sub-topic Draw' },
-          { n: 2, label: 'Team Assignment' },
-          { n: 3, label: 'Confirm & Publish' },
-        ].map((s, i) => (
-          <React.Fragment key={s.n}>
-            <div
-              onClick={() => !confirmed && setStep(s.n)}
-              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', background: step === s.n ? 'rgba(59,130,246,0.15)' : 'var(--bg-subtle)', border: `1px solid ${step === s.n ? 'rgba(59,130,246,0.4)' : 'var(--border-color)'}`, borderRadius: i === 0 ? '10px 0 0 10px' : i === 2 ? '0 10px 10px 0' : '0', cursor: confirmed ? 'default' : 'pointer', flex: 1, transition: 'var(--transition)' }}
-            >
-              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: step > s.n || (s.n === 1 && topicDrawn) || (s.n === 2 && teamsAssigned) || (s.n === 3 && confirmed) ? 'var(--success)' : step === s.n ? 'var(--primary)' : 'var(--bg-active)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', flexShrink: 0 }}>
-                {(s.n === 1 && topicDrawn) || (s.n === 2 && teamsAssigned) || (s.n === 3 && confirmed) ? <CheckCircle size={16} color="white" /> : s.n}
-              </div>
-              <span style={{ fontSize: '14px', fontWeight: step === s.n ? '600' : '400', color: step === s.n ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
+          {!confirmed && (
+            <div style={{ display: 'flex', gap: '0', marginBottom: '32px' }}>
+              {[
+                { n: 1, label: 'Sub-topic Draw' },
+                { n: 2, label: 'Team Assignment' },
+                { n: 3, label: 'Confirm & Publish' },
+              ].map((s, i) => (
+                <React.Fragment key={s.n}>
+                  <div
+                    onClick={() => !confirmed && setStep(s.n)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 20px', background: step === s.n ? 'rgba(59,130,246,0.15)' : 'var(--bg-subtle)', border: `1px solid ${step === s.n ? 'rgba(59,130,246,0.4)' : 'var(--border-color)'}`, borderRadius: i === 0 ? '10px 0 0 10px' : i === 2 ? '0 10px 10px 0' : '0', cursor: confirmed ? 'default' : 'pointer', flex: 1, transition: 'var(--transition)' }}
+                  >
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: step > s.n || (s.n === 1 && topicDrawn) || (s.n === 2 && teamsAssigned) || (s.n === 3 && confirmed) ? 'var(--success)' : step === s.n ? 'var(--primary)' : 'var(--bg-active)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: '700', flexShrink: 0 }}>
+                      {(s.n === 1 && topicDrawn) || (s.n === 2 && teamsAssigned) || (s.n === 3 && confirmed) ? <CheckCircle size={16} color="white" /> : s.n}
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: step === s.n ? '600' : '400', color: step === s.n ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
+                  </div>
+                  {i < 2 && <div style={{ width: '1px', background: 'var(--border-color)' }} />}
+                </React.Fragment>
+              ))}
             </div>
-            {i < 2 && <div style={{ width: '1px', background: 'var(--border-color)' }} />}
-          </React.Fragment>
-        ))}
-      </div>
+          )}
 
       {/* ── STEP 1: Sub-topic Draw ── */}
-      {step === 1 && (
+      {!confirmed && step === 1 && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           {/* Left: available sub-topics */}
           <div className="glass-panel" style={{ padding: '24px' }}>
@@ -239,7 +336,7 @@ const TrackDraw = () => {
       )}
 
       {/* ── STEP 2: Team Assignment ── */}
-      {step === 2 && (
+      {!confirmed && step === 2 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Unassigned teams */}
           {!teamsAssigned && (
@@ -255,8 +352,8 @@ const TrackDraw = () => {
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {unassignedTeams.map(team => (
-                  <div key={team} style={{ padding: '6px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Users size={13} color="var(--text-secondary)" /> {team}
+                  <div key={team.id || team.name} style={{ padding: '6px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Users size={13} color="var(--text-secondary)" /> {team.name}
                   </div>
                 ))}
               </div>
@@ -290,11 +387,11 @@ const TrackDraw = () => {
                     ))
                   )}
                   {track.teams.map((team, i) => (
-                    <div key={team} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                    <div key={team.id || team.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                       <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: track.bg, border: `1px solid ${track.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', color: track.color, flexShrink: 0 }}>
                         {i + 1}
                       </div>
-                      <span style={{ fontSize: '13px', fontWeight: '500' }}>{team}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '500' }}>{team.name}</span>
                     </div>
                   ))}
                 </div>
@@ -316,16 +413,20 @@ const TrackDraw = () => {
       )}
 
       {/* ── STEP 3: Confirm ── */}
-      {step === 3 && (
+      {(confirmed || step === 3) && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          <div className="glass-panel" style={{ padding: '32px', border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.04)' }}>
-            <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>Confirm Draw Results</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.7' }}>
-              Once confirmed, the results will be <strong>published to all participants</strong>. Teams will see their assigned Track and Sub-topic in their accounts.
-            </p>
+          <div className="glass-panel" style={{ padding: '32px', border: confirmed ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(245,158,11,0.3)', background: confirmed ? 'rgba(16,185,129,0.04)' : 'rgba(245,158,11,0.04)' }}>
+            <h3 style={{ fontSize: '20px', marginBottom: '8px' }}>
+              {confirmed ? 'Track Draw Results' : 'Confirm Draw Results'}
+            </h3>
+            {!confirmed && (
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.7' }}>
+                Once confirmed, the results will be <strong>published to all participants</strong>. Teams will see their assigned Track and Sub-topic in their accounts.
+              </p>
+            )}
 
             {/* Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px', marginTop: confirmed ? '24px' : '0' }}>
               {tracks.map(track => (
                 <div key={track.id} style={{ padding: '16px', background: track.bg, border: `1px solid ${track.border}`, borderRadius: '12px' }}>
                   <div style={{ fontWeight: '700', color: track.color, fontSize: '16px', marginBottom: '4px' }}>{track.name}</div>
@@ -333,20 +434,29 @@ const TrackDraw = () => {
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <Users size={12} /> {track.teams.length} teams
                   </div>
+                  {confirmed && track.teams.length > 0 && (
+                    <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {track.teams.map((t, i) => (
+                        <div key={i} style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>• {t.name || t}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
-            {error && (
+            {error && !confirmed && (
               <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '16px', animation: shaking ? 'shake 0.4s ease-in-out' : 'none' }}>
                 <AlertCircle size={16} color="#ef4444" style={{ flexShrink: 0 }} />
                 <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500' }}>{error}</span>
               </div>
             )}
 
-            <button onClick={handleConfirm} disabled={confirmed} className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '15px', gap: '8px', background: confirmed ? 'var(--success)' : 'var(--primary)', boxShadow: confirmed ? 'none' : '0 4px 20px rgba(245,158,11,0.4)' }}>
-              {confirmed ? <><CheckCircle size={18} /> Confirmed & Published</> : <><Lock size={16} /> Confirm & Publish Results</>}
-            </button>
+            {!confirmed && (
+              <button onClick={handleConfirm} className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '15px', gap: '8px', background: 'var(--primary)', boxShadow: '0 4px 20px rgba(245,158,11,0.4)' }}>
+                <Lock size={16} /> Confirm & Publish Results
+              </button>
+            )}
           </div>
         </div>
       )}
