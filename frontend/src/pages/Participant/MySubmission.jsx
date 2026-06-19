@@ -1,229 +1,398 @@
-import React, { useState } from 'react';
-import { Clock, Code, LayoutGrid, FileText, CheckCircle, AlertCircle, Video, AlignLeft, Mail, Layers } from 'lucide-react';
-import './Workspace.css';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send } from 'lucide-react';
+import { submissionService, criterionService } from '../../api/scoreService';
+import { eventService } from '../../api/eventService';
+import { teamService } from '../../api/teamService';
 
 const MySubmission = () => {
+  const [event, setEvent] = useState(null);
+  const [currentRound, setCurrentRound] = useState(null);
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const [teamData, setTeamData] = useState(null);
+  const [existingSubmission, setExistingSubmission] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [formData, setFormData] = useState({
+    projectName: '',
+    description: '',
+    techStack: '',
+    repoUrl: '',
+    demoUrl: '',
+    slidesUrl: '',
+    videoUrl: '',
+    contactEmail: '',
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
-    projectName: 'Medical Knowledge RAG System',
-    description: 'A domain-specific RAG system for medical literature that enables healthcare professionals to query complex medical knowledge bases with high accuracy. Built with LangGraph for agent orchestration and Pinecone for vector storage.',
-    techStack: 'LangGraph, OpenAI SDK, Pinecone, FastAPI, React',
-    contact: 'team@nullpointer.ai',
-    repo: 'https://github.com/nullpointer/medical-rag',
-    demo: 'https://medical-rag-demo.vercel.app',
-    slides: 'https://www.canva.com/design/medical-rag-presentation/edit',
-    video: 'https://youtube.com/watch?v=dQw4w9WgXcQ'
-  });
+  const [showAllRounds, setShowAllRounds] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setError('');
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const tId = localStorage.getItem('p_teamId') || localStorage.getItem('userId');
+        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+        setCurrentRoundIndex(roundIdx);
 
-    // Unhappy Case Simulation
-    if (formData.repo.includes('error') || formData.projectName.includes('error')) {
-      setError('Invalid Repository URL. Please provide a valid public Github link.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-    
-    if (formData.repo.includes('drive.google.com')) {
-      setError('Google Drive is not allowed for source code. Please use GitHub, Jira, Confluence, or Notion.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
+        // Load event from real API
+        const eventsRes = await eventService.getEvents();
+        const evt = eventsRes?.data?.[0] || null;
+        setEvent(evt);
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitted(true);
-      setIsSubmitting(false);
-    }, 1500);
+        const round = evt?.rounds?.[roundIdx] || null;
+        setCurrentRound(round);
+
+        // Load existing submission
+        if (tId && round?.id) {
+          try {
+            const subRes = await submissionService.getSubmission(round.id, tId);
+            if (subRes?.data) {
+              const sub = subRes.data;
+              setExistingSubmission(sub);
+              setFormData({
+                projectName: sub.submissionName || '',
+                description: sub.description || '',
+                techStack: sub.techStackName || '',
+                repoUrl: sub.githubUrl || '',
+                demoUrl: sub.demoUrl || '',
+                slidesUrl: sub.slideUrl || '',
+                videoUrl: '',
+                contactEmail: '',
+              });
+              setIsSubmitted(true);
+            }
+          } catch {
+            // No submission yet
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const validate = () => {
+    if (!formData.projectName.trim()) return 'Project name is required.';
+    if (!formData.repoUrl.trim()) return 'GitHub repository URL is required.';
+    if (formData.repoUrl.toLowerCase().includes('drive.google.com')) return 'Google Drive links are not accepted. Please use GitHub.';
+    if (!formData.repoUrl.startsWith('http')) return 'Repository URL must start with http:// or https://';
+    if (!formData.description.trim()) return 'Project description is required.';
+    return '';
   };
 
+  const handleSubmit = async () => {
+    const err = validate();
+    if (err) {
+      setError(err);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const tId = parseInt(localStorage.getItem('p_teamId') || localStorage.getItem('userId') || '1');
+      const accountId = parseInt(localStorage.getItem('userId') || '1');
+      const roundId = currentRound?.id;
+      if (!roundId) throw new Error('No round ID');
+
+      const payload = {
+        submittedByAccountId: accountId,
+        submissionName: formData.projectName,
+        description: formData.description,
+        techStackName: formData.techStack,
+        githubUrl: formData.repoUrl,
+        demoUrl: formData.demoUrl,
+        slideUrl: formData.slidesUrl,
+      };
+
+      const result = await submissionService.upsertSubmission(roundId, tId, payload);
+      setExistingSubmission(result?.data || result);
+      setIsSubmitted(true);
+    } catch (e) {
+      setError('Submission failed. ' + (e?.response?.data?.message || 'Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = () => {
+    setIsSubmitted(false);
+    setError('');
+  };
+
+  const isLocked = currentRound?.status === 'locked' || currentRound?.status === 'completed';
+
+  if (loading) {
+    return (
+      <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <Clock size={40} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <p>Loading submission...</p>
+      </div>
+    );
+  }
+
+  if (!currentRound) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
+        <h2 style={{ marginBottom: '8px' }}>No Active Round</h2>
+        <p>There is no active round for submission right now. Please wait for the Admin to start a round.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="animate-fade-in" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
-      <div className="page-header" style={{ marginBottom: '32px' }}>
+    <div className="animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>My Submission</h1>
-          <p className="subtitle">Team: NullPointerException | Track B - Medical Knowledge RAG</p>
+          <h1>Project Submission</h1>
+          <p className="subtitle">{event?.name || 'Hackathon'} — {currentRound.name}</p>
         </div>
-      </div>
-
-      <div className="glass-panel" style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', background: isSubmitted ? 'rgba(16, 185, 129, 0.05)' : 'rgba(59, 130, 246, 0.05)', border: `1px solid ${isSubmitted ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {isSubmitted ? (
-            <CheckCircle size={32} color="var(--success)" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {isLocked ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', color: 'var(--danger)', fontSize: '13px', fontWeight: '600' }}>
+              <Lock size={15} /> Round Locked
+            </div>
           ) : (
-            <Clock size={32} color="var(--primary)" />
-          )}
-          <div>
-            <h3 style={{ fontSize: '18px', marginBottom: '4px', color: isSubmitted ? 'var(--success)' : 'var(--text-primary)' }}>
-              {isSubmitted ? 'Submission Received' : 'Awaiting Submission'}
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              {isSubmitted ? 'You can still update your links before the deadline.' : 'Please provide all required links before the deadline.'}
-            </p>
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Deadline</div>
-          <div style={{ fontSize: '20px', fontWeight: '700', color: 'var(--danger)' }}>12d : 08h : 45m</div>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <div className="glass-panel" style={{ padding: '32px', marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '20px', marginBottom: '24px' }}>Project Details</h2>
-          
-          {/* Error Message UI */}
-          {error && (
-            <div
-              className={shaking ? 'shake' : ''}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px',
-                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                borderRadius: '10px', marginBottom: '24px',
-                animation: shaking ? 'shake 0.4s ease-in-out' : 'none',
-              }}
-            >
-              <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
-              <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500' }}>{error}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
+              <Clock size={15} /> Round Open
             </div>
           )}
-          
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <FileText size={18} color="var(--text-primary)" /> Project Name *
-            </label>
-            <input 
-              type="text" 
-              className="task-input" 
-              placeholder="e.g. Real-time Resource Forecasting" 
-              value={formData.projectName}
-              onChange={(e) => setFormData({...formData, projectName: e.target.value})}
-              required 
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <AlignLeft size={18} color="var(--text-primary)" /> Project Description *
-            </label>
-            <textarea 
-              className="task-input" 
-              placeholder="Briefly describe what your project does, how it works, and the problem it solves..." 
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              style={{ minHeight: '120px', resize: 'vertical', paddingTop: '12px' }}
-              required 
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <Layers size={18} color="var(--text-primary)" /> Tech Stack *
-            </label>
-            <input 
-              type="text" 
-              className="task-input" 
-              placeholder="e.g. Python, TensorFlow, Postgres, React" 
-              value={formData.techStack}
-              onChange={(e) => setFormData({...formData, techStack: e.target.value})}
-              required 
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <Mail size={18} color="var(--text-primary)" /> Primary Contact Email *
-            </label>
-            <input 
-              type="email" 
-              className="task-input" 
-              placeholder="e.g. team@null.ai" 
-              value={formData.contact}
-              onChange={(e) => setFormData({...formData, contact: e.target.value})}
-              required 
-            />
-          </div>
         </div>
+      </div>
 
-        <div className="glass-panel" style={{ padding: '32px' }}>
-          <h2 style={{ fontSize: '20px', marginBottom: '24px' }}>Project Links</h2>
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <Code size={18} color="var(--text-primary)" /> Source Code / Platform *
-            </label>
-            <div style={{ fontSize: '12px', color: 'var(--warning)', marginBottom: '8px' }}>Only GitHub, Jira, Confluence, and Notion are accepted. Personal Google Drive links are strictly prohibited.</div>
-            <input 
-              type="url" 
-              className="task-input" 
-              placeholder="https://github.com/..." 
-              value={formData.repo}
-              onChange={(e) => setFormData({...formData, repo: e.target.value})}
-              required 
-              style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}}
-            />
+      {/* Round Progress */}
+      {event?.rounds && event.rounds.length > 1 && (
+        <div className="glass-panel" style={{ padding: '16px 24px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: showAllRounds ? '16px' : '0', cursor: 'pointer' }} onClick={() => setShowAllRounds(p => !p)}>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Round {currentRoundIndex + 1} of {event.rounds.length}: <span style={{ color: 'var(--primary)' }}>{currentRound.name}</span>
+            </span>
+            {showAllRounds ? <ChevronUp size={16} color="var(--text-secondary)" /> : <ChevronDown size={16} color="var(--text-secondary)" />}
           </div>
-
-          <div className="form-group" style={{ marginBottom: '24px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <LayoutGrid size={18} color="var(--text-primary)" /> Live Demo URL (Optional)
-            </label>
-            <input 
-              type="url" 
-              className="task-input" 
-              placeholder="https://your-project.vercel.app" 
-              value={formData.demo}
-              onChange={(e) => setFormData({...formData, demo: e.target.value})}
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: '32px' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', color: 'var(--text-secondary)' }}>
-              <FileText size={18} color="var(--text-primary)" /> Presentation Slides *
-            </label>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Live presentation via Slides is required (Canva, Google Slides, PowerPoint Online). PDF is not allowed.</div>
-            <input 
-              type="url" 
-              className="task-input" 
-              placeholder="Google Slides / Canva link" 
-              value={formData.slides}
-              onChange={(e) => setFormData({...formData, slides: e.target.value})}
-              required 
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', paddingTop: '24px', borderTop: '1px solid var(--border-color)' }}>
-            <button type="button" className="btn btn-secondary">Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Submitting...' : isSubmitted ? 'Update Submission' : 'Submit Project'}
-            </button>
-          </div>
-        </div>
-      </form>
-
-      {isSubmitted && (
-        <div style={{ marginTop: '24px', display: 'flex', gap: '12px', alignItems: 'flex-start', background: 'rgba(245, 158, 11, 0.1)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
-          <AlertCircle size={20} color="var(--warning)" style={{ flexShrink: 0 }} />
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-            <strong style={{ color: 'var(--warning)' }}>Important:</strong> Make sure your Github repository is public or you have granted access to the judging panel. Demo links must remain active for at least 30 days after the event concludes.
-          </p>
+          {showAllRounds && (
+            <div style={{ display: 'flex', gap: '0' }}>
+              {event.rounds.map((r, i) => (
+                <div key={i} style={{ flex: 1, padding: '10px 14px', background: i === currentRoundIndex ? 'rgba(59,130,246,0.1)' : i < currentRoundIndex ? 'rgba(16,185,129,0.06)' : 'var(--bg-subtle)', border: `1px solid ${i === currentRoundIndex ? 'rgba(59,130,246,0.3)' : 'var(--border-color)'}`, borderRadius: i === 0 ? '8px 0 0 8px' : i === event.rounds.length - 1 ? '0 8px 8px 0' : '0' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: i === currentRoundIndex ? 'var(--primary)' : i < currentRoundIndex ? 'var(--success)' : 'var(--text-secondary)' }}>{r.name}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {r.start && r.start.includes('T') ? new Date(r.start).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : r.start} → 
+                    {r.end ? (r.end.includes('T') ? new Date(r.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : r.end) : 'TBD'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
+        {/* Left: Form */}
+        <div>
+          {isSubmitted && existingSubmission ? (
+            /* ── Submitted State ── */
+            <div className="glass-panel" style={{ padding: '32px', border: '1px solid rgba(16,185,129,0.3)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <CheckCircle size={26} color="var(--success)" />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '20px', marginBottom: '4px', color: 'var(--success)' }}>Submission Received!</h2>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    Submitted at {new Date(existingSubmission.submittedAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: '16px' }}>
+                {[
+                  { label: 'Project Name', value: existingSubmission.projectName },
+                  { label: 'Description', value: existingSubmission.description },
+                  { label: 'Tech Stack', value: existingSubmission.techStack },
+                  { label: 'Repository URL', value: existingSubmission.repoUrl, isLink: true },
+                  existingSubmission.demoUrl && { label: 'Demo URL', value: existingSubmission.demoUrl, isLink: true },
+                  existingSubmission.slidesUrl && { label: 'Slides', value: existingSubmission.slidesUrl, isLink: true },
+                  existingSubmission.videoUrl && { label: 'Video', value: existingSubmission.videoUrl, isLink: true },
+                ].filter(Boolean).map((item, i) => (
+                  <div key={i} style={{ padding: '14px 16px', background: 'var(--bg-subtle)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>{item.label}</div>
+                    {item.isLink ? (
+                      <a href={item.value} target="_blank" rel="noreferrer" style={{ fontSize: '14px', color: 'var(--primary)', wordBreak: 'break-all' }}>{item.value}</a>
+                    ) : (
+                      <div style={{ fontSize: '14px', lineHeight: '1.5' }}>{item.value}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {!isLocked && (
+                <button onClick={handleEdit} className="btn btn-secondary" style={{ marginTop: '24px', width: '100%', justifyContent: 'center' }}>
+                  Edit Submission
+                </button>
+              )}
+            </div>
+          ) : (
+            /* ── Form State ── */
+            <div className="glass-panel" style={{ padding: '32px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
+                {isLocked ? '🔒 Round Locked — View Only' : 'Submit Your Project'}
+              </h2>
+
+              {error && (
+                <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', color: '#ef4444', fontSize: '13px' }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} /> {error}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Project Name *</label>
+                  <input disabled={isLocked} type="text" value={formData.projectName} onChange={e => setFormData(p => ({ ...p, projectName: e.target.value }))}
+                    placeholder="e.g. MedRAG — Medical Knowledge Assistant"
+                    style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Project Description *</label>
+                  <textarea disabled={isLocked} value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
+                    placeholder="Describe your project, the problem it solves, and your approach..."
+                    rows={4}
+                    style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Tech Stack</label>
+                  <input disabled={isLocked} type="text" value={formData.techStack} onChange={e => setFormData(p => ({ ...p, techStack: e.target.value }))}
+                    placeholder="e.g. Python, LangChain, Pinecone, React"
+                    style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                </div>
+
+                <div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    <GitBranch size={14} /> GitHub Repository URL *
+                  </label>
+                  <input disabled={isLocked} type="url" value={formData.repoUrl} onChange={e => setFormData(p => ({ ...p, repoUrl: e.target.value }))}
+                    placeholder="https://github.com/yourteam/project"
+                    style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      <Globe size={14} /> Demo URL
+                    </label>
+                    <input disabled={isLocked} type="url" value={formData.demoUrl} onChange={e => setFormData(p => ({ ...p, demoUrl: e.target.value }))}
+                      placeholder="https://your-demo.vercel.app"
+                      style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                      <FileText size={14} /> Slides URL
+                    </label>
+                    <input disabled={isLocked} type="url" value={formData.slidesUrl} onChange={e => setFormData(p => ({ ...p, slidesUrl: e.target.value }))}
+                      placeholder="https://slides.com/..."
+                      style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Demo Video URL</label>
+                  <input disabled={isLocked} type="url" value={formData.videoUrl} onChange={e => setFormData(p => ({ ...p, videoUrl: e.target.value }))}
+                    placeholder="https://youtube.com/..."
+                    style={{ width: '100%', padding: '12px 14px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', opacity: isLocked ? 0.6 : 1 }} />
+                </div>
+
+                {!isLocked && (
+                  <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-primary"
+                    style={{ padding: '14px', fontSize: '15px', justifyContent: 'center', gap: '8px', marginTop: '8px' }}>
+                    {isSubmitting ? <><Clock size={18} /> Submitting...</> : <><Send size={18} /> Submit Project</>}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: Info Panel */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Team info */}
+          <div className="glass-panel" style={{ padding: '20px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Your Team</h3>
+            {teamData ? (
+              <>
+                <div style={{ fontSize: '18px', fontWeight: '800', marginBottom: '8px' }}>{teamData.name}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {teamData.members?.map((m, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: `hsl(${i * 60}, 60%, 50%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: '700', color: 'white', flexShrink: 0 }}>
+                        {m.name?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '500' }}>{m.name}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{m.role}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No team found. Please join a team first.</p>
+            )}
+          </div>
+
+          {/* Round info + criteria */}
+          <div className="glass-panel" style={{ padding: '20px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Scoring Criteria</h3>
+            {currentRound?.criteria && currentRound.criteria.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {currentRound.criteria.map((c, i) => (
+                  <div key={i} style={{ padding: '12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)' }}>{c.weight}%</span>
+                    </div>
+                    <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No criteria configured for this round.</p>
+            )}
+          </div>
+
+          {/* Deadline */}
+          <div className="glass-panel" style={{ padding: '20px', background: isLocked ? 'rgba(239,68,68,0.05)' : 'rgba(59,130,246,0.05)', border: `1px solid ${isLocked ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)'}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              {isLocked ? <Lock size={16} color="var(--danger)" /> : <Clock size={16} color="var(--primary)" />}
+              <span style={{ fontSize: '13px', fontWeight: '600', color: isLocked ? 'var(--danger)' : 'var(--primary)' }}>
+                {isLocked ? 'Submission Closed' : 'Deadline'}
+              </span>
+            </div>
+            <div style={{ fontSize: '16px', fontWeight: '700' }}>
+              {currentRound.end ? (currentRound.end.includes('T') ? new Date(currentRound.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : currentRound.end) : 'TBD'}
+            </div>
+            {!isLocked && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>You can edit your submission until the round is locked.</div>}
+          </div>
+        </div>
+      </div>
 
       <style>{`
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
-          20% { transform: translateX(-8px); }
-          40% { transform: translateX(8px); }
-          60% { transform: translateX(-6px); }
-          80% { transform: translateX(6px); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
         }
+        .shake { animation: shake 0.4s ease-in-out; }
       `}</style>
     </div>
   );
