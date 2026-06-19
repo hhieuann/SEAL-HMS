@@ -52,4 +52,7 @@ public class Team extends BaseEntity {
 
     @Column(name = "event_rank")
     private Integer eventRank;
+
+    @org.hibernate.annotations.Formula("(SELECT count(*) FROM team_member tm WHERE tm.team_id = team_id AND tm.status = 'ACCEPTED')")
+    private Integer memberCount;
 }
