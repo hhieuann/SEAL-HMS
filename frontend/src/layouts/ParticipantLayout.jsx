@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
 import './ParticipantLayout.css';
@@ -9,9 +9,34 @@ const ParticipantLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
+  const [isEliminated, setIsEliminated] = useState(false);
 
   // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
   useEffect(() => {
+    const checkElimination = () => {
+      const eId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1';
+      const trackDrawConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
+      if (!trackDrawConfirmed) {
+        setIsEliminated(false);
+        return;
+      }
+      const trackDrawStr = localStorage.getItem(`trackDraw_${eId}`);
+      if (trackDrawStr) {
+        try {
+          const parsedDraw = JSON.parse(trackDrawStr);
+          const myTeamName = localStorage.getItem('myTeamName');
+          if (myTeamName) {
+            const inDraw = parsedDraw.some(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
+            setIsEliminated(!inDraw);
+          }
+        } catch(e) {}
+      }
+    };
+    
+    checkElimination();
+    window.addEventListener('storage', checkElimination);
+    window.addEventListener('participant_state_updated', checkElimination);
+
     if (isReady) return; // Already set, skip
 
     const accountId = parseInt(localStorage.getItem('accountId'));
@@ -172,11 +197,24 @@ const ParticipantLayout = () => {
         </nav>
       </aside>
 
-      <main className="main-content">
-        <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
-          <Outlet />
-        </div>
-      </main>
+        <main className="main-content">
+          <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
+            {isEliminated && (location.pathname.includes('/workspace') || location.pathname.includes('/submission')) ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px', textAlign: 'center' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '24px', borderRadius: '50%', marginBottom: '24px' }}>
+                  <X size={48} color="#ef4444" />
+                </div>
+                <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '16px' }}>Your team has been eliminated.</h1>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '18px', maxWidth: '600px', lineHeight: '1.6' }}>
+                  Thank you for participating in the hackathon! Unfortunately, your team did not advance to the current round. 
+                  You can still view your scores and team details using the sidebar.
+                </p>
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );
