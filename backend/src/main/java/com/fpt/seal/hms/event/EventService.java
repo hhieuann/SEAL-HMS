@@ -33,6 +33,13 @@ public class EventService {
     }
 
     @Transactional(readOnly = true)
+    public List<EventResponse> getAssignedEvents(String email) {
+        return eventRepository.findEventsAssignedToJudgeByEmail(email).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
     public EventResponse getEventById(Long id) {
         Event event = findEventEntityById(id);
         EventResponse response = mapToResponse(event);
