@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
@@ -155,6 +155,26 @@ const RoundTransition = () => {
   );
   const allTiesResolved = tiebreakerTeams.every(t => resolvedTies[t.team]);
 
+  const handleExportCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Rank,Team,Score,Status,Track\n";
+    
+    const listToExport = isLastRound ? finalsTeamList : trackStandings.flatMap(t => t.teams.map(team => ({...team, fromTrack: t.name})));
+    
+    listToExport.forEach(t => {
+      const row = `${t.rank || ''},"${t.team || ''}",${t.score || 0},${t.status || ''},"${t.fromTrack || ''}"`;
+      csvContent += row + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `event_${eventId}_results.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleLock = async () => {
     if (tiebreakerTeams.length > 0 && !allTiesResolved) {
       setLockError(true);
@@ -176,7 +196,16 @@ const RoundTransition = () => {
       setConfirmed(true);
       setLockToast(true);
       
-      await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
+      const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
+      const startIdx = statuses.indexOf(currentRoundObj.status);
+      if (startIdx !== -1) {
+        for (let i = startIdx + 1; i <= statuses.indexOf('COMPLETED'); i++) {
+           await eventService.updateRoundStatus(currentRoundObj.id, statuses[i]);
+        }
+      } else {
+        // fallback if somehow status is not found, attempt direct transition
+        await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
+      }
 
       if (!isLastRound) {
         // Build next round track draw (only keep advanced teams)
@@ -198,6 +227,21 @@ const RoundTransition = () => {
           window.location.reload();
         }, 1500);
       } else {
+        // Finalize Event status in backend
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        
+        const eventStatuses = ['PLANNED', 'UPCOMING', 'ONGOING', 'COMPLETED'];
+        const startEventIdx = event?.status ? eventStatuses.indexOf(event.status.toUpperCase()) : -1;
+        
+        if (startEventIdx !== -1) {
+          for (let i = startEventIdx + 1; i <= eventStatuses.indexOf('COMPLETED'); i++) {
+            await eventService.updateEventStatus(parsedEventId, eventStatuses[i]);
+          }
+        } else {
+          // fallback
+          await eventService.updateEventStatus(parsedEventId, 'COMPLETED');
+        }
+
         setTimeout(() => setLockToast(false), 4000);
         setTimeout(() => {
           setShowCelebration(true);
@@ -225,7 +269,7 @@ const RoundTransition = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn btn-secondary">Export Results CSV</button>
+          <button className="btn btn-secondary" onClick={handleExportCSV}>Export Results CSV</button>
             <button
               onClick={handleLock}
               disabled={confirmed}
@@ -499,15 +543,25 @@ const RoundTransition = () => {
               EVENT FINALIZED!
             </h2>
             <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '15px', marginBottom: '32px' }}>
-              The Hackathon has officially concluded. The winning teams have been recorded, and the final Leaderboard is now published to the public portal for everyone to see!
+              The Hackathon has officially concluded. The final Leaderboard is locked in and ready for the award ceremony! 
+              You can download the final CSV report or view the leaderboard.
             </p>
-            <button 
-              onClick={() => navigate('/admin')}
-              className="btn btn-primary" 
-              style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--primary)' }}
-            >
-              <CheckCircle size={18} /> Return to Dashboard
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={handleExportCSV}
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px' }}
+              >
+                <Download size={18} /> Export CSV
+              </button>
+              <button 
+                onClick={() => navigate(`/admin/event/${eventId}/teams`)}
+                className="btn btn-primary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--primary)' }}
+              >
+                <Users size={18} /> Leaderboard
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,41 +1,121 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut } from 'lucide-react';
+import { eventService } from '../../api/eventService';
+import { teamService } from '../../api/teamService';
+import { submissionService, scoreService } from '../../api/scoreService';
 
 const ExpertDashboard = () => {
   const navigate = useNavigate();
 
   const handleEnterWorkspace = (ctx) => {
-    const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, path: ctx.path };
+    const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, path: ctx.path, eventId: ctx.eventId };
     localStorage.setItem('expertContext', JSON.stringify(contextData));
     navigate(ctx.path);
   };
 
-  const assignments = [
-    {
-      id: 1,
-      event: 'SEAL Hackathon Spring 2026',
-      role: 'Judge',
-      track: 'Track B - Medical Knowledge RAG',
-      path: '/judge/panel',
-      stats: { pending: 1, flagged: 0, completed: 1 },
-      status: 'active'
-    },
-    {
-      id: 2,
-      event: 'SEAL Hackathon Spring 2026',
-      role: 'Mentor',
-      track: 'Track B - Medical Knowledge RAG',
-      path: '/mentor/tickets',
-      stats: { openTickets: 3, urgentTickets: 1, resolved: 18 },
-      status: 'active'
-    }
-  ];
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [currentUser, setCurrentUser] = React.useState(() => {
-    const saved = localStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : { name: 'Sarah Nguyen', roles: ['Judge', 'Mentor'], avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=14b8a6&color=fff' };
+  const [currentUser, setCurrentUser] = useState(() => {
+    const email = localStorage.getItem('userEmail') || 'Expert';
+    const role = localStorage.getItem('userRole') || 'JUDGE';
+    const userId = parseInt(localStorage.getItem('userId') || '1');
+    
+    const roles = [];
+    if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
+    if (role === 'MENTOR') roles.push('Mentor');
+    
+    return { 
+      name: email.split('@')[0], 
+      roles,
+      userId,
+      avatar: `https://ui-avatars.com/api/?name=${email.split('@')[0]}&background=14b8a6&color=fff` 
+    };
   });
+
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const response = await eventService.getAssignedEvents();
+        const events = response.data || [];
+        
+        const dynamicAssignments = [];
+        
+        for (const evt of events) {
+          // Calculate Judge Stats if applicable
+          let pending = '-', completed = '-';
+          if (currentUser.roles.includes('Judge') && evt.status !== 'CREATED') {
+            try {
+              let p = 0, c = 0;
+              const roundsRes = await eventService.getEventRounds(evt.id);
+              const rounds = roundsRes.data || [];
+              let activeRoundIdx = -1;
+              for (let i = rounds.length - 1; i >= 0; i--) {
+                if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                  activeRoundIdx = i; break;
+                }
+              }
+              const activeRound = rounds[activeRoundIdx !== -1 ? activeRoundIdx : 0];
+              
+              if (activeRound) {
+                const teamsData = await teamService.getTeamsByEvent(evt.id);
+                const teamsList = teamsData?.data || teamsData || [];
+                
+                await Promise.all(teamsList.map(async (t) => {
+                  if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
+                    try {
+                      const subRes = await submissionService.getSubmission(activeRound.id, t.id);
+                      if (subRes?.data?.id) {
+                        const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
+                        if (scoresRes?.data?.length > 0) c++; else p++;
+                      }
+                    } catch (e) {
+                      // No submission yet
+                    }
+                  }
+                }));
+              }
+              pending = p;
+              completed = c;
+            } catch (e) { console.error(e); }
+          }
+
+          if (currentUser.roles.includes('Judge')) {
+            dynamicAssignments.push({
+              id: `judge-${evt.id}`,
+              eventId: evt.id,
+              event: evt.name,
+              role: 'Judge',
+              track: 'General',
+              path: '/judge/panel',
+              stats: { pending, flagged: 0, completed },
+              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+            });
+          }
+          if (currentUser.roles.includes('Mentor')) {
+            dynamicAssignments.push({
+              id: `mentor-${evt.id}`,
+              eventId: evt.id,
+              event: evt.name,
+              role: 'Mentor',
+              track: 'General',
+              path: '/mentor/tickets',
+              stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
+              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+            });
+          }
+        }
+        
+        setAssignments(dynamicAssignments);
+      } catch (err) {
+        console.error("Failed to fetch events", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchEvents();
+  }, [currentUser.roles, currentUser.userId]);
 
   const hasJudge = currentUser.roles.includes('Judge');
   const hasMentor = currentUser.roles.includes('Mentor');

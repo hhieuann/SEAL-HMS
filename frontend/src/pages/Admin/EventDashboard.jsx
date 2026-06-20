@@ -43,10 +43,22 @@ const EventDashboard = () => {
         const allTopics = await Promise.all(topicsPromises);
         const subTopics = allTopics.flat();
 
+        // Fetch Criteria
+        const { criterionService } = await import('../../api/scoreService.js');
+        const roundsWithCriteriaPromises = rawRounds.map(async r => {
+          try {
+             const critRes = await criterionService.getCriteria(r.id);
+             return { ...r, criteria: critRes?.data || [] };
+          } catch {
+             return { ...r, criteria: [] };
+          }
+        });
+        const roundsWithCriteria = await Promise.all(roundsWithCriteriaPromises);
+
         const enrichedEvent = {
           ...rawEvent,
           subTopics: subTopics,
-          rounds: rawRounds.map(r => {
+          rounds: roundsWithCriteria.map(r => {
             let startStr = r.startTime;
             if (Array.isArray(startStr)) startStr = `${startStr[0]}-${String(startStr[1]).padStart(2, '0')}-${String(startStr[2]).padStart(2, '0')}T${String(startStr[3] || 0).padStart(2, '0')}:${String(startStr[4] || 0).padStart(2, '0')}`;
             let endStr = r.endTime;
@@ -243,8 +255,8 @@ const EventDashboard = () => {
                   <div className="timeline-content">
                     <h4>{round.name}</h4>
                     <p>
-                      {round.start && round.end ? `${round.start} → ${round.end}` : 'Dates TBD'}
-                      {round.criteria && round.criteria.length > 0 ? ` · ${round.criteria.length} criteria` : ''}
+                      {round.start && round.end ? `${round.start} — ${round.end}` : 'Dates TBD'}
+                      {round.criteria && round.criteria.length > 0 ? ` • ${round.criteria.length} criteria` : ''}
                     </p>
                   </div>
                 </div>
@@ -303,10 +315,10 @@ const EventDashboard = () => {
                             <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
                           </div>
                           <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                            <div style={{ width: `${Math.round(c.weight)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
                           </div>
                         </div>
-                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{c.weight}%</span>
+                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round(c.weight)}%</span>
                       </div>
                     ))}
                   </div>

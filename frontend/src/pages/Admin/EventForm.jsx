@@ -154,10 +154,33 @@ const EventForm = () => {
             endTime: fr.end || null,
             promotionTopN: 10
           };
+          let savedRoundId = null;
           if (fr.id && fr.id < 1000000000) {
-            try { await eventService.updateRound(fr.id, roundPayload); } catch(e) { console.error('Failed to update round', e); }
+            try { 
+               await eventService.updateRound(fr.id, roundPayload); 
+               savedRoundId = fr.id;
+            } catch(e) { console.error('Failed to update round', e); }
           } else {
-            try { await eventService.createRound(eventId, roundPayload); } catch(e) { console.error('Failed to create round', e); }
+            try { 
+               const newRound = await eventService.createRound(eventId, roundPayload); 
+               savedRoundId = newRound.data?.id;
+            } catch(e) { console.error('Failed to create round', e); }
+          }
+
+          // FIX: Sync new criteria added in EventForm
+          if (savedRoundId && fr.criteria && fr.criteria.length > 0) {
+             try {
+                const { criterionService } = await import('../../api/scoreService.js');
+                for (const c of fr.criteria) {
+                   if (c.id > 1000000000) { // newly added in the UI
+                      await criterionService.createCriterion(savedRoundId, {
+                         name: c.name,
+                         weight: (c.weight || 0) / 100,
+                         maxScore: 100
+                      });
+                   }
+                }
+             } catch(e) { console.error('Failed to sync new criteria for round', e); }
           }
         }
 
@@ -211,6 +234,28 @@ const EventForm = () => {
             }
           } catch(topicErr) {
              console.error("Failed to create topics sequentially", topicErr);
+          }
+
+          // FIX: Backend Batch API drops criteria! We must manually save them for new events.
+          try {
+             const roundsRes = await eventService.getEventRounds(savedEventId);
+             const savedRounds = roundsRes.data || [];
+             const { criterionService } = await import('../../api/scoreService.js');
+             
+             for (const fr of formData.rounds) {
+                const savedRound = savedRounds.find(sr => sr.name === fr.name);
+                if (savedRound && fr.criteria && fr.criteria.length > 0) {
+                   for (const c of fr.criteria) {
+                      await criterionService.createCriterion(savedRound.id, {
+                         name: c.name,
+                         weight: (c.weight || 0) / 100,
+                         maxScore: 100
+                      });
+                   }
+                }
+             }
+          } catch(criteriaErr) {
+             console.error("Failed to create criteria", criteriaErr);
           }
         }
       }

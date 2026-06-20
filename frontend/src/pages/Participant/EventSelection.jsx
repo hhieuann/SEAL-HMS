@@ -280,7 +280,7 @@ const EventSelection = () => {
                     <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>{evt.name}</h2>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{evt.endDate}</div>
                   </div>
-                  <button type="button" onClick={() => navigate('/participant/archive')} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button type="button" onClick={() => navigate(`/participant/archive/${evt.id}`)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Trophy size={18} color="#ffd700" /> View Results
                   </button>
                 </div>
