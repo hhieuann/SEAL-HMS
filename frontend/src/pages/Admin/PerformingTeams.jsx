@@ -21,13 +21,16 @@ const PerformingTeams = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Build team list from real teams + track draw results
-    import('../../api/teamService.js').then(({ teamService }) => {
-      const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-      teamService.getTeamsByEvent(parsedEventId).then(rawTeams => {
-        const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
+    const load = async () => {
+      try {
+        const { teamService } = await import('../../api/teamService.js');
+        const { eventService } = await import('../../api/eventService.js');
+        const { submissionService } = await import('../../api/scoreService.js');
+        const apiClient = (await import('../../api/apiClient.js')).default;
 
-        // Build a map: teamName -> { trackName, trackColor }
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+
+        const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
         const teamTrackMap = {};
         if (trackDrawStr) {
           const drawn = JSON.parse(trackDrawStr);
@@ -42,35 +45,81 @@ const PerformingTeams = () => {
           });
         }
 
-        const teamsList = rawTeams.data || rawTeams;
+        const rawTeams = await teamService.getTeamsByEvent(parsedEventId);
+        const teamsList = rawTeams.data || rawTeams || [];
         const mappedTeams = Array.isArray(teamsList) ? teamsList : [];
 
-        const enriched = mappedTeams.map((team, i) => {
+        // Fetch active round
+        let activeRound = null;
+        try {
+          const roundsRes = await eventService.getEventRounds(parsedEventId);
+          const rounds = roundsRes.data || [];
+          activeRound = rounds[0]; // fallback
+          for (let i = rounds.length - 1; i >= 0; i--) {
+            if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+              activeRound = rounds[i];
+              break;
+            }
+          }
+        } catch (e) {}
+
+        // Fetch round standings to get scores
+        let standingsMap = {};
+        if (activeRound) {
+          try {
+            const standingsRes = await apiClient.get(`/api/v1/rounds/${activeRound.id}/standings`);
+            const sList = standingsRes.data?.data || [];
+            sList.forEach(st => {
+              standingsMap[st.teamId] = st.score;
+            });
+          } catch(e) {}
+        }
+
+        const enriched = await Promise.all(mappedTeams.map(async (team, i) => {
           const trackInfo = teamTrackMap[team.name];
+
+          let subStatus = '(No submission yet)';
+          let desc = null;
+          let repo = null;
+
+          if (activeRound) {
+            try {
+              const subRes = await submissionService.getSubmission(activeRound.id, team.id);
+              if (subRes?.data?.id) {
+                subStatus = subRes.data.submissionName || 'Submitted';
+                desc = subRes.data.description;
+                repo = subRes.data.githubUrl;
+              }
+            } catch (e) {}
+          }
 
           return {
             id: team.id,
             name: team.name,
-            project: team.project || '(No submission yet)',
+            project: subStatus,
+            description: desc,
+            repo: repo,
             track: trackInfo ? trackInfo.trackName : 'Not assigned',
             trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
             status: team.status || 'Active',
-            score: team.score ?? null,
+            score: standingsMap[team.id] !== undefined ? standingsMap[team.id] : null,
             members: team.memberCount || 0,
             membersList: [],
             icon: ICONS[i % ICONS.length],
             inviteCode: team.inviteCode || 'N/A',
+            currentRound: activeRound ? activeRound.name : 'N/A',
           };
-        });
+        }));
 
         setTeams(enriched);
         setLoading(false);
-      }).catch(err => {
+      } catch (err) {
         console.error("Failed to load real teams", err);
         setLoading(false);
-      });
-    });
-  }, []);
+      }
+    };
+    load();
+  }, [eventId]);
 
   const handleStatusChange = async (teamId, newStatus) => {
     try {
@@ -194,7 +243,7 @@ const PerformingTeams = () => {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project ({team.currentRound})</div>
                 <div style={{ fontSize: '15px', fontWeight: '500' }}>{team.project}</div>
               </div>
 

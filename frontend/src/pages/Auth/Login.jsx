@@ -37,7 +37,7 @@ const Login = () => {
 
       // Navigate based on actual role returned from Spring Boot
       if (role === 'ADMIN') navigate('/admin/dashboard');
-      else if (role === 'JUDGE' || role === 'MENTOR') navigate('/expert/dashboard');
+      else if (role === 'JUDGE' || role === 'MENTOR' || role === 'LECTURER' || role === 'GUEST_JUDGE') navigate('/expert/dashboard');
       else navigate('/participant');
       
     } catch (err) {

@@ -6,6 +6,11 @@ export const eventService = {
     return response.data;
   },
 
+  getAssignedEvents: async () => {
+    const response = await apiClient.get('/api/v1/events/assigned');
+    return response.data;
+  },
+
   getEventDetails: async (id) => {
     const response = await apiClient.get(`/api/v1/events/${id}`);
     return response.data;
