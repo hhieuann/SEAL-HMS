@@ -18,26 +18,30 @@ const Login = () => {
     david: { name: 'David Kim', type: 'expert', roles: ['Mentor'], avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
   };
 
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     
-    const email = e.target[0].value;
-    const password = e.target[1].value;
-
     setIsSubmitting(true);
 
     try {
       // Call real backend API
-      const { role } = await authApi.login(email, password);
+      const { role } = await authApi.login(emailInput, passwordInput);
       
       // Giả lập lưu currentUser để tương thích giao diện cũ
-      const user = accounts[accountId] || accounts['participant'];
+      let user = accounts['participant'];
+      if (role === 'ADMIN' || role === 'STAFF') user = accounts['admin'];
+      else if (role === 'GUEST_JUDGE' || role === 'JUDGE') user = accounts['alan'];
+      else if (role === 'LECTURER' || role === 'MENTOR') user = accounts['david'];
+      
       localStorage.setItem('currentUser', JSON.stringify(user));
 
       // Navigate based on actual role returned from Spring Boot
-      if (role === 'ADMIN') navigate('/admin/dashboard');
-      else if (role === 'JUDGE' || role === 'MENTOR' || role === 'LECTURER' || role === 'GUEST_JUDGE') navigate('/expert/dashboard');
+      if (role === 'ADMIN' || role === 'STAFF') navigate('/admin/dashboard');
+      else if (role === 'GUEST_JUDGE' || role === 'LECTURER' || role === 'JUDGE' || role === 'MENTOR') navigate('/expert/dashboard');
       else navigate('/participant');
       
     } catch (err) {
@@ -72,11 +76,24 @@ const Login = () => {
       
       <form onSubmit={handleLogin} className="auth-form">
         <div className="form-floating">
-          <input type="email" id="email" placeholder=" " style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
+          <input 
+            type="email" 
+            id="email" 
+            placeholder=" " 
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} 
+          />
           <label htmlFor="email">Email Address</label>
         </div>
         <div className="form-floating">
-          <input type="password" id="password" placeholder=" " />
+          <input 
+            type="password" 
+            id="password" 
+            placeholder=" " 
+            value={passwordInput}
+            onChange={(e) => setPasswordInput(e.target.value)}
+          />
           <label htmlFor="password">Password</label>
         </div>
         <button type="submit" className="btn btn-primary full-width mt-4" disabled={isSubmitting}>

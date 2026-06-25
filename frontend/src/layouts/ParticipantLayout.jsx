@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
 import './ParticipantLayout.css';
@@ -9,38 +9,13 @@ const ParticipantLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
-  const [isEliminated, setIsEliminated] = useState(false);
 
   // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
   useEffect(() => {
-    const checkElimination = () => {
-      const eId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1';
-      const trackDrawConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
-      if (!trackDrawConfirmed) {
-        setIsEliminated(false);
-        return;
-      }
-      const trackDrawStr = localStorage.getItem(`trackDraw_${eId}`);
-      if (trackDrawStr) {
-        try {
-          const parsedDraw = JSON.parse(trackDrawStr);
-          const myTeamName = localStorage.getItem('myTeamName');
-          if (myTeamName) {
-            const inDraw = parsedDraw.some(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
-            setIsEliminated(!inDraw);
-          }
-        } catch(e) {}
-      }
-    };
-    
-    checkElimination();
-    window.addEventListener('storage', checkElimination);
-    window.addEventListener('participant_state_updated', checkElimination);
-
     if (isReady) return; // Already set, skip
 
     const accountId = parseInt(localStorage.getItem('accountId'));
-    const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
+    const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
 
     const rehydrate = async () => {
       try {
@@ -65,7 +40,7 @@ const ParticipantLayout = () => {
               localStorage.setItem('p_teamId', team.id);
               localStorage.setItem('myTeamName', team.name);
               localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
-              localStorage.setItem('p_eventId', eventId);
+              localStorage.setItem('p_selectedEventId', eventId);
               localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
               setIsReady(true);
               window.dispatchEvent(new Event('participant_state_updated'));
@@ -104,18 +79,18 @@ const ParticipantLayout = () => {
   return (
     <div className="app-container">
       <header className="fpt-topbar">
-        <div className="logo" style={{ color: 'white', paddingLeft: '24px' }}>
+        <div className="logo" style={{ color: 'white', paddingLeft: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div className="logo-icon" style={{ background: 'white', color: 'var(--primary)' }}><Code size={24} /></div>
           <span className="logo-text">SEAL<span style={{ color: 'white' }}>.</span></span>
+          <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.3)', margin: '0 8px' }}></div>
+          <img src="/src/assets/FptLogo.png" alt="FPT" style={{ height: '90px', objectFit: 'contain' }} />
         </div>
         
         <div style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
+            <img src="https://ui-avatars.com/api/?name=John+Doe&background=fff&color=F26F21" alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
             <div className="user-info" style={{ textAlign: 'left' }}>
-              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>
-                {localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant'}
-              </span>
+              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>John Doe</span>
               <span className="user-role" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Participant</span>
             </div>
           </div>
@@ -197,24 +172,11 @@ const ParticipantLayout = () => {
         </nav>
       </aside>
 
-        <main className="main-content">
-          <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
-            {isEliminated && (location.pathname.includes('/workspace') || location.pathname.includes('/submission')) ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px', textAlign: 'center' }}>
-                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '24px', borderRadius: '50%', marginBottom: '24px' }}>
-                  <X size={48} color="#ef4444" />
-                </div>
-                <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '16px' }}>Your team has been eliminated.</h1>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '18px', maxWidth: '600px', lineHeight: '1.6' }}>
-                  Thank you for participating in the hackathon! Unfortunately, your team did not advance to the current round. 
-                  You can still view your scores and team details using the sidebar.
-                </p>
-              </div>
-            ) : (
-              <Outlet />
-            )}
-          </div>
-        </main>
+      <main className="main-content">
+        <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
+          <Outlet />
+        </div>
+      </main>
       </div>
     </div>
   );
