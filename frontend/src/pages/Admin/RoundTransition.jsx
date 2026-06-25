@@ -88,8 +88,11 @@ const RoundTransition = () => {
               return b.score - a.score;
             });
 
-            // Assign rank and detect ties at the cutoff (position 2 vs 3, or 1 vs 2)
-            const cutoff = savedRoundIdx === 0 ? 2 : 1;
+            // Assign rank and detect ties at the cutoff.
+            // Use promotionTopN from the round if available, else fall back to all teams advancing.
+            const roundObj = evt.rounds?.[savedRoundIdx];
+            const promotionTopN = roundObj?.promotionTopN ?? teamEntries.length;
+            const cutoff = promotionTopN;
             const ranked = teamEntries.map((entry, idx) => {
               const rank = idx + 1;
               const cutoffScore = teamEntries[cutoff - 1]?.score;
@@ -118,13 +121,15 @@ const RoundTransition = () => {
           const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
           const teams = teamsRes.data || [];
           if (teams.length > 0) {
+            const roundObj = evt.rounds?.[savedRoundIdx];
+            const promotionTopN = roundObj?.promotionTopN ?? teams.length;
             const placeholder = [{
               id: 'all',
               name: 'All Teams (No track draw yet)',
               color: 'var(--primary)',
               teams: teams.map((t, i) => ({
                 rank: i + 1, team: t.name,
-                score: null, status: i < 2 ? 'advance' : 'eliminate', tied: false,
+                score: null, status: i < promotionTopN ? 'advance' : 'eliminate', tied: false,
               }))
             }];
             setTrackStandings(placeholder);
@@ -259,7 +264,7 @@ const RoundTransition = () => {
     <>
       <div className="page-header">
         <div>
-          <h1>Round Transition & Penalty</h1>
+          <h1>Round Transition & Result</h1>
           <p className="subtitle">
             {event?.name || 'Hackathon'} —{' '}
             {currentRound
@@ -461,7 +466,7 @@ const RoundTransition = () => {
               </div>
 
               <div style={{ padding: '6px 24px', background: 'rgba(59,130,246,0.08)', borderBottom: '1px solid rgba(59,130,246,0.2)', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}>
-                Top 2 from each track will advance to <strong>{nextRound?.name}</strong>
+                Top {rounds[currentRoundIndex]?.promotionTopN ?? activeTrackData?.teams?.filter(t => t.status === 'advance').length ?? '?'} from each track will advance to <strong>{nextRound?.name}</strong>
               </div>
 
               <div style={{ position: 'relative' }}>
@@ -476,10 +481,10 @@ const RoundTransition = () => {
 
                   return (
                     <React.Fragment key={i}>
-                      {i === 2 && (
+                      {i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
                         <div style={{ padding: '8px 24px', background: 'rgba(16,185,129,0.1)', borderTop: '1px dashed rgba(16,185,129,0.6)', borderBottom: '1px dashed rgba(16,185,129,0.6)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ChevronRight size={14} color="var(--success)" />
-                          <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Top 2 Cutoff → {nextRound?.name}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cutoff → {nextRound?.name}</span>
                         </div>
                       )}
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent', opacity: finalStatus === 'eliminate' ? 0.6 : 1 }}>
@@ -555,11 +560,11 @@ const RoundTransition = () => {
                 <Download size={18} /> Export CSV
               </button>
               <button 
-                onClick={() => navigate(`/admin/event/${eventId}/teams`)}
+                onClick={() => setShowCelebration(false)}
                 className="btn btn-primary" 
                 style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--primary)' }}
               >
-                <Users size={18} /> Leaderboard
+                <CheckCircle size={18} /> Done
               </button>
             </div>
           </div>

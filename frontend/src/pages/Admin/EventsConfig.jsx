@@ -139,10 +139,10 @@ const EventsConfig = () => {
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><Target size={13} color="var(--primary)" /> <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span></div>
                               <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                                <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
                               </div>
                             </div>
-                            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{c.weight}%</span>
+                            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round((c.weight || 0) * 100)}%</span>
                           </div>
                         ))}
                       </div>
