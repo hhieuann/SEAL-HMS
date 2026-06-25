@@ -40,38 +40,49 @@ const ParticipantLayout = () => {
     if (isReady) return; // Already set, skip
 
     const accountId = parseInt(localStorage.getItem('accountId'));
-    const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
+    const userEmail = localStorage.getItem('userEmail');
 
     const rehydrate = async () => {
       try {
-        const teamsRes = await teamService.getTeamsByEvent(eventId);
-        const teams = teamsRes.data || [];
-        for (const team of teams) {
+        // Fetch all events to scan across every event, not just a hardcoded one
+        const { eventService } = await import('../api/eventService');
+        const eventsRes = await eventService.getEvents();
+        const allEvents = eventsRes.data || [];
+
+        for (const evt of allEvents) {
           try {
-            const membersRes = await teamService.getMembers(team.id);
-            const members = membersRes.data || [];
-            const userEmail = localStorage.getItem('userEmail');
-            const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
-            if (isMember) {
-              const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
-              
-              if (!accountId && me.accountId) {
-                localStorage.setItem('accountId', me.accountId);
-                localStorage.setItem('userId', me.accountId);
-              }
-              
-              localStorage.setItem('p_hasTeam', 'true');
-              localStorage.setItem('p_hasJoinedEvent', 'true');
-              localStorage.setItem('p_teamId', team.id);
-              localStorage.setItem('myTeamName', team.name);
-              localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
-              localStorage.setItem('p_eventId', eventId);
-              localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
-              setIsReady(true);
-              window.dispatchEvent(new Event('participant_state_updated'));
-              break;
+            const teamsRes = await teamService.getTeamsByEvent(evt.id);
+            const teams = teamsRes.data || [];
+
+            for (const team of teams) {
+              try {
+                const membersRes = await teamService.getMembers(team.id);
+                const members = membersRes.data || [];
+                const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
+
+                if (isMember) {
+                  const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
+
+                  if (!accountId && me?.accountId) {
+                    localStorage.setItem('accountId', me.accountId);
+                    localStorage.setItem('userId', me.accountId);
+                  }
+
+                  localStorage.setItem('p_hasTeam', 'true');
+                  localStorage.setItem('p_hasJoinedEvent', 'true');
+                  localStorage.setItem('p_teamId', team.id);
+                  localStorage.setItem('myTeamName', team.name);
+                  localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
+                  localStorage.setItem('p_eventId', evt.id);
+                  localStorage.setItem('p_selectedEventId', evt.id);
+                  localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
+                  setIsReady(true);
+                  window.dispatchEvent(new Event('participant_state_updated'));
+                  return; // Done — found the team, stop scanning
+                }
+              } catch (e) { /* skip team if members fetch fails */ }
             }
-          } catch (e) { /* skip team if members fetch fails */ }
+          } catch (e) { /* skip event if teams fetch fails */ }
         }
       } catch (e) {
         console.error('Failed to re-hydrate participant state:', e);
