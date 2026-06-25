@@ -115,7 +115,7 @@ const Scores = () => {
             if (scoresForCrit.length > 0) {
                const rawAvg = scoresForCrit.reduce((acc, curr) => acc + (curr.score || 0), 0) / scoresForCrit.length;
                const max = parseFloat(crit.maxScore) || 1;
-               const weight = parseFloat(crit.weight) || 0;
+               const weight = (parseFloat(crit.weight) || 0) * 100; // BE stores 0–1
                const weightedScore = (rawAvg / max) * weight;
                avgMap[cId] = parseFloat(weightedScore.toFixed(1));
                weightedTotal += weightedScore;
@@ -266,7 +266,7 @@ const Scores = () => {
             <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={20} color="var(--primary)" /> Your Team Score</h2>
             <div style={{ background: '#F8FAFC', padding: '8px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
               <span style={{ fontSize: '28px', fontWeight: '800', color: myScore > 0 ? 'var(--success)' : 'var(--text-secondary)' }}>{myScore > 0 ? myScore : '—'}</span>
-              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c)=>s+c.weight,0)||100}</span>
+              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c) => s + Math.round((c.weight||0)*100), 0) || 100}</span>
             </div>
           </div>
 
@@ -274,7 +274,7 @@ const Scores = () => {
             {currentRound?.criteria?.map((c, i) => {
               const key = c.id || c.name;
               const val = criteriaAvg[key] || 0;
-              const max = c.weight;
+              const max = Math.round((c.weight || 0) * 100); // weight is 0–1, display as %
               const pct = max > 0 ? (val / max) * 100 : 0;
               const colors = ['var(--primary)', 'var(--accent-1)', 'var(--success)', 'var(--warning)'];
               const color = colors[i % colors.length];
@@ -282,7 +282,7 @@ const Scores = () => {
                 <div key={i}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px' }}>
                     <span>{c.name}</span>
-                    <strong>{val} / {max}</strong>
+                    <strong>{val} / {max}%</strong>
                   </div>
                   <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: color }}></div>

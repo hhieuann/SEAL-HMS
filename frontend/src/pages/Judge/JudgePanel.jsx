@@ -68,11 +68,8 @@ const JudgePanel = () => {
         const approvedTeams = teamsList.filter(t =>
           ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)
         );
-        setTeams(approvedTeams);
 
         if (approvedTeams.length > 0) {
-          setActiveTeamId(approvedTeams[0].id);
-
           // Load criteria for this round
           try {
             const criteriaRes = await criterionService.getCriteria(round.id);
@@ -82,7 +79,7 @@ const JudgePanel = () => {
             console.error(e);
           }
 
-          // Load submissions & existing scores for all teams
+          // Load submissions & existing scores for all approved teams
           const subMap = {};
           const scoresMap = {};
           await Promise.all(approvedTeams.map(async (team) => {
@@ -96,14 +93,21 @@ const JudgePanel = () => {
                 if (scoresRes?.data?.length) scoresMap[team.id] = scoresRes.data;
               }
             } catch {
-              // Team hasn't submitted yet — that's fine
+              // Team hasn't submitted yet for this round — exclude from list
             }
           }));
           setSubmissions(subMap);
           setExistingScores(scoresMap);
 
-          // Init scores for first team
-          initScores(approvedTeams[0].id, scoresMap);
+          // Only show teams that have a submission for THIS round (eliminates old round carry-overs)
+          const teamsWithSubmission = approvedTeams.filter(t => !!subMap[t.id]);
+          setTeams(teamsWithSubmission);
+
+          // Set first team with a submission as active
+          if (teamsWithSubmission.length > 0) {
+            setActiveTeamId(teamsWithSubmission[0].id);
+            initScores(teamsWithSubmission[0].id, scoresMap);
+          }
         }
       } catch (e) {
         console.error('JudgePanel load error:', e);
@@ -138,7 +142,7 @@ const JudgePanel = () => {
     criteria.forEach(c => {
       const val = parseFloat(scores[c.id]) || 0;
       const max = parseFloat(c.maxScore) || 1;
-      const weight = parseFloat(c.weight) || 0;
+      const weight = (parseFloat(c.weight) || 0) * 100; // BE stores 0–1, display as %
       weightedTotal += (val / max) * weight;
     });
     return weightedTotal;
@@ -151,7 +155,7 @@ const JudgePanel = () => {
       const c = criteria.find(cr => cr.id === s.criterionId);
       const val = parseFloat(s.score) || 0;
       const max = parseFloat(s.maxScore) || 1;
-      const weight = c ? (parseFloat(c.weight) || 0) : 0;
+      const weight = (c ? (parseFloat(c.weight) || 0) : 0) * 100; // BE stores 0–1
       weightedTotal += (val / max) * weight;
     });
     return weightedTotal;
