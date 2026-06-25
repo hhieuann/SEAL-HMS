@@ -37,19 +37,21 @@ const ParticipantLayout = () => {
     window.addEventListener('storage', checkElimination);
     window.addEventListener('participant_state_updated', checkElimination);
 
-    if (isReady) return; // Already set, skip
-
     const accountId = parseInt(localStorage.getItem('accountId'));
     const userEmail = localStorage.getItem('userEmail');
 
     const rehydrate = async () => {
       try {
-        // Fetch all events to scan across every event, not just a hardcoded one
         const { eventService } = await import('../api/eventService');
         const eventsRes = await eventService.getEvents();
         const allEvents = eventsRes.data || [];
 
+        let foundActiveTeam = false;
+
         for (const evt of allEvents) {
+          if (evt.status?.toLowerCase() === 'completed') {
+            continue; // Ignore past events for active dashboard status
+          }
           try {
             const teamsRes = await teamService.getTeamsByEvent(evt.id);
             const teams = teamsRes.data || [];
@@ -77,13 +79,27 @@ const ParticipantLayout = () => {
                   localStorage.setItem('p_selectedEventId', evt.id);
                   localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
                   setIsReady(true);
+                  foundActiveTeam = true;
                   window.dispatchEvent(new Event('participant_state_updated'));
-                  return; // Done — found the team, stop scanning
+                  return; // Done
                 }
-              } catch (e) { /* skip team if members fetch fails */ }
+              } catch (e) { /* skip */ }
             }
-          } catch (e) { /* skip event if teams fetch fails */ }
+          } catch (e) { /* skip */ }
         }
+
+        if (!foundActiveTeam && localStorage.getItem('p_hasTeam') === 'true') {
+           localStorage.removeItem('p_hasTeam');
+           localStorage.removeItem('p_hasJoinedEvent');
+           localStorage.removeItem('p_teamId');
+           localStorage.removeItem('myTeamName');
+           localStorage.removeItem('p_isLeader');
+           // Keep selectedEventId if they want to browse, but clear the strict eventId lock
+           localStorage.removeItem('p_eventId');
+           setIsReady(false);
+           window.dispatchEvent(new Event('participant_state_updated'));
+        }
+
       } catch (e) {
         console.error('Failed to re-hydrate participant state:', e);
       }
