@@ -17,10 +17,17 @@ const EventSelection = () => {
   const [hasTeam, setHasTeam] = useState(localStorage.getItem('p_hasTeam') === 'true');
 
   useEffect(() => {
+    // Clear stale join flags if there's no real team membership
+    if (localStorage.getItem('p_hasJoinedEvent') === 'true' && localStorage.getItem('p_hasTeam') !== 'true') {
+      localStorage.removeItem('p_hasJoinedEvent');
+      localStorage.removeItem('p_eventId');
+      localStorage.removeItem('p_selectedEventId');
+    }
+
     import('../../api/eventService.js').then(({ eventService }) => {
       eventService.getEvents().then(res => {
         const mappedEvents = (res.data || []).map(evt => {
-          return { ...evt, registrationOpen: evt.registrationOpen !== false }; // Default true unless explicitly false in API
+          return { ...evt, registrationOpen: evt.registrationOpen !== false };
         });
         setEvents(mappedEvents);
       });
@@ -63,9 +70,15 @@ const EventSelection = () => {
           const isCompleted = evt.status?.toLowerCase() === 'completed';
 
           const joinedEventIdStr = localStorage.getItem('p_eventId');
-          const isJoinedThisEvent = joinedEventIdStr === evt.id.toString() || registeredEventId === evt.id;
+          // hasTrueTeam = backend confirmed this user is in a real team
+          const hasTrueTeam = localStorage.getItem('p_hasTeam') === 'true' || hasTeam;
+          // isJoinedThisEvent = user just clicked Register on this event,
+          // OR they have a backend-confirmed team in this event
+          const isJoinedThisEvent = registeredEventId === evt.id ||
+            (hasTrueTeam && joinedEventIdStr === evt.id.toString());
           const isRegisteringThisEvent = registeringEventId === evt.id;
-          const hasJoinedAnyEvent = localStorage.getItem('p_hasJoinedEvent') === 'true' || registeredEventId !== null;
+          // hasJoinedAnyEvent = user is committed to an event (blocks registering to others)
+          const hasJoinedAnyEvent = registeredEventId !== null || (hasTrueTeam && !!joinedEventIdStr);
 
           if (isLive) {
             return (
