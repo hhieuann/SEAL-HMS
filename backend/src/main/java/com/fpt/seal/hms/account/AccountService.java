@@ -23,7 +23,7 @@ public class AccountService {
     private final StudentRepository studentRepository;
 
     @Transactional
-    public Account register(String email, String rawPassword, Role role) {
+    public Account register(String email, String rawPassword, Role role, String studentCode) {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
@@ -34,17 +34,31 @@ public class AccountService {
         if (assignedRole != Role.STUDENT && assignedRole != Role.LECTURER) {
             throw new BusinessException("Self-registration is only allowed for STUDENT or LECTURER");
         }
+
+        // A STUDENT account must carry a unique student code.
+        boolean isStudent = assignedRole == Role.STUDENT;
+        String normalizedCode = studentCode != null ? studentCode.trim() : null;
+        if (isStudent) {
+            if (normalizedCode == null || normalizedCode.isBlank()) {
+                throw new BusinessException("Student code is required to register as a STUDENT");
+            }
+            if (studentRepository.existsByStudentCode(normalizedCode)) {
+                throw new BusinessException("Student code already registered: " + normalizedCode);
+            }
+        }
+
         Account account = new Account();
         account.setEmail(email);
         account.setPassword(passwordEncoder.encode(rawPassword));
         account.setRole(assignedRole);
         account.setStatus(AccountStatus.PENDING); // admin/staff activate later
-        
+
         Account savedAccount = accountRepository.save(account);
-        
-        if (savedAccount.getRole() == Role.STUDENT) {
+
+        if (isStudent) {
             Student student = new Student();
             student.setAccount(savedAccount);
+            student.setStudentCode(normalizedCode);
             studentRepository.save(student);
         }
         
