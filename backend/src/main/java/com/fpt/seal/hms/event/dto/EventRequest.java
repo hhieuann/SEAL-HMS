@@ -22,6 +22,16 @@ public class EventRequest {
     private LocalDate startDate;
     private LocalDate endDate;
 
+    @jakarta.validation.constraints.NotNull(message = "Registration start date is required")
+    private LocalDate registrationStartDate;
+
+    @jakarta.validation.constraints.NotNull(message = "Registration end date is required")
+    private LocalDate registrationEndDate;
+
+    @jakarta.validation.constraints.NotNull(message = "Max teams is required")
+    @jakarta.validation.constraints.Min(value = 1, message = "Max teams must be at least 1")
+    private Integer maxTeams;
+
     private String description;
 
     @Valid

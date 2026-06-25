@@ -39,4 +39,13 @@ public class Event extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @Column(name = "registration_start_date", nullable = false)
+    private LocalDate registrationStartDate;
+
+    @Column(name = "registration_end_date", nullable = false)
+    private LocalDate registrationEndDate;
+
+    @Column(name = "max_teams", nullable = false)
+    private Integer maxTeams;
 }

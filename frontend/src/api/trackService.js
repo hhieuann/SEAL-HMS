@@ -21,6 +21,16 @@ export const trackService = {
     return response.data;
   },
 
+  updateTopic: async (id, topicData) => {
+    const response = await apiClient.put(`/api/v1/topics/${id}`, topicData);
+    return response.data;
+  },
+
+  deleteTopic: async (id) => {
+    const response = await apiClient.delete(`/api/v1/topics/${id}`);
+    return response.data;
+  },
+
   updateTrack: async (id, trackData) => {
     const response = await apiClient.put(`/api/v1/tracks/${id}`, trackData);
     return response.data;

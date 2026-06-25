@@ -59,6 +59,27 @@ public class TeamService {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
+        java.util.List<com.fpt.seal.hms.teammember.entity.TeamMember> existingInEvent = teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(
+                request.getLeaderAccountId(), eventId, com.fpt.seal.hms.common.enums.MemberStatus.DECLINED);
+        if (!existingInEvent.isEmpty()) {
+            throw new BusinessException("You are already a member of another team in this event and cannot create a new one.");
+        }
+
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (event.getRegistrationStartDate() != null && today.isBefore(event.getRegistrationStartDate())) {
+            throw new BusinessException("Registration for this event has not started yet.");
+        }
+        if (event.getRegistrationEndDate() != null && today.isAfter(event.getRegistrationEndDate())) {
+            throw new BusinessException("Registration for this event has closed.");
+        }
+
+        if (event.getMaxTeams() != null) {
+            long currentTeams = teamRepository.countByEventId(eventId);
+            if (currentTeams >= event.getMaxTeams()) {
+                throw new BusinessException("Event has reached its maximum number of teams.");
+            }
+        }
+
         Team team = new Team();
         team.setEvent(event);
         team.setName(request.getName());

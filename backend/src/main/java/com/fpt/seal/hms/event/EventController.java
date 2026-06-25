@@ -8,6 +8,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,6 +24,17 @@ public class EventController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<EventResponse>>> getAllEvents() {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getAllEvents()));
+    }
+
+    @GetMapping("/assigned")
+    @PreAuthorize("hasAnyRole('JUDGE', 'LECTURER', 'GUEST_JUDGE', 'MENTOR')")
+    public ResponseEntity<ApiResponse<List<EventResponse>>> getAssignedEvents(Authentication auth) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.getAssignedEvents(auth.getName())));
+    }
+
+    @GetMapping("/debug/{id}")
+    public ResponseEntity<ApiResponse<EventResponse>> getEventByIdDebug(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
     }
 
     @GetMapping("/{id}")

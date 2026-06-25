@@ -2,6 +2,7 @@ package com.fpt.seal.hms.submission;
 
 import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
+import com.fpt.seal.hms.common.enums.RoundStatus;
 import com.fpt.seal.hms.common.enums.SubmissionStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
@@ -46,6 +47,10 @@ public class SubmissionService {
     public SubmissionResponse upsertSubmission(Long roundId, Long teamId, SubmissionRequest request) {
         Round round = roundRepository.findById(roundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found"));
+
+        if (round.getStatus() != RoundStatus.ACTIVE) {
+            throw new BusinessException("Cannot submit: The round is not currently active.");
+        }
 
         if (round.getEndTime() == null) {
             throw new BusinessException("Cannot submit: Round does not have an end time (deadline) configured.");

@@ -15,6 +15,9 @@ public class EventResponse {
     private String type;
     private LocalDate startDate;
     private LocalDate endDate;
+    private LocalDate registrationStartDate;
+    private LocalDate registrationEndDate;
+    private Integer maxTeams;
     private EventStatus status;
     private String description;
     private LocalDateTime createdAt;
