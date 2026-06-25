@@ -49,6 +49,7 @@ public class RoundService {
         round.setStartTime(request.getStartTime());
         round.setEndTime(request.getEndTime());
         round.setPromotionTopN(request.getPromotionTopN());
+        round.setEliminatedTeams(request.getEliminatedTeams());
         round.setStatus(RoundStatus.CREATED);
         round.setRoundSeq(nextSeq);
 
@@ -68,6 +69,7 @@ public class RoundService {
         round.setStartTime(request.getStartTime());
         round.setEndTime(request.getEndTime());
         round.setPromotionTopN(request.getPromotionTopN());
+        round.setEliminatedTeams(request.getEliminatedTeams());
 
         return mapToResponse(roundRepository.save(round));
     }
@@ -137,6 +139,7 @@ public class RoundService {
         response.setStartTime(round.getStartTime());
         response.setEndTime(round.getEndTime());
         response.setPromotionTopN(round.getPromotionTopN());
+        response.setEliminatedTeams(round.getEliminatedTeams());
         response.setStatus(round.getStatus());
         response.setRoundSeq(round.getRoundSeq());
         response.setCreatedAt(round.getCreatedAt());

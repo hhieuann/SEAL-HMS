@@ -58,6 +58,12 @@ public class TeamMemberService {
             throw new BusinessException("User is already in the team or has been invited.");
         }
 
+        List<TeamMember> existingInEvent = teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(
+                account.getId(), team.getEvent().getId(), MemberStatus.DECLINED);
+        if (!existingInEvent.isEmpty()) {
+            throw new BusinessException("This user is already a member of another team in this event.");
+        }
+
         TeamMember member = new TeamMember();
         member.setTeam(team);
         member.setAccount(account);

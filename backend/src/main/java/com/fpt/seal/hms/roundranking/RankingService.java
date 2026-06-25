@@ -43,6 +43,12 @@ public class RankingService {
         rankings.sort(Comparator.comparing(this::scoreOf).reversed());
 
         Integer topN = round.getPromotionTopN();
+        if (round.getEliminatedTeams() != null) {
+            topN = Math.max(0, rankings.size() - round.getEliminatedTeams());
+            round.setPromotionTopN(topN);
+            roundRepository.save(round);
+        }
+
         assignRanks(rankings, this::scoreOf, RoundRanking::setRank);
         for (RoundRanking rr : rankings) {
             Integer rank = rr.getRank();
