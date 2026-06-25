@@ -46,6 +46,8 @@ const TeamFormation = () => {
       localStorage.setItem('p_hasTeam', 'true');
       localStorage.setItem('p_isLeader', 'true');
       
+      window.dispatchEvent(new Event('participant_state_updated'));
+      
       setActiveTab('success_create');
     } catch (err) {
       setError(err.message || 'Failed to create team');

@@ -33,9 +33,14 @@ const ParticipantLayout = () => {
       }
     };
     
+    const handleStateUpdate = () => {
+      checkElimination();
+      setIsReady(localStorage.getItem('p_hasTeam') === 'true');
+    };
+    
     checkElimination();
-    window.addEventListener('storage', checkElimination);
-    window.addEventListener('participant_state_updated', checkElimination);
+    window.addEventListener('storage', handleStateUpdate);
+    window.addEventListener('participant_state_updated', handleStateUpdate);
 
     const accountId = parseInt(localStorage.getItem('accountId'));
     const userEmail = localStorage.getItem('userEmail');
@@ -106,6 +111,11 @@ const ParticipantLayout = () => {
     };
 
     rehydrate();
+
+    return () => {
+      window.removeEventListener('storage', handleStateUpdate);
+      window.removeEventListener('participant_state_updated', handleStateUpdate);
+    };
   }, []);
 
   const handleLogout = () => {
