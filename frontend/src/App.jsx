@@ -78,7 +78,7 @@ function App() {
           <Route path="scores" element={<Scores />} />
           <Route path="mentor" element={<ContactMentor />} />
           <Route path="faq" element={<FAQ />} />
-          <Route path="archive/:eventId" element={<EventArchive />} />
+          <Route path="archive" element={<EventArchive />} />
         </Route>
 
         {/* Admin/Coordinator Routes */}
@@ -109,9 +109,9 @@ function App() {
         </Route>
 
         {/* Judge Routes */}
-        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'LECTURER', 'GUEST_JUDGE']}><ExpertDashboard /></ProtectedRoute>} />
+        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER']}><ExpertDashboard /></ProtectedRoute>} />
         
-        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'LECTURER', 'GUEST_JUDGE']}><JudgeLayout /></ProtectedRoute>}>
+        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
           <Route path="history" element={<ScoringHistory />} />
@@ -119,7 +119,7 @@ function App() {
         </Route>
 
         {/* Mentor Routes */}
-        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['MENTOR']}><MentorLayout /></ProtectedRoute>}>
+        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['MENTOR', 'LECTURER']}><MentorLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />

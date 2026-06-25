@@ -40,11 +40,32 @@ public class AdminSeeder implements CommandLineRunner {
     @Value("${app.staff.password:Staff@12345}")
     private String staffPassword;
 
+    @Value("${app.lecturer.email:lecturer@seal-hms.local}")
+    private String lecturerEmail;
+
+    @Value("${app.lecturer.password:Lecturer@12345}")
+    private String lecturerPassword;
+
+    @Value("${app.student.email:student@seal-hms.local}")
+    private String studentEmail;
+
+    @Value("${app.student.password:Student@12345}")
+    private String studentPassword;
+
+    @Value("${app.guest_judge.email:judge@seal-hms.local}")
+    private String guestJudgeEmail;
+
+    @Value("${app.guest_judge.password:Judge@12345}")
+    private String guestJudgePassword;
+
     @Override
     @Transactional
     public void run(String... args) {
         seedIfMissing(Role.ADMIN, adminEmail, adminPassword);
         seedIfMissing(Role.STAFF, staffEmail, staffPassword);
+        seedIfMissing(Role.LECTURER, lecturerEmail, lecturerPassword);
+        seedIfMissing(Role.STUDENT, studentEmail, studentPassword);
+        seedIfMissing(Role.GUEST_JUDGE, guestJudgeEmail, guestJudgePassword);
     }
 
     /** Create an ACTIVE account with the given role only when none of that role exists. */

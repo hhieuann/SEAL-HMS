@@ -2,8 +2,11 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-image: 
-      radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 60%);
+  background-image: url('../assets/FptBackground.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* Navbar matching Home Page */
