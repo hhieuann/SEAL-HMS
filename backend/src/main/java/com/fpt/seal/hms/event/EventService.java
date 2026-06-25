@@ -50,11 +50,22 @@ public class EventService {
 
     @Transactional
     public EventResponse createEvent(EventRequest request) {
+        if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&
+            request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
+            throw new IllegalArgumentException("Registration end date must not be before start date.");
+        }
+        if (request.getMaxTeams() != null && request.getMaxTeams() < 1) {
+            throw new IllegalArgumentException("Max teams must be at least 1.");
+        }
+
         Event event = new Event();
         event.setName(request.getName());
         event.setType(request.getType());
         event.setStartDate(request.getStartDate());
         event.setEndDate(request.getEndDate());
+        event.setRegistrationStartDate(request.getRegistrationStartDate());
+        event.setRegistrationEndDate(request.getRegistrationEndDate());
+        event.setMaxTeams(request.getMaxTeams());
         event.setDescription(request.getDescription());
         event.setStatus(EventStatus.PLANNED); // default status
 
@@ -87,10 +98,21 @@ public class EventService {
             throw new BusinessException("Cannot update event details when status is " + event.getStatus());
         }
 
+        if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&
+            request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
+            throw new IllegalArgumentException("Registration end date must not be before start date.");
+        }
+        if (request.getMaxTeams() != null && request.getMaxTeams() < 1) {
+            throw new IllegalArgumentException("Max teams must be at least 1.");
+        }
+
         event.setName(request.getName());
         event.setType(request.getType());
         event.setStartDate(request.getStartDate());
         event.setEndDate(request.getEndDate());
+        event.setRegistrationStartDate(request.getRegistrationStartDate());
+        event.setRegistrationEndDate(request.getRegistrationEndDate());
+        event.setMaxTeams(request.getMaxTeams());
         event.setDescription(request.getDescription());
 
         return mapToResponse(eventRepository.save(event));
@@ -167,6 +189,9 @@ public class EventService {
         response.setType(event.getType());
         response.setStartDate(event.getStartDate());
         response.setEndDate(event.getEndDate());
+        response.setRegistrationStartDate(event.getRegistrationStartDate());
+        response.setRegistrationEndDate(event.getRegistrationEndDate());
+        response.setMaxTeams(event.getMaxTeams());
         response.setStatus(event.getStatus());
         response.setDescription(event.getDescription());
         response.setCreatedAt(event.getCreatedAt());

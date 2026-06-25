@@ -14,4 +14,5 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Long> {
     Optional<TeamMember> findByTeamIdAndAccountId(Long teamId, Long accountId);
     long countByTeamIdAndStatus(Long teamId, MemberStatus status);
     long countByTeamIdAndStatusNot(Long teamId, MemberStatus status); // e.g. count all NOT declined/withdrawn
+    List<TeamMember> findByAccountIdAndTeam_EventIdAndStatusNot(Long accountId, Long eventId, MemberStatus status);
 }
