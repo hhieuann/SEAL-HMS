@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
@@ -28,7 +28,18 @@ const RoundTransition = () => {
         const evt = eventRes.data;
         setEvent(evt);
 
-        const savedRoundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
+        const rounds = evt.rounds || [];
+        let savedRoundIdx = 0;
+        if (rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = rounds.length - 1; i >= 0; i--) {
+            if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          savedRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
         setCurrentRoundIndex(savedRoundIdx);
         const round = evt.rounds?.[savedRoundIdx];
         const roundId = round?.id || String(savedRoundIdx);
@@ -61,11 +72,12 @@ const RoundTransition = () => {
         if (trackDrawStr) {
           const drawn = JSON.parse(trackDrawStr);
           const standings = drawn.map((track, i) => {
-            const teamEntries = (track.teams || []).map(teamName => {
-              const teamObj = teamsList.find(t => t.name === teamName);
-              const teamId = teamObj?.id;
+            const teamEntries = (track.teams || []).map(teamItem => {
+              const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
+              const teamObj = teamsList.find(t => t.name === teamNameStr);
+              const teamId = teamObj?.id || (typeof teamItem === 'object' ? teamItem.id : undefined);
               const score = (teamId && dbScoreMap[teamId] != null) ? dbScoreMap[teamId] : null;
-              return { team: teamName, teamId, score };
+              return { team: teamNameStr, teamId, score };
             });
 
             // Sort by score desc (null scores go to bottom)
@@ -143,7 +155,27 @@ const RoundTransition = () => {
   );
   const allTiesResolved = tiebreakerTeams.every(t => resolvedTies[t.team]);
 
-  const handleLock = () => {
+  const handleExportCSV = () => {
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += "Rank,Team,Score,Status,Track\n";
+    
+    const listToExport = isLastRound ? finalsTeamList : trackStandings.flatMap(t => t.teams.map(team => ({...team, fromTrack: t.name})));
+    
+    listToExport.forEach(t => {
+      const row = `${t.rank || ''},"${t.team || ''}",${t.score || 0},${t.status || ''},"${t.fromTrack || ''}"`;
+      csvContent += row + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `event_${eventId}_results.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleLock = async () => {
     if (tiebreakerTeams.length > 0 && !allTiesResolved) {
       setLockError(true);
       setLockShaking(true);
@@ -151,27 +183,73 @@ const RoundTransition = () => {
       return;
     }
     setLockError(false);
-    setConfirmed(true);
-    setLockToast(true);
-    if (!isLastRound) {
-      // Build next round track draw (only keep advanced teams)
-      const nextRoundDraw = trackStandings.map(track => {
-        const advancedTeams = track.teams
-          .filter(t => t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass'))
-          .map(t => t.team);
-        return { ...track, teams: advancedTeams };
-      });
-      localStorage.setItem('trackDraw', JSON.stringify(nextRoundDraw));
-      localStorage.setItem('currentRoundIndex', String(currentRoundIndex + 1));
-      
-      setTimeout(() => {
+    
+    try {
+      const currentRoundObj = rounds[currentRoundIndex];
+      // If the current round hasn't started yet, we START it.
+      if (currentRoundObj.status === 'CREATED' || currentRoundObj.status?.toLowerCase() === 'planned') {
+        await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
         window.location.reload();
-      }, 1500);
-    } else {
-      setTimeout(() => setLockToast(false), 4000);
-      setTimeout(() => {
-        setShowCelebration(true);
-      }, 500);
+        return;
+      }
+
+      setConfirmed(true);
+      setLockToast(true);
+      
+      const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
+      const startIdx = statuses.indexOf(currentRoundObj.status);
+      if (startIdx !== -1) {
+        for (let i = startIdx + 1; i <= statuses.indexOf('COMPLETED'); i++) {
+           await eventService.updateRoundStatus(currentRoundObj.id, statuses[i]);
+        }
+      } else {
+        // fallback if somehow status is not found, attempt direct transition
+        await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
+      }
+
+      if (!isLastRound) {
+        // Build next round track draw (only keep advanced teams)
+        const nextRoundDraw = trackStandings.map(track => {
+          const advancedTeams = track.teams
+            .filter(t => t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass'))
+            .map(t => t.team);
+          return { ...track, teams: advancedTeams };
+        });
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(nextRoundDraw));
+        
+        const nextRoundObj = rounds[currentRoundIndex + 1];
+        if (nextRoundObj) {
+           await eventService.updateRoundStatus(nextRoundObj.id, 'ACTIVE');
+        }
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        // Finalize Event status in backend
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        
+        const eventStatuses = ['PLANNED', 'UPCOMING', 'ONGOING', 'COMPLETED'];
+        const startEventIdx = event?.status ? eventStatuses.indexOf(event.status.toUpperCase()) : -1;
+        
+        if (startEventIdx !== -1) {
+          for (let i = startEventIdx + 1; i <= eventStatuses.indexOf('COMPLETED'); i++) {
+            await eventService.updateEventStatus(parsedEventId, eventStatuses[i]);
+          }
+        } else {
+          // fallback
+          await eventService.updateEventStatus(parsedEventId, 'COMPLETED');
+        }
+
+        setTimeout(() => setLockToast(false), 4000);
+        setTimeout(() => {
+          setShowCelebration(true);
+        }, 500);
+      }
+    } catch (err) {
+       console.error("Error updating round status", err);
+       alert("Failed to update round status");
     }
   };
 
@@ -191,26 +269,28 @@ const RoundTransition = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn btn-secondary">Export Results CSV</button>
-          <button
-            onClick={handleLock}
-            disabled={confirmed}
-            className="btn btn-primary"
-            style={{
-              background: confirmed ? 'rgba(16,185,129,0.3)' : lockError ? 'var(--danger)' : isLastRound ? 'var(--success)' : 'var(--primary)',
-              cursor: confirmed ? 'not-allowed' : 'pointer',
-              gap: '8px',
-              animation: lockShaking ? 'shake 0.4s ease-in-out' : 'none',
-              padding: '10px 24px'
-            }}
-          >
-            {confirmed
-              ? <><CheckCircle size={16} /> {isLastRound ? 'Event Finalized' : `Advanced to ${nextRound?.name}`}</>
-              : isLastRound
-                ? <><Trophy size={16} /> Finalize & End Event</>
-                : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
-            }
-          </button>
+          <button className="btn btn-secondary" onClick={handleExportCSV}>Export Results CSV</button>
+            <button
+              onClick={handleLock}
+              disabled={confirmed}
+              className="btn btn-primary"
+              style={{
+                background: confirmed ? 'rgba(16,185,129,0.3)' : lockError ? 'var(--danger)' : isLastRound && currentRound?.status !== 'CREATED' && currentRound?.status?.toLowerCase() !== 'planned' ? 'var(--success)' : 'var(--primary)',
+                cursor: confirmed ? 'not-allowed' : 'pointer',
+                gap: '8px',
+                animation: lockShaking ? 'shake 0.4s ease-in-out' : 'none',
+                padding: '10px 24px'
+              }}
+            >
+              {confirmed
+                ? <><CheckCircle size={16} /> {isLastRound ? 'Event Finalized' : `Advanced to ${nextRound?.name}`}</>
+                : (currentRound?.status === 'CREATED' || currentRound?.status?.toLowerCase() === 'planned')
+                  ? <><ArrowRight size={16} /> Start {currentRound?.name || 'Round'}</>
+                  : isLastRound
+                    ? <><Trophy size={16} /> Finalize & End Event</>
+                    : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
+              }
+            </button>
         </div>
       </div>
 
@@ -463,15 +543,25 @@ const RoundTransition = () => {
               EVENT FINALIZED!
             </h2>
             <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '15px', marginBottom: '32px' }}>
-              The Hackathon has officially concluded. The winning teams have been recorded, and the final Leaderboard is now published to the public portal for everyone to see!
+              The Hackathon has officially concluded. The final Leaderboard is locked in and ready for the award ceremony! 
+              You can download the final CSV report or view the leaderboard.
             </p>
-            <button 
-              onClick={() => navigate('/admin')}
-              className="btn btn-primary" 
-              style={{ width: '100%', padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--primary)' }}
-            >
-              <CheckCircle size={18} /> Return to Dashboard
-            </button>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={handleExportCSV}
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px' }}
+              >
+                <Download size={18} /> Export CSV
+              </button>
+              <button 
+                onClick={() => navigate(`/admin/event/${eventId}/teams`)}
+                className="btn btn-primary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--primary)' }}
+              >
+                <Users size={18} /> Leaderboard
+              </button>
+            </div>
           </div>
         </div>
       )}

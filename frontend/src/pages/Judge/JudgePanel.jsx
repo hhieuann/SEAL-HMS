@@ -27,23 +27,43 @@ const JudgePanel = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes?.data?.[0] || null;
+        let evt = null;
+        const ctxStr = localStorage.getItem('expertContext');
+        let ctx = ctxStr ? JSON.parse(ctxStr) : null;
+
+        if (ctx && ctx.eventId) {
+          const eventDetails = await eventService.getEventDetails(ctx.eventId);
+          evt = eventDetails?.data || eventDetails || null;
+        } else {
+          const eventsRes = await eventService.getAssignedEvents();
+          evt = eventsRes?.data?.[0] || null;
+        }
+        
         if (evt) {
           const roundsRes = await eventService.getEventRounds(evt.id);
           evt.rounds = roundsRes.data || [];
         }
         setEvent(evt);
 
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+        const round = evt?.rounds?.[activeRoundIdx] || null;
         setCurrentRound(round);
 
         if (!evt || !round) return;
 
         // Load real teams from backend
-        const teamsData = await teamService.getTeamsByEvent(1);
+        const teamsData = await teamService.getTeamsByEvent(evt.id);
         const teamsList = teamsData?.data || teamsData || [];
         const approvedTeams = teamsList.filter(t =>
           ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)
@@ -58,8 +78,8 @@ const JudgePanel = () => {
             const criteriaRes = await criterionService.getCriteria(round.id);
             const criteriaList = criteriaRes?.data || [];
             setCriteria(criteriaList);
-          } catch {
-            setCriteria([]);
+          } catch (e) {
+            console.error(e);
           }
 
           // Load submissions & existing scores for all teams
@@ -114,7 +134,27 @@ const JudgePanel = () => {
   };
 
   const computeTotal = () => {
-    return Object.values(scores).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+    let weightedTotal = 0;
+    criteria.forEach(c => {
+      const val = parseFloat(scores[c.id]) || 0;
+      const max = parseFloat(c.maxScore) || 1;
+      const weight = parseFloat(c.weight) || 0;
+      weightedTotal += (val / max) * weight;
+    });
+    return weightedTotal;
+  };
+
+  const computeExistingTotal = (myScores) => {
+    if (!myScores || !myScores.length) return 0;
+    let weightedTotal = 0;
+    myScores.forEach(s => {
+      const c = criteria.find(cr => cr.id === s.criterionId);
+      const val = parseFloat(s.score) || 0;
+      const max = parseFloat(s.maxScore) || 1;
+      const weight = c ? (parseFloat(c.weight) || 0) : 0;
+      weightedTotal += (val / max) * weight;
+    });
+    return weightedTotal;
   };
 
   const handleSubmitScore = async () => {
@@ -151,7 +191,7 @@ const JudgePanel = () => {
   const activeSubmission = submissions[activeTeamId];
   const myScoresForActiveTeam = existingScores[activeTeamId];
   const total = computeTotal();
-  const maxTotal = criteria.reduce((s, c) => s + (parseFloat(c.maxScore) || 0), 0) || 100;
+  const maxTotal = 100;
 
   if (loading) {
     return (
@@ -301,12 +341,12 @@ const JudgePanel = () => {
 
               {myScoresForActiveTeam && myScoresForActiveTeam.length > 0 && (
                 <div style={{ marginTop: '20px', padding: '14px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <CheckCircle size={16} color="var(--success)" />
-                    <span style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '600' }}>
-                      You already scored this team: <strong>{myScoresForActiveTeam.reduce((s, x) => s + parseFloat(x.score || 0), 0).toFixed(1)} pts total</strong>
-                    </span>
-                  </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <CheckCircle size={16} color="var(--success)" />
+                      <span style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '600' }}>
+                        You already scored this team: <strong>{computeExistingTotal(myScoresForActiveTeam).toFixed(1)} pts total</strong>
+                      </span>
+                    </div>
                   <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {myScoresForActiveTeam.map((s, i) => (
                       <span key={i} style={{ fontSize: '11px', padding: '2px 8px', background: 'var(--bg-subtle)', borderRadius: '6px', color: 'var(--text-secondary)' }}>

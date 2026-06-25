@@ -24,38 +24,197 @@ const Scores = () => {
         if (!teamId) { setLoading(false); return; }
 
         const { eventService } = await import('../../api/eventService');
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes.data[0];
+        const { teamService } = await import('../../api/teamService');
+        const { criterionService, submissionService, scoreService } = await import('../../api/scoreService');
         
+        const eventsRes = await eventService.getEvents();
+        const evts = eventsRes.data || [];
+        
+        let evt = null;
+        let myTeamsList = [];
+        for (const e of evts) {
+          try {
+            const teamsData = await teamService.getTeamsByEvent(e.id);
+            const tList = teamsData?.data || teamsData || [];
+            if (tList.some(t => t.id === parseInt(teamId) || t.id === teamId)) {
+              evt = e;
+              myTeamsList = tList;
+              break;
+            }
+          } catch (err) {}
+        }
+        
+        if (!evt && evts.length > 0) evt = evts[0];
+
+        // Fallback: If user is not in any team (e.g. Admin testing), just load teams for the first event
+        if (myTeamsList.length === 0 && evt) {
+          try {
+            const teamsData = await teamService.getTeamsByEvent(evt.id);
+            myTeamsList = teamsData?.data || teamsData || [];
+          } catch (err) {}
+        }
+
         if (evt) {
           const roundsRes = await eventService.getEventRounds(evt.id);
           evt.rounds = roundsRes.data || [];
         }
         setEvent(evt);
         
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-        const round = evt?.rounds?.[roundIdx];
+        let activeRoundIdx = 0;
+        let savedRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          const now = new Date();
+          const nowStr = now.toISOString();
+          activeRoundIdx = evt.rounds.findIndex(r => {
+            if (!r.start || !r.end) return false;
+            return r.start <= nowStr && r.end >= nowStr;
+          });
+          if (activeRoundIdx === -1) {
+            activeRoundIdx = evt.rounds.length - 1;
+          }
+
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          savedRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(savedRoundIdx);
+        const round = evt?.rounds?.[savedRoundIdx] || null;
         setCurrentRound(round);
 
-        // Fetch team details (if we had a real public endpoint for it)
-        // For now, we simulate basic team data from localStorage so the UI doesn't crash
         const teamName = localStorage.getItem('p_teamName') || 'My Team';
         setTeamData({ id: teamId, name: teamName });
 
         if (!round) { setLoading(false); return; }
 
-        // Placeholder for future backend Leaderboard / Scores API
-        setMyScore(0);
-        setCriteriaAvg({});
-        setFeedbacks([]);
-        setLeaderboard([]);
-        
-        if (roundIdx > 0) {
+        try {
+          const critRes = await criterionService.getCriteria(round.id);
+          if (critRes?.data) round.criteria = critRes.data;
+        } catch (e) {}
+
+        let subId = null;
+        try {
+          const subRes = await submissionService.getSubmission(round.id, teamId);
+          if (subRes?.data?.id) subId = subRes.data.id;
+        } catch (e) {}
+
+        if (subId) {
+          const scoresRes = await scoreService.getScores(subId);
+          const scoresData = scoresRes?.data || scoresRes || [];
+
+          const avgMap = {};
+          let weightedTotal = 0;
+          
+          (round.criteria || []).forEach(crit => {
+            const cId = crit.id;
+            const scoresForCrit = scoresData.filter(s => s.criterionId === cId);
+            if (scoresForCrit.length > 0) {
+               const rawAvg = scoresForCrit.reduce((acc, curr) => acc + (curr.score || 0), 0) / scoresForCrit.length;
+               const max = parseFloat(crit.maxScore) || 1;
+               const weight = parseFloat(crit.weight) || 0;
+               const weightedScore = (rawAvg / max) * weight;
+               avgMap[cId] = parseFloat(weightedScore.toFixed(1));
+               weightedTotal += weightedScore;
+            } else {
+               avgMap[cId] = 0;
+            }
+          });
+
+          const fbList = [];
+          const fbSet = new Set();
+          scoresData.forEach(s => {
+            if (s.comment && s.comment.trim().length > 0) {
+              const key = `${s.judgeEmail}-${s.comment}`;
+              if (!fbSet.has(key)) {
+                fbSet.add(key);
+                fbList.push({ judgeId: s.judgeEmail || 'Judge', text: s.comment });
+              }
+            }
+          });
+
+          setMyScore(parseFloat(weightedTotal.toFixed(1)));
+          setCriteriaAvg(avgMap);
+          setFeedbacks(fbList);
+        } else {
+          setMyScore(0);
+          setCriteriaAvg({});
+          setFeedbacks([]);
+        }
+
+        if (savedRoundIdx > 0) {
           setIsFinals(true);
           setTrackName('Finals');
         } else {
           setTrackName('Current Track');
+        }
+        
+        if (round?.status?.toUpperCase() === 'COMPLETED' || evt?.status?.toUpperCase() === 'COMPLETED') {
+          try {
+            const { standingsService } = await import('../../api/scoreService');
+            const standingsRes = await standingsService.getStandings(round.id);
+            const dbStandings = standingsRes?.data || standingsRes || [];
+            const dbScoreMap = {};
+            dbStandings.forEach(s => { if (s.teamId && s.score != null) dbScoreMap[s.teamId] = parseFloat(s.score); });
+
+            const trackDrawStr = localStorage.getItem(`trackDraw_${evt.id}`);
+            let finalLeaderboard = [];
+            
+            if (trackDrawStr) {
+              const drawn = JSON.parse(trackDrawStr);
+              const isFinalsRound = savedRoundIdx === (evt.rounds.length - 1);
+              
+              const standings = drawn.map(track => {
+                return (track.teams || []).map(teamItem => {
+                  const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
+                  const teamObj = myTeamsList.find(t => t.name === teamNameStr);
+                  const tId = teamObj?.id || (typeof teamItem === 'object' ? teamItem.id : undefined);
+                  const score = (tId && dbScoreMap[tId] != null) ? dbScoreMap[tId] : null;
+                  return { team: teamNameStr, teamId: tId, score, fromTrack: track.name };
+                });
+              });
+
+              if (isFinalsRound) {
+                finalLeaderboard = standings.flat();
+                finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+                finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+              } else {
+                const myTeamName = localStorage.getItem('myTeamName');
+                const myTrackIdx = drawn.findIndex(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
+                
+                if (myTrackIdx !== -1) {
+                  finalLeaderboard = standings[myTrackIdx];
+                  finalLeaderboard.sort((a, b) => {
+                    if (a.score === null && b.score === null) return 0;
+                    if (a.score === null) return 1;
+                    if (b.score === null) return -1;
+                    return b.score - a.score;
+                  });
+                  finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+                }
+              }
+            }
+            
+            // Fallback: If trackDraw doesn't exist (e.g. Incognito browser) or myTrackIdx was not found
+            if (finalLeaderboard.length === 0 && myTeamsList.length > 0) {
+              finalLeaderboard = myTeamsList.map(t => {
+                const score = dbScoreMap[t.id] != null ? dbScoreMap[t.id] : null;
+                return { team: t.name, teamId: t.id, score, fromTrack: 'Global' };
+              });
+              finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+              finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+            }
+
+            setLeaderboard(finalLeaderboard);
+          } catch (err) {
+            console.error("Failed to load leaderboard:", err);
+            setLeaderboard([]);
+          }
+        } else {
+          setLeaderboard([]);
         }
 
       } catch (e) {

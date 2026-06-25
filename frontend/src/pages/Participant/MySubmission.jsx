@@ -33,19 +33,46 @@ const MySubmission = () => {
     const load = async () => {
       try {
         const tId = localStorage.getItem('p_teamId') || localStorage.getItem('userId');
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-
         // Load event from real API
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes?.data?.[0] || null;
+        const eventIdStr = localStorage.getItem('p_eventId') || '1';
+        const eventRes = await eventService.getEventDetails(eventIdStr);
+        const evt = eventRes?.data || null;
         setEvent(evt);
 
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+
+        const round = evt?.rounds?.[activeRoundIdx] || null;
+        
+        if (round) {
+          try {
+            const critRes = await criterionService.getCriteria(round.id);
+            if (critRes?.data) round.criteria = critRes.data;
+          } catch (e) {}
+        }
         setCurrentRound(round);
+
+        if (tId) {
+          try {
+            const teamRes = await teamService.getTeam(tId);
+            setTeamData(teamRes?.data || null);
+          } catch (e) {}
+        }
 
         // Load existing submission
         if (tId && round?.id) {
+          let hasCurrentSub = false;
+          let existingSubHasData = false;
           try {
             const subRes = await submissionService.getSubmission(round.id, tId);
             if (subRes?.data) {
@@ -62,9 +89,37 @@ const MySubmission = () => {
                 contactEmail: '',
               });
               setIsSubmitted(true);
+              hasCurrentSub = true;
+              if (sub.submissionName && sub.submissionName.trim().length > 0) {
+                existingSubHasData = true;
+              }
             }
           } catch {
-            // No submission yet
+            // No submission yet for current round
+          }
+          
+          // If no submission in current round, or if it is missing the project name, try fetching from the previous round to pre-fill
+          if ((!hasCurrentSub || !existingSubHasData) && activeRoundIdx > 0) {
+            try {
+              const prevRoundId = evt.rounds[activeRoundIdx - 1].id;
+              const prevSubRes = await submissionService.getSubmission(prevRoundId, tId);
+              if (prevSubRes?.data) {
+                const pSub = prevSubRes.data;
+                setFormData({
+                  projectName: pSub.submissionName || '',
+                  description: pSub.description || '',
+                  techStack: pSub.techStackName || '',
+                  repoUrl: pSub.githubUrl || '',
+                  demoUrl: pSub.demoUrl || '',
+                  slidesUrl: pSub.slideUrl || '',
+                  videoUrl: '',
+                  contactEmail: '',
+                });
+                // We do NOT set existingSubmission or isSubmitted because it's a new round.
+              }
+            } catch {
+              // Ignore if previous round has no submission either
+            }
           }
         }
       } catch (e) {
@@ -77,6 +132,8 @@ const MySubmission = () => {
   }, []);
 
   const validate = () => {
+    const tId = localStorage.getItem('p_teamId');
+    if (!tId || tId === 'undefined') return 'You must join or create a team before submitting.';
     if (!formData.projectName.trim()) return 'Project name is required.';
     if (!formData.repoUrl.trim()) return 'GitHub repository URL is required.';
     if (formData.repoUrl.toLowerCase().includes('drive.google.com')) return 'Google Drive links are not accepted. Please use GitHub.';
@@ -126,7 +183,7 @@ const MySubmission = () => {
     setError('');
   };
 
-  const isLocked = currentRound?.status === 'locked' || currentRound?.status === 'completed';
+  const isLocked = currentRound?.status !== 'ACTIVE';
 
   if (loading) {
     return (
@@ -240,9 +297,11 @@ const MySubmission = () => {
           ) : (
             /* ── Form State ── */
             <div className="glass-panel" style={{ padding: '32px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
-                {isLocked ? '🔒 Round Locked — View Only' : 'Submit Your Project'}
-              </h2>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
+                  {isLocked 
+                    ? (currentRound?.status === 'CREATED' ? '🔒 Submission Closed (Round Not Started)' : '🔒 Round Locked – View Only') 
+                    : 'Submit Your Project'}
+                </h2>
 
               {error && (
                 <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', color: '#ef4444', fontSize: '13px' }}>
@@ -369,15 +428,22 @@ const MySubmission = () => {
           </div>
 
           {/* Deadline */}
-          <div className="glass-panel" style={{ padding: '20px', background: isLocked ? 'rgba(239,68,68,0.05)' : 'rgba(59,130,246,0.05)', border: `1px solid ${isLocked ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)'}` }}>
+          <div style={{ padding: '16px', background: isLocked ? 'rgba(239,68,68,0.05)' : 'rgba(59,130,246,0.05)', border: '1px solid', borderColor: isLocked ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)', borderRadius: '12px', marginTop: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               {isLocked ? <Lock size={16} color="var(--danger)" /> : <Clock size={16} color="var(--primary)" />}
               <span style={{ fontSize: '13px', fontWeight: '600', color: isLocked ? 'var(--danger)' : 'var(--primary)' }}>
-                {isLocked ? 'Submission Closed' : 'Deadline'}
+                {isLocked 
+                  ? (currentRound?.status === 'CREATED' ? 'Round Not Started' : 'Submission Closed') 
+                  : 'Deadline'}
               </span>
             </div>
             <div style={{ fontSize: '16px', fontWeight: '700' }}>
-              {currentRound.end ? (currentRound.end.includes('T') ? new Date(currentRound.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : currentRound.end) : 'TBD'}
+              {isLocked 
+                ? (currentRound?.status === 'SCORING' ? 'Judges are currently scoring this round.' : 
+                   currentRound?.status === 'UNDER_REVIEW' ? 'This round is currently under review.' : 
+                   currentRound?.status === 'COMPLETED' ? 'This round has concluded.' : 
+                   currentRound?.status === 'CREATED' ? 'This round has not started yet.' : 'Submissions are locked.')
+                : (currentRound.end ? (currentRound.end.includes('T') ? new Date(currentRound.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : currentRound.end) : 'TBD')}
             </div>
             {!isLocked && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>You can edit your submission until the round is locked.</div>}
           </div>
