@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Lock, Calendar, Target } from 'lucide-react';
+import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target } from 'lucide-react';
 import './EventDashboard.css';
 
 const EventDashboard = () => {
@@ -93,12 +93,6 @@ const EventDashboard = () => {
     }
   };
 
-  const handleRoundDateChange = (roundId, field, value) => {
-    const updatedRounds = event.rounds.map(r => 
-      r.id === roundId ? { ...r, [field]: value } : r
-    );
-    setEvent({ ...event, rounds: updatedRounds });
-  };
 
   if (!event) {
     return (
@@ -164,45 +158,7 @@ const EventDashboard = () => {
         </div>
       </div>
 
-      {/* Event Management Controls */}
-      <div className="glass-panel" style={{ marginTop: '24px', marginBottom: '24px', padding: '24px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Lock size={20} color="var(--primary)" /> Event Management Controls
-        </h2>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          {/* Round Time Management */}
-          <div>
-            <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Round Time Management</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', maxHeight: '200px', overflowY: 'auto' }}>
-              {event.rounds && event.rounds.length > 0 ? event.rounds.map((round) => (
-                <div key={round.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
-                  <div style={{ fontWeight: '500', fontSize: '13px' }}>{round.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input 
-                      type="time" 
-                      value={round.start || ''} 
-                      onChange={e => handleRoundDateChange(round.id, 'start', e.target.value)}
-                      title="Start Time"
-                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
-                    />
-                    <span style={{ color: 'var(--text-secondary)' }}>→</span>
-                    <input 
-                      type="time" 
-                      value={round.end || ''} 
-                      onChange={e => handleRoundDateChange(round.id, 'end', e.target.value)}
-                      title="End Time"
-                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
-                    />
-                  </div>
-                </div>
-              )) : (
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No rounds configured</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       <div className="dashboard-bottom-grid">
         {/* Teams Panel */}
@@ -315,10 +271,10 @@ const EventDashboard = () => {
                             <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
                           </div>
                           <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${Math.round(c.weight)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                            <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
                           </div>
                         </div>
-                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round(c.weight)}%</span>
+                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round((c.weight || 0) * 100)}%</span>
                       </div>
                     ))}
                   </div>
