@@ -4,6 +4,7 @@ import com.fpt.seal.hms.common.enums.AccountStatus;
 import com.fpt.seal.hms.common.enums.Role;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
+import com.fpt.seal.hms.lecturer.LecturerRepository;
 import com.fpt.seal.hms.student.StudentRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +28,8 @@ class AccountServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private StudentRepository studentRepository;
+    @Mock
+    private LecturerRepository lecturerRepository;
     @InjectMocks
     private AccountService accountService;
 
@@ -47,7 +50,7 @@ class AccountServiceTest {
         when(passwordEncoder.encode("raw")).thenReturn("ENC");
         when(accountRepository.save(any(Account.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Account result = accountService.register("new@fpt.edu.vn", "raw", null, "SE161234");
+        Account result = accountService.register("new@fpt.edu.vn", "raw", null, "SE161234", null, null, null);
 
         assertThat(result.getStatus()).isEqualTo(AccountStatus.PENDING);
         assertThat(result.getRole()).isEqualTo(Role.STUDENT); // null role defaults to STUDENT
@@ -60,7 +63,7 @@ class AccountServiceTest {
     void register_throws_whenStudentCodeMissing() {
         when(accountRepository.existsByEmail("nocode@fpt.edu.vn")).thenReturn(false);
 
-        assertThatThrownBy(() -> accountService.register("nocode@fpt.edu.vn", "raw", Role.STUDENT, null))
+        assertThatThrownBy(() -> accountService.register("nocode@fpt.edu.vn", "raw", Role.STUDENT, null, null, null, null))
                 .isInstanceOf(BusinessException.class);
         verify(accountRepository, never()).save(any());
     }
@@ -70,7 +73,7 @@ class AccountServiceTest {
         when(accountRepository.existsByEmail("dupcode@fpt.edu.vn")).thenReturn(false);
         when(studentRepository.existsByStudentCode("SE161234")).thenReturn(true);
 
-        assertThatThrownBy(() -> accountService.register("dupcode@fpt.edu.vn", "raw", Role.STUDENT, "SE161234"))
+        assertThatThrownBy(() -> accountService.register("dupcode@fpt.edu.vn", "raw", Role.STUDENT, "SE161234", null, null, null))
                 .isInstanceOf(BusinessException.class);
         verify(accountRepository, never()).save(any());
     }
@@ -79,7 +82,7 @@ class AccountServiceTest {
     void register_throws_whenEmailAlreadyExists() {
         when(accountRepository.existsByEmail("dup@fpt.edu.vn")).thenReturn(true);
 
-        assertThatThrownBy(() -> accountService.register("dup@fpt.edu.vn", "raw", Role.STUDENT, "SE161234"))
+        assertThatThrownBy(() -> accountService.register("dup@fpt.edu.vn", "raw", Role.STUDENT, "SE161234", null, null, null))
                 .isInstanceOf(BusinessException.class);
         verify(accountRepository, never()).save(any());
     }

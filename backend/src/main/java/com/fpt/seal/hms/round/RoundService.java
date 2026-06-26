@@ -9,6 +9,10 @@ import com.fpt.seal.hms.round.dto.RoundRequest;
 import com.fpt.seal.hms.round.dto.RoundResponse;
 import com.fpt.seal.hms.round.dto.RoundStatusUpdateRequest;
 import com.fpt.seal.hms.round.entity.Round;
+import com.fpt.seal.hms.track.TrackRepository;
+import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.topic.TopicRepository;
+import com.fpt.seal.hms.topic.entity.Topic;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +27,8 @@ public class RoundService {
 
     private final RoundRepository roundRepository;
     private final EventRepository eventRepository;
+    private final TrackRepository trackRepository;
+    private final TopicRepository topicRepository;
 
     @Transactional(readOnly = true)
     public List<RoundResponse> getRoundsByEventId(Long eventId) {
@@ -133,17 +139,28 @@ public class RoundService {
         List<Round> rounds = roundRepository.findByEventId(event.getId());
         rounds.sort(Comparator.comparing(Round::getRoundSeq));
 
+        int trackCount = 1;
+        List<Track> tracks = trackRepository.findByEventId(event.getId());
+        if (!tracks.isEmpty()) {
+            Track firstTrack = tracks.get(0);
+            List<Topic> topics = topicRepository.findByTrackId(firstTrack.getId());
+            if (!topics.isEmpty()) {
+                trackCount = topics.size();
+            }
+        }
+
         int availablePool = event.getMaxTeams() != null ? event.getMaxTeams() : 0;
 
         for (int i = 0; i < rounds.size() - 1; i++) {
             Round round = rounds.get(i);
-            int promotion = round.getPromotionTopN() != null ? round.getPromotionTopN() : 0;
+            int promotionPerTrack = round.getPromotionTopN() != null ? round.getPromotionTopN() : 0;
+            int totalPromotedThisRound = promotionPerTrack * trackCount;
             
-            if (promotion >= availablePool) {
-                throw new BusinessException(String.format("Round %d promotes %d teams but the available pool is only %d",
-                        round.getRoundSeq(), promotion, availablePool));
+            if (totalPromotedThisRound >= availablePool) {
+                throw new BusinessException(String.format("Round %d promotes %d teams total (%d per track) but the available pool is only %d",
+                        round.getRoundSeq(), totalPromotedThisRound, promotionPerTrack, availablePool));
             }
-            availablePool = promotion;
+            availablePool = totalPromotedThisRound;
         }
     }
 

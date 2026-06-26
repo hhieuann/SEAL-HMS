@@ -12,9 +12,9 @@ import java.util.List;
 public interface EventRepository extends JpaRepository<Event, Long> {
 
     @Query(value = "SELECT DISTINCT e.* FROM event e " +
-           "JOIN round r ON e.event_id = r.event_id " +
-           "JOIN judge j ON r.round_id = j.round_id " +
-           "JOIN lecturer l ON j.lecturer_id = l.lecturer_id " +
+           "JOIN track t ON e.event_id = t.event_id " +
+           "JOIN track_assignment ta ON t.track_id = ta.track_id " +
+           "JOIN lecturer l ON ta.lecturer_id = l.lecturer_id " +
            "JOIN account a ON l.account_id = a.account_id " +
            "WHERE a.email = :email", nativeQuery = true)
     List<Event> findEventsAssignedToJudgeByEmail(@Param("email") String email);

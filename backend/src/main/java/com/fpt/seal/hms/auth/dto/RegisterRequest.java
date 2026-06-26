@@ -10,5 +10,8 @@ public record RegisterRequest(
         @NotBlank @Size(min = 6, message = "password must be at least 6 chars") String password,
         Role role,
         // Required when registering as STUDENT (validated in AccountService); ignored otherwise.
-        @Size(max = 20, message = "student code must be at most 20 chars") String studentCode) {
+        @Size(max = 20, message = "student code must be at most 20 chars") String studentCode,
+        String firstName,
+        String lastName,
+        String campus) {
 }
