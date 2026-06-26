@@ -1,23 +1,291 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info } from 'lucide-react';
+import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info, Activity } from 'lucide-react';
 
-// Simulate: has the track draw been completed by Admin?
-const DRAW_DONE = localStorage.getItem('trackDraw') !== null;
-const assignedTrack = DRAW_DONE
-  ? { track: 'Track B', color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)', subTopic: 'Medical Knowledge RAG', teamsInTrack: 8 }
-  : null;
+// Custom hook for live countdown
+const useCountdown = (targetDateStr) => {
+  const [timeLeft, setTimeLeft] = useState('');
+
+  useEffect(() => {
+    if (!targetDateStr) {
+      setTimeLeft('');
+      return;
+    }
+
+    const target = new Date(targetDateStr).getTime();
+    
+    const updateTimer = () => {
+      const now = new Date().getTime();
+      const diff = target - now;
+
+      if (diff <= 0) {
+        setTimeLeft('Expired');
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      const parts = [];
+      if (days > 0) parts.push(`${days}d`);
+      if (hours > 0 || days > 0) parts.push(`${hours}h`);
+      if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+      parts.push(`${seconds}s`);
+      
+      setTimeLeft(parts.join(' '));
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [targetDateStr]);
+
+  return timeLeft;
+};
+
+const UpcomingEventCard = ({ evt, handleRegister, isRegisteringThisEvent, hasJoinedAnyEvent, isJoinedThisEvent, hasTeam, registerError }) => {
+  const navigate = useNavigate();
+  // We assume BE returns an ISO datetime for the deadline. If it's just a date, we append T23:59:59 to make the countdown accurate to end of day.
+  let regCloseStr = evt.registrationEndDate;
+  if (regCloseStr && regCloseStr.length === 10) regCloseStr += 'T23:59:59';
+  const regCloseTime = useCountdown(regCloseStr);
+  
+  const max = evt.maxTeams || '∞';
+  const current = evt.currentTeams || 0;
+  const progressPerc = max === '∞' ? 0 : Math.min(100, (current / max) * 100);
+
+  return (
+    <div className="glass-panel" style={{ padding: '32px', border: '1px solid rgba(59,130,246,0.3)', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: 'var(--primary)' }}></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'rgba(59,130,246,0.15)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Clock size={14} /> Upcoming / Registration Open
+            </span>
+            {regCloseTime && regCloseTime !== 'Expired' && (
+              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="pulse-dot" style={{ background: 'var(--warning)', width: '8px', height: '8px' }}></span>
+                Closes in: {regCloseTime}
+              </span>
+            )}
+            {regCloseTime === 'Expired' && (
+              <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--danger)' }}>Registration Closed</span>
+            )}
+          </div>
+          
+          <h2 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '12px' }}>{evt.name || "Untitled Hackathon"}</h2>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', maxWidth: '700px', lineHeight: '1.6' }}>
+            {evt.description || "Register now to secure your spot and start forming your team before the event begins!"}
+          </p>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Calendar size={18} color="var(--primary)" /> 
+              <span style={{ fontWeight: '500' }}>Registration:</span> {evt.registrationStartDate || 'TBD'} – {evt.registrationEndDate || 'TBD'}
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Info size={18} color="var(--accent-2)" /> 
+              <span style={{ fontWeight: '500' }}>Event starts:</span> {evt.startDate || 'TBD'}
+            </span>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', maxWidth: '400px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13px', fontWeight: '600' }}>
+              <span>Registered Teams</span>
+              <span>{current} / {max}</span>
+            </div>
+            <div style={{ height: '8px', background: 'var(--bg-active)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: `${progressPerc}%`, background: progressPerc >= 100 ? 'var(--danger)' : 'var(--primary)', borderRadius: '4px', transition: 'width 0.5s ease' }}></div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '180px' }}>
+          {evt.registrationOpen !== false && (!hasJoinedAnyEvent) && (
+            <button 
+              onClick={() => handleRegister(evt.id)} 
+              disabled={isRegisteringThisEvent || progressPerc >= 100 || regCloseTime === 'Expired'} 
+              className="btn btn-primary"
+              style={{ padding: '14px 24px', fontSize: '15px', justifyContent: 'center' }}
+            >
+              {isRegisteringThisEvent ? 'Registering...' : (progressPerc >= 100 ? 'Event Full' : 'Register to Join')}
+            </button>
+          )}
+          {evt.registrationOpen === false && (
+            <button className="btn btn-secondary" disabled style={{ opacity: 0.5, padding: '14px 24px', justifyContent: 'center' }}>Registration Closed</button>
+          )}
+          
+          {registerError && registerError.eventId === evt.id && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '8px 10px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', fontSize: '12px', color: '#ef4444', lineHeight: '1.5', marginTop: '8px' }}>
+              <span style={{ flexShrink: 0, marginTop: '1px' }}>⚠️</span> {registerError.message}
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {isJoinedThisEvent && (
+        <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '24px' }}>
+          {!hasTeam ? (
+            <div style={{ padding: '20px 24px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Users size={22} color="var(--primary)" />
+              </div>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>
+                  ✅ Registered — Team formation required
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  You need to create a new team or enter an invite code to join a team (3-5 members) before the event starts.
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
+                <button onClick={() => navigate('/participant/team-formation')} className="btn btn-primary">
+                  Join Team <ArrowRight size={16} style={{ marginLeft: '6px' }} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '20px 24px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <CheckCircle size={22} color="var(--success)" />
+              </div>
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px', color: 'var(--success)' }}>
+                  Ready to compete
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                  Your team is fully registered. Waiting for the event to start.
+                </div>
+              </div>
+              <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
+                <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black' }}>
+                  Enter Workspace <ArrowRight size={16} style={{ marginLeft: '6px' }} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
+  const navigate = useNavigate();
+  
+  const now = new Date();
+  let currentRound = null;
+  
+  if (evt.rounds && evt.rounds.length > 0) {
+    currentRound = evt.rounds.find(r => r.status && r.status.toUpperCase() === 'ACTIVE');
+    
+    if (!currentRound) {
+      currentRound = evt.rounds.find(r => {
+        const start = r.startTime ? new Date(r.startTime) : new Date(0);
+        const end = r.endTime ? new Date(r.endTime) : new Date(8640000000000000);
+        return now >= start && now <= end;
+      });
+    }
+    if (!currentRound) {
+       currentRound = evt.rounds.find(r => r.startTime && new Date(r.startTime) > now);
+    }
+  }
+
+  const isActive = currentRound && (
+    (currentRound.status && currentRound.status.toUpperCase() === 'ACTIVE') ||
+    (now >= new Date(currentRound.startTime || 0) && now <= new Date(currentRound.endTime || 8640000000000000))
+  );
+
+  const targetTime = currentRound ? (isActive ? currentRound.endTime : currentRound.startTime) : evt.endDate;
+  const countdownLabel = currentRound ? (isActive ? "Ends in:" : "Starts in:") : "Ends in:";
+  const roundTimeLeft = useCountdown(targetTime);
+
+  return (
+    <div className="glass-panel" style={{ padding: '32px', border: '1px solid rgba(16,185,129,0.4)', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: 'var(--success)' }}></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+            <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="pulse-dot" style={{ background: 'var(--success)', width: '8px', height: '8px' }}></span>
+              Event is Live
+            </span>
+          </div>
+          
+          <h2 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '16px' }}>{evt.name || "Untitled Hackathon"}</h2>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.05)', padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '24px', maxWidth: '600px' }}>
+            <Activity size={24} color="var(--success)" />
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Currently Running
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', color: 'var(--text-primary)' }}>
+                {currentRound ? currentRound.name : 'Main Competition Phase'}
+                {roundTimeLeft && roundTimeLeft !== 'Expired' && (
+                  <span style={{ fontSize: '13px', color: 'var(--success)', background: 'rgba(16,185,129,0.15)', padding: '4px 8px', borderRadius: '6px' }}>
+                    {countdownLabel} {roundTimeLeft}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Calendar size={18} color="var(--success)" /> <span style={{ fontWeight: '500' }}>Event Window:</span> {evt.startDate} – {evt.endDate || 'TBD'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Users size={18} color="var(--primary)" /> <span style={{ fontWeight: '500' }}>Active Teams:</span> {evt.currentTeams || 0} / {evt.maxTeams || '∞'}</span>
+          </div>
+        </div>
+
+        <div style={{ marginLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '180px', alignItems: 'flex-end' }}>
+          {isJoinedThisEvent ? (
+            <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black', padding: '14px 24px', fontSize: '15px' }}>
+              Enter Workspace <ArrowRight size={18} style={{ marginLeft: '8px' }} />
+            </button>
+          ) : (
+             <div style={{ padding: '12px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', fontSize: '13px', fontWeight: '600', textAlign: 'center' }}>
+               Registration Closed<br/><span style={{ fontSize: '11px', fontWeight: '400', color: 'var(--text-secondary)' }}>Event is currently ongoing</span>
+             </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CompletedEventCard = ({ evt }) => {
+  const navigate = useNavigate();
+  return (
+    <div className="glass-panel" style={{ padding: '32px', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ marginBottom: '8px' }}>
+            <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>Ended</span>
+          </div>
+          <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>{evt.name}</h2>
+          <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Event ended on {evt.endDate || 'TBD'}</div>
+        </div>
+        <button type="button" onClick={() => navigate(`/participant/archive/${evt.id}`)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Trophy size={18} color="#ffd700" /> View Results
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const EventSelection = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
-  const [totalTeams, setTotalTeams] = useState(0);
   const [registeredEventId, setRegisteredEventId] = useState(null);
   const [registeringEventId, setRegisteringEventId] = useState(null);
   const [hasTeam, setHasTeam] = useState(localStorage.getItem('p_hasTeam') === 'true');
+  const [registerError, setRegisterError] = useState(null);
 
   useEffect(() => {
-    // Clear stale join flags if there's no real team membership
     if (localStorage.getItem('p_hasJoinedEvent') === 'true' && localStorage.getItem('p_hasTeam') !== 'true') {
       localStorage.removeItem('p_hasJoinedEvent');
       localStorage.removeItem('p_eventId');
@@ -32,9 +300,6 @@ const EventSelection = () => {
         setEvents(mappedEvents);
       });
     });
-    import('../../api/teamService.js').then(({ teamService }) => {
-      teamService.getTeamsByEvent(1).then(res => setTotalTeams(res.data?.length || 0)).catch(() => setTotalTeams(0));
-    });
     
     const handleStateUpdate = () => {
       setHasTeam(localStorage.getItem('p_hasTeam') === 'true');
@@ -43,267 +308,66 @@ const EventSelection = () => {
     return () => window.removeEventListener('participant_state_updated', handleStateUpdate);
   }, []);
 
-  const handleRegister = (eventId) => {
-    setRegisteringEventId(eventId);
-    localStorage.setItem('p_hasJoinedEvent', 'true');
-    localStorage.setItem('p_eventId', eventId.toString());
-    setTimeout(() => {
-      setRegisteredEventId(eventId);
+  const handleRegister = async (evtId) => {
+    setRegisteringEventId(evtId);
+    setRegisterError(null);
+    try {
+      await new Promise(r => setTimeout(r, 800)); // simulate network
+      localStorage.setItem('p_hasJoinedEvent', 'true');
+      localStorage.setItem('p_eventId', evtId.toString());
+      setRegisteredEventId(evtId);
+    } catch (err) {
+      const status = err?.response?.status;
+      if (status === 409) {
+        setRegisterError({ eventId: evtId, message: 'This event has reached its maximum number of teams. Registration is closed.' });
+      } else if (status === 400) {
+        const msg = err?.response?.data?.message || '';
+        if (msg.toLowerCase().includes('not opened')) {
+          setRegisterError({ eventId: evtId, message: 'Registration for this event has not opened yet.' });
+        } else if (msg.toLowerCase().includes('closed')) {
+          setRegisterError({ eventId: evtId, message: 'Registration for this event has closed.' });
+        } else {
+          setRegisterError({ eventId: evtId, message: msg || 'Unable to register. Please try again.' });
+        }
+      } else {
+        setRegisterError({ eventId: evtId, message: 'Something went wrong. Please try again.' });
+      }
+    } finally {
       setRegisteringEventId(null);
-    }, 1000);
+    }
   };
 
   return (
     <div className="animate-fade-in" style={{ padding: '0 20px' }}>
       <div className="page-header" style={{ marginBottom: '40px' }}>
         <div>
-          <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Hackathons</h1>
-          <p className="subtitle">Discover and register for SEAL hackathons.</p>
+          <h1 style={{ fontSize: '36px', marginBottom: '8px' }}>Explore Hackathons</h1>
+          <p className="subtitle">Discover, register, and track ongoing SEAL hackathons.</p>
         </div>
       </div>
 
       <div style={{ display: 'grid', gap: '32px' }}>
-
         {events.map((evt) => {
           const isLive = evt.status?.toLowerCase() === 'live' || evt.status?.toLowerCase() === 'ongoing';
           const isUpcoming = evt.status?.toLowerCase() === 'upcoming' || evt.status?.toLowerCase() === 'planned';
           const isCompleted = evt.status?.toLowerCase() === 'completed';
 
           const joinedEventIdStr = localStorage.getItem('p_eventId');
-          // hasTrueTeam = backend confirmed this user is in a real team
           const hasTrueTeam = localStorage.getItem('p_hasTeam') === 'true' || hasTeam;
-          // isJoinedThisEvent = user just clicked Register on this event,
-          // OR they have a backend-confirmed team in this event
-          const isJoinedThisEvent = registeredEventId === evt.id ||
-            (hasTrueTeam && joinedEventIdStr === evt.id.toString());
-          const isRegisteringThisEvent = registeringEventId === evt.id;
-          // hasJoinedAnyEvent = user is committed to an event (blocks registering to others)
+          const isJoinedThisEvent = registeredEventId === evt.id || (hasTrueTeam && joinedEventIdStr === evt.id.toString());
           const hasJoinedAnyEvent = registeredEventId !== null || (hasTrueTeam && !!joinedEventIdStr);
 
           if (isLive) {
-            return (
-              <div key={evt.id} className="glass-panel" style={{ padding: '32px', border: '1px solid rgba(59,130,246,0.2)' }}>
-                {/* Event header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'rgba(16,185,129,0.15)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.3)' }}>
-                        🟢 Live Now
-                      </span>
-                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Hackathon Event</span>
-                    </div>
-                    <h2 style={{ fontSize: '26px', fontWeight: '800', marginBottom: '8px', lineHeight: '1.3' }}>
-                      {evt.name || "Untitled Hackathon"}
-                    </h2>
-                    <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', maxWidth: '600px' }}>
-                      {evt.description || "No description provided."}
-                    </p>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={15} /> {evt.startDate} – {evt.endDate}</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={15} /> Online / Offline</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Users size={15} /> {totalTeams} Teams Registered</span>
-                    </div>
-                  </div>
-                  {evt.prize && (
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Prize</div>
-                      <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--warning)' }}>{evt.prize}</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action Area */}
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px' }}>
-                  {isJoinedThisEvent ? (
-                    !hasTeam ? (
-                      <div style={{ padding: '20px 24px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Users size={22} color="var(--primary)" />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>
-                            ✅ Registered — Team formation required
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                            You need to create a new team or enter an invite code to join a team (3-5 members) before the event starts.
-                          </div>
-                        </div>
-                        <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-                          <button onClick={() => navigate('/participant/team-formation')} className="btn btn-primary">
-                            Join Team <ArrowRight size={16} style={{ marginLeft: '6px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '20px 24px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <CheckCircle size={22} color="var(--success)" />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px', color: 'var(--success)' }}>
-                            Ready to compete
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                            Your team is fully registered. Enter the Workspace to check track draw results and work on your project.
-                          </div>
-                        </div>
-                        <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-                          <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black' }}>
-                            Enter Workspace <ArrowRight size={16} style={{ marginLeft: '6px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  ) : hasJoinedAnyEvent ? (
-                    <div style={{ padding: '16px', background: 'var(--bg-active)', border: '1px dashed var(--border-color)', borderRadius: '12px', color: 'var(--text-secondary)', fontSize: '14px', textAlign: 'center' }}>
-                      Locked — You are already participating in another event.
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1, padding: '20px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: '12px' }}>
-                        <div style={{ fontWeight: '700', marginBottom: '12px', fontSize: '15px' }}>Important Track Info</div>
-                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '10px' }}>
-                          <Shuffle size={18} color="var(--warning)" style={{ flexShrink: 0, marginTop: '2px' }} />
-                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.7', margin: 0 }}>
-                            The specific competition track and topic will be <strong style={{ color: 'var(--text-primary)' }}>randomly drawn by the organizers</strong> on <strong style={{ color: 'var(--warning)' }}>Day 1 — {evt.startDate} at 14:00</strong>.
-                          </p>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', minWidth: '180px' }}>
-                        <button 
-                          onClick={() => handleRegister(evt.id)} 
-                          disabled={isRegisteringThisEvent || evt.registrationOpen === false} 
-                          className={`btn ${evt.registrationOpen === false ? 'btn-secondary' : 'btn-primary'}`} 
-                          style={{ justifyContent: 'center', padding: '14px 24px', fontSize: '15px', opacity: evt.registrationOpen === false ? 0.6 : 1 }}
-                        >
-                          {evt.registrationOpen === false ? 'Registration Closed' : isRegisteringThisEvent ? 'Registering...' : 'Register to Join'}
-                        </button>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center', lineHeight: '1.5' }}>
-                          {evt.registrationOpen === false 
-                            ? 'Event is no longer accepting new teams.' 
-                            : evt.registrationDeadline 
-                              ? `Deadline: ${evt.registrationDeadline}` 
-                              : 'Register to proceed to team formation'
-                          }
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
+             return <LiveEventCard key={evt.id} evt={evt} isJoinedThisEvent={isJoinedThisEvent} />;
           }
-
           if (isUpcoming) {
-            return (
-              <div key={evt.id} className="glass-panel" style={{ padding: '32px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'rgba(59,130,246,0.1)', color: 'var(--primary)', border: '1px solid rgba(59,130,246,0.2)' }}>
-                        🔵 Upcoming
-                      </span>
-                    </div>
-                    <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '8px' }}>{evt.name}</h2>
-                    <div style={{ display: 'flex', gap: '20px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Calendar size={15} /> {evt.startDate}</span>
-                    </div>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px' }}>{evt.description}</p>
-                  </div>
-                  {evt.registrationOpen && (!hasJoinedAnyEvent) && (
-                    <button 
-                      onClick={() => handleRegister(evt.id)} 
-                      disabled={isRegisteringThisEvent} 
-                      className="btn btn-primary"
-                    >
-                      {isRegisteringThisEvent ? 'Registering...' : 'Register to Join'}
-                    </button>
-                  )}
-                  {evt.registrationOpen === false && (
-                    <button className="btn btn-secondary" disabled style={{ opacity: 0.5 }}>Registration Closed</button>
-                  )}
-                </div>
-
-                {/* Action Area for Upcoming */}
-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '24px', marginTop: '24px' }}>
-                  {isJoinedThisEvent ? (
-                    !hasTeam ? (
-                      <div style={{ padding: '20px 24px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <Users size={22} color="var(--primary)" />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>
-                            ✅ Registered — Team formation required
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                            You need to create a new team or enter an invite code to join a team (3-5 members) before the event starts.
-                          </div>
-                        </div>
-                        <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-                          <button onClick={() => navigate('/participant/team-formation')} className="btn btn-primary">
-                            Join Team <ArrowRight size={16} style={{ marginLeft: '6px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ padding: '20px 24px', background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '12px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <CheckCircle size={22} color="var(--success)" />
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px', color: 'var(--success)' }}>
-                            Ready to compete
-                          </div>
-                          <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-                            Your team is fully registered. Enter the Workspace to check track draw results and work on your project.
-                          </div>
-                        </div>
-                        <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-                          <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black' }}>
-                            Enter Workspace <ArrowRight size={16} style={{ marginLeft: '6px' }} />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  ) : hasJoinedAnyEvent ? (
-                    <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                      Locked — You are already participating in another event.
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-                      Register now to secure your spot and start forming your team before the event begins!
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            );
+             return <UpcomingEventCard key={evt.id} evt={evt} handleRegister={handleRegister} isRegisteringThisEvent={registeringEventId === evt.id} hasJoinedAnyEvent={hasJoinedAnyEvent} isJoinedThisEvent={isJoinedThisEvent} hasTeam={hasTeam} registerError={registerError} />;
           }
-
           if (isCompleted) {
-            return (
-              <div key={evt.id} className="glass-panel" style={{ padding: '32px', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.35)', pointerEvents: 'none' }} />
-                <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ marginBottom: '8px' }}>
-                      <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '700', background: 'var(--bg-hover)', color: 'var(--text-secondary)' }}>Ended</span>
-                    </div>
-                    <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>{evt.name}</h2>
-                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{evt.endDate}</div>
-                  </div>
-                  <button type="button" onClick={() => navigate(`/participant/archive/${evt.id}`)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Trophy size={18} color="#ffd700" /> View Results
-                  </button>
-                </div>
-              </div>
-            );
+             return <CompletedEventCard key={evt.id} evt={evt} />;
           }
-
           return null;
         })}
-
       </div>
     </div>
   );
