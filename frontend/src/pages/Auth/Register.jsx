@@ -25,19 +25,28 @@ const Register = () => {
     //   return;
     // }
 
-    const email = e.target[0].value; // First Name
-    // Trong thực tế sẽ gom cả họ tên, email, pass, file... để gửi lên server bằng FormData
+    const firstName = document.getElementById('firstName').value;
+    const lastName = document.getElementById('lastName').value;
     const fptEmail = document.getElementById('fptEmail').value;
     const password = document.getElementById('regPassword').value;
+    const studentId = document.getElementById('studentId').value;
+    const campus = document.getElementById('campus').value;
 
     setIsSubmitting(true);
     try {
-      // Gọi lên Spring Boot Backend API
-      await authApi.register(fptEmail, password, 'STUDENT');
+      // 1. Create account (needs studentCode)
+      await authApi.register(fptEmail, password, 'STUDENT', studentId);
+      
+      // 2. Login to get token for profile creation
+      await authApi.login(fptEmail, password);
+      
+      // 3. Create student profile
+      const { default: apiClient } = await import('../../api/apiClient');
+      await apiClient.post('/api/v1/students', { firstName, lastName, campus });
       
       setSuccess('Account created successfully! Redirecting...');
       setTimeout(() => {
-        navigate('/login');
+        authApi.logout(); // Clears state and redirects to /login
       }, 1500);
     } catch (err) {
       console.error('Registration Error:', err);

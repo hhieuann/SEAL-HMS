@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
 import './ParticipantLayout.css';
@@ -9,51 +9,113 @@ const ParticipantLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
+  const [isEliminated, setIsEliminated] = useState(false);
 
   // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
   useEffect(() => {
-    if (isReady) return; // Already set, skip
+    const checkElimination = () => {
+      const eId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1';
+      const trackDrawConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
+      if (!trackDrawConfirmed) {
+        setIsEliminated(false);
+        return;
+      }
+      const trackDrawStr = localStorage.getItem(`trackDraw_${eId}`);
+      if (trackDrawStr) {
+        try {
+          const parsedDraw = JSON.parse(trackDrawStr);
+          const myTeamName = localStorage.getItem('myTeamName');
+          if (myTeamName) {
+            const inDraw = parsedDraw.some(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
+            setIsEliminated(!inDraw);
+          }
+        } catch(e) {}
+      }
+    };
+    
+    const handleStateUpdate = () => {
+      checkElimination();
+      setIsReady(localStorage.getItem('p_hasTeam') === 'true');
+    };
+    
+    checkElimination();
+    window.addEventListener('storage', handleStateUpdate);
+    window.addEventListener('participant_state_updated', handleStateUpdate);
 
     const accountId = parseInt(localStorage.getItem('accountId'));
-    const eventId = parseInt(localStorage.getItem('p_selectedEventId') || '1');
+    const userEmail = localStorage.getItem('userEmail');
 
     const rehydrate = async () => {
       try {
-        const teamsRes = await teamService.getTeamsByEvent(eventId);
-        const teams = teamsRes.data || [];
-        for (const team of teams) {
+        const { eventService } = await import('../api/eventService');
+        const eventsRes = await eventService.getEvents();
+        const allEvents = eventsRes.data || [];
+
+        let foundActiveTeam = false;
+
+        for (const evt of allEvents) {
+          if (evt.status?.toLowerCase() === 'completed') {
+            continue; // Ignore past events for active dashboard status
+          }
           try {
-            const membersRes = await teamService.getMembers(team.id);
-            const members = membersRes.data || [];
-            const userEmail = localStorage.getItem('userEmail');
-            const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
-            if (isMember) {
-              const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
-              
-              if (!accountId && me.accountId) {
-                localStorage.setItem('accountId', me.accountId);
-                localStorage.setItem('userId', me.accountId);
-              }
-              
-              localStorage.setItem('p_hasTeam', 'true');
-              localStorage.setItem('p_hasJoinedEvent', 'true');
-              localStorage.setItem('p_teamId', team.id);
-              localStorage.setItem('myTeamName', team.name);
-              localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
-              localStorage.setItem('p_selectedEventId', eventId);
-              localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
-              setIsReady(true);
-              window.dispatchEvent(new Event('participant_state_updated'));
-              break;
+            const teamsRes = await teamService.getTeamsByEvent(evt.id);
+            const teams = teamsRes.data || [];
+
+            for (const team of teams) {
+              try {
+                const membersRes = await teamService.getMembers(team.id);
+                const members = membersRes.data || [];
+                const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
+
+                if (isMember) {
+                  const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
+
+                  if (!accountId && me?.accountId) {
+                    localStorage.setItem('accountId', me.accountId);
+                    localStorage.setItem('userId', me.accountId);
+                  }
+
+                  localStorage.setItem('p_hasTeam', 'true');
+                  localStorage.setItem('p_hasJoinedEvent', 'true');
+                  localStorage.setItem('p_teamId', team.id);
+                  localStorage.setItem('myTeamName', team.name);
+                  localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
+                  localStorage.setItem('p_eventId', evt.id);
+                  localStorage.setItem('p_selectedEventId', evt.id);
+                  localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
+                  setIsReady(true);
+                  foundActiveTeam = true;
+                  window.dispatchEvent(new Event('participant_state_updated'));
+                  return; // Done
+                }
+              } catch (e) { /* skip */ }
             }
-          } catch (e) { /* skip team if members fetch fails */ }
+          } catch (e) { /* skip */ }
         }
+
+        if (!foundActiveTeam && localStorage.getItem('p_hasTeam') === 'true') {
+           localStorage.removeItem('p_hasTeam');
+           localStorage.removeItem('p_hasJoinedEvent');
+           localStorage.removeItem('p_teamId');
+           localStorage.removeItem('myTeamName');
+           localStorage.removeItem('p_isLeader');
+           // Keep selectedEventId if they want to browse, but clear the strict eventId lock
+           localStorage.removeItem('p_eventId');
+           setIsReady(false);
+           window.dispatchEvent(new Event('participant_state_updated'));
+        }
+
       } catch (e) {
         console.error('Failed to re-hydrate participant state:', e);
       }
     };
 
     rehydrate();
+
+    return () => {
+      window.removeEventListener('storage', handleStateUpdate);
+      window.removeEventListener('participant_state_updated', handleStateUpdate);
+    };
   }, []);
 
   const handleLogout = () => {
@@ -87,10 +149,12 @@ const ParticipantLayout = () => {
         </div>
         
         <div style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src="https://ui-avatars.com/api/?name=John+Doe&background=fff&color=F26F21" alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+          <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
+            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
             <div className="user-info" style={{ textAlign: 'left' }}>
-              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>John Doe</span>
+              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>
+                {localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant'}
+              </span>
               <span className="user-role" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Participant</span>
             </div>
           </div>
@@ -172,11 +236,24 @@ const ParticipantLayout = () => {
         </nav>
       </aside>
 
-      <main className="main-content">
-        <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
-          <Outlet />
-        </div>
-      </main>
+        <main className="main-content">
+          <div className="page-content" style={{ height: '100vh', overflowY: 'auto' }}>
+            {isEliminated && (location.pathname.includes('/workspace') || location.pathname.includes('/submission')) ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px', textAlign: 'center' }}>
+                <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '24px', borderRadius: '50%', marginBottom: '24px' }}>
+                  <X size={48} color="#ef4444" />
+                </div>
+                <h1 style={{ fontSize: '32px', color: 'var(--text-primary)', marginBottom: '16px' }}>Your team has been eliminated.</h1>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '18px', maxWidth: '600px', lineHeight: '1.6' }}>
+                  Thank you for participating in the hackathon! Unfortunately, your team did not advance to the current round. 
+                  You can still view your scores and team details using the sidebar.
+                </p>
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );

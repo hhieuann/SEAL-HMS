@@ -269,13 +269,12 @@ const MySubmission = () => {
 
               <div style={{ display: 'grid', gap: '16px' }}>
                 {[
-                  { label: 'Project Name', value: existingSubmission.projectName },
+                  { label: 'Project Name', value: existingSubmission.submissionName },
                   { label: 'Description', value: existingSubmission.description },
-                  { label: 'Tech Stack', value: existingSubmission.techStack },
-                  { label: 'Repository URL', value: existingSubmission.repoUrl, isLink: true },
+                  { label: 'Tech Stack', value: existingSubmission.techStackName },
+                  { label: 'Repository URL', value: existingSubmission.githubUrl, isLink: true },
                   existingSubmission.demoUrl && { label: 'Demo URL', value: existingSubmission.demoUrl, isLink: true },
-                  existingSubmission.slidesUrl && { label: 'Slides', value: existingSubmission.slidesUrl, isLink: true },
-                  existingSubmission.videoUrl && { label: 'Video', value: existingSubmission.videoUrl, isLink: true },
+                  existingSubmission.slideUrl && { label: 'Slides', value: existingSubmission.slideUrl, isLink: true },
                 ].filter(Boolean).map((item, i) => (
                   <div key={i} style={{ padding: '14px 16px', background: 'var(--bg-subtle)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>{item.label}</div>
@@ -414,10 +413,10 @@ const MySubmission = () => {
                   <div key={i} style={{ padding: '12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)' }}>{c.weight}%</span>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)' }}>{Math.round((c.weight || 0) * 100)}%</span>
                     </div>
                     <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                      <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }} />
+                      <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }} />
                     </div>
                   </div>
                 ))}

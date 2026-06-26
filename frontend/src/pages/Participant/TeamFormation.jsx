@@ -46,6 +46,8 @@ const TeamFormation = () => {
       localStorage.setItem('p_hasTeam', 'true');
       localStorage.setItem('p_isLeader', 'true');
       
+      window.dispatchEvent(new Event('participant_state_updated'));
+      
       setActiveTab('success_create');
     } catch (err) {
       setError(err.message || 'Failed to create team');
@@ -183,9 +185,9 @@ const TeamFormation = () => {
           </div>
 
           <form onSubmit={handleCreateTeam} style={{ display: activeTab === 'create' ? 'block' : 'none' }}>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px' }}>Team Name</label>
-              <input type="text" className="task-input" placeholder="e.g., NullPointerException" defaultValue="ByteStrike" required />
+            <div className="form-floating" style={{ marginBottom: '20px' }}>
+              <input type="text" id="teamName" className="task-input" placeholder=" " required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
+              <label htmlFor="teamName">Team Name</label>
             </div>
             
             <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', marginBottom: '20px' }}>
@@ -241,9 +243,9 @@ const TeamFormation = () => {
           </div>
 
           <form onSubmit={handleJoinTeam} style={{ display: activeTab === 'join' ? 'block' : 'none' }}>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px' }}>Invite Code</label>
-              <input type="text" className="task-input" placeholder="Enter 6-digit code or paste link" defaultValue={initialInviteCode || ''} required />
+            <div className="form-floating" style={{ marginBottom: '20px' }}>
+              <input type="text" id="inviteCode" className="task-input" placeholder=" " defaultValue={initialInviteCode || ''} required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
+              <label htmlFor="inviteCode">Invite Code</label>
             </div>
             <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '8px', marginBottom: '20px', color: 'var(--warning)', fontSize: '13px' }}>
               Note: Joining a team is subject to approval by the Team Leader or System if capacity is full.
