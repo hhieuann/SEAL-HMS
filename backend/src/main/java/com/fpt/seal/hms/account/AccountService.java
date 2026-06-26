@@ -8,6 +8,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.fpt.seal.hms.student.Student;
 import com.fpt.seal.hms.student.StudentRepository;
+import com.fpt.seal.hms.lecturer.Lecturer;
+import com.fpt.seal.hms.lecturer.LecturerRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,9 +23,10 @@ public class AccountService {
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
     private final StudentRepository studentRepository;
+    private final LecturerRepository lecturerRepository;
 
     @Transactional
-    public Account register(String email, String rawPassword, Role role, String studentCode) {
+    public Account register(String email, String rawPassword, Role role, String studentCode, String firstName, String lastName, String campus) {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
@@ -59,10 +62,67 @@ public class AccountService {
             Student student = new Student();
             student.setAccount(savedAccount);
             student.setStudentCode(normalizedCode);
+            student.setFirstName(firstName);
+            student.setLastName(lastName);
+            student.setCampus(campus);
             studentRepository.save(student);
         }
         
         return savedAccount;
+    }
+
+    /**
+     * Admin creates a Lecturer account directly — bypasses PENDING, immediately ACTIVE.
+     * Returns a pair of [savedAccount, rawPassword] so the caller can show the temp password once.
+     */
+    @Transactional
+    public Object[] adminCreateLecturer(String email, String fullName, String department, String campus, String phone) {
+        if (accountRepository.existsByEmail(email)) {
+            throw new BusinessException("Email already registered: " + email);
+        }
+
+        // Auto-generate a secure temp password
+        String rawPassword = generateTempPassword();
+
+        Account account = new Account();
+        account.setEmail(email);
+        account.setPassword(passwordEncoder.encode(rawPassword));
+        account.setRole(Role.LECTURER);
+        account.setStatus(AccountStatus.ACTIVE); // admin-created accounts skip PENDING
+
+        Account savedAccount = accountRepository.save(account);
+
+        Lecturer lecturer = new Lecturer();
+        lecturer.setAccount(savedAccount);
+        lecturer.setFullName(fullName);
+        lecturer.setDepartment(department);
+        lecturer.setCampus(campus);
+        lecturer.setPhone(phone);
+        lecturerRepository.save(lecturer);
+
+        return new Object[]{savedAccount, rawPassword};
+    }
+
+    private String generateTempPassword() {
+        String upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        String lower = "abcdefghjkmnpqrstuvwxyz";
+        String digits = "23456789";
+        String special = "@#!";
+        String all = upper + lower + digits + special;
+        java.util.Random rng = new java.util.Random();
+        StringBuilder sb = new StringBuilder();
+        sb.append(upper.charAt(rng.nextInt(upper.length())));
+        sb.append(lower.charAt(rng.nextInt(lower.length())));
+        sb.append(digits.charAt(rng.nextInt(digits.length())));
+        sb.append(special.charAt(rng.nextInt(special.length())));
+        for (int i = 0; i < 8; i++) sb.append(all.charAt(rng.nextInt(all.length())));
+        // Shuffle
+        char[] arr = sb.toString().toCharArray();
+        for (int i = arr.length - 1; i > 0; i--) {
+            int j = rng.nextInt(i + 1);
+            char tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+        }
+        return new String(arr);
     }
 
     @Transactional(readOnly = true)

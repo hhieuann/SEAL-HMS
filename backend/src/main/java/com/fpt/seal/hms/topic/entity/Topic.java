@@ -18,9 +18,13 @@ public class Topic {
     @Column(name = "topic_id")
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "track_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "track_id")
     private Track track;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "event_id", nullable = false)
+    private com.fpt.seal.hms.event.entity.Event event;
 
     @Column(name = "topic_name", length = 200)
     private String name;
