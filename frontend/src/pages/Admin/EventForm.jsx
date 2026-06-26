@@ -273,11 +273,11 @@ const EventForm = () => {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'24px'}}>
                 <div>
                   <label style={lbl}>Registration Opens {req}</label>
-                  <input type="date" style={inp()} value={formData.registrationStartDate} onChange={e=>setFormData({...formData,registrationStartDate:e.target.value})}/>
+                  <input type="date" style={inp()} min={isEditMode ? undefined : new Date().toISOString().split('T')[0]} value={formData.registrationStartDate} onChange={e=>setFormData({...formData,registrationStartDate:e.target.value})}/>
                 </div>
                 <div>
                   <label style={lbl}>Registration Closes {req}</label>
-                  <input type="date" style={inp(regEndBeforeStart?errBorder:{})} value={formData.registrationEndDate} min={regStart||undefined} onChange={e=>setFormData({...formData,registrationEndDate:e.target.value})}/>
+                  <input type="date" style={inp(regEndBeforeStart?errBorder:{})} value={formData.registrationEndDate} min={regStart || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,registrationEndDate:e.target.value})}/>
                   {regEndBeforeStart && <InlineWarn msg="Must be after registration open date"/>}
                 </div>
                 <div>
@@ -299,12 +299,12 @@ const EventForm = () => {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px'}}>
                 <div>
                   <label style={lbl}>Event Start Date {req}</label>
-                  <input type="date" style={inp(evtStartNotAfterReg?errBorder:{})} value={formData.startDate} min={regEnd||undefined} onChange={e=>setFormData({...formData,startDate:e.target.value})}/>
+                  <input type="date" style={inp(evtStartNotAfterReg?errBorder:{})} value={formData.startDate} min={regEnd || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,startDate:e.target.value})}/>
                   {evtStartNotAfterReg && <InlineWarn msg="Must be at least 1 day after registration closes"/>}
                 </div>
                 <div>
                   <label style={lbl}>Event End Date {req}</label>
-                  <input type="date" style={inp(evtEndBeforeStart?errBorder:{})} value={formData.endDate} min={evtStart||undefined} onChange={e=>setFormData({...formData,endDate:e.target.value})}/>
+                  <input type="date" style={inp(evtEndBeforeStart?errBorder:{})} value={formData.endDate} min={evtStart || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,endDate:e.target.value})}/>
                   {evtEndBeforeStart && <InlineWarn msg="End date must be after start date"/>}
                 </div>
               </div>
