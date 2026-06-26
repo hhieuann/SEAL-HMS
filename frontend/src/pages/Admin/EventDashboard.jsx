@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target } from 'lucide-react';
+import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2 } from 'lucide-react';
 import './EventDashboard.css';
 
 const EventDashboard = () => {
@@ -8,6 +8,7 @@ const EventDashboard = () => {
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -60,9 +61,9 @@ const EventDashboard = () => {
           subTopics: subTopics,
           rounds: roundsWithCriteria.map(r => {
             let startStr = r.startTime;
-            if (Array.isArray(startStr)) startStr = `${startStr[0]}-${String(startStr[1]).padStart(2, '0')}-${String(startStr[2]).padStart(2, '0')}T${String(startStr[3] || 0).padStart(2, '0')}:${String(startStr[4] || 0).padStart(2, '0')}`;
             let endStr = r.endTime;
-            if (Array.isArray(endStr)) endStr = `${endStr[0]}-${String(endStr[1]).padStart(2, '0')}-${String(endStr[2]).padStart(2, '0')}T${String(endStr[3] || 0).padStart(2, '0')}:${String(endStr[4] || 0).padStart(2, '0')}`;
+            if (startStr && startStr.length > 16) startStr = startStr.slice(0, 16);
+            if (endStr && endStr.length > 16) endStr = endStr.slice(0, 16);
             return { ...r, start: startStr, end: endStr };
           })
         };
@@ -85,11 +86,14 @@ const EventDashboard = () => {
     try {
       const { eventService } = await import('../../api/eventService.js');
       if (updates.status) {
+        setStatusActionLoading(true);
         const res = await eventService.updateEventStatus(event.id, updates.status);
         setEvent(prev => ({ ...prev, status: res.data.status }));
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setStatusActionLoading(false);
     }
   };
 
@@ -110,6 +114,19 @@ const EventDashboard = () => {
   const totalTopics = event.subTopics ? event.subTopics.length : 0;
   const totalRounds = event.rounds ? event.rounds.length : 0;
 
+  const today = new Date().toISOString().split('T')[0];
+  const statusUpper = (event.status || '').toUpperCase();
+  const showRegBanner = statusUpper === 'PLANNED' && event.registrationStartDate && today >= event.registrationStartDate;
+
+  const statusConfig = {
+    PLANNED:   { label: 'Planning Phase',    color: 'var(--text-secondary)', bg: 'var(--bg-hover)',            nextLabel: 'Open Registration', nextStatus: 'UPCOMING', icon: <Unlock size={16}/> },
+    UPCOMING:  { label: 'Registration Open', color: 'var(--primary)',        bg: 'rgba(59,130,246,0.1)',       nextLabel: 'Lock Registration', nextStatus: 'ONGOING',  icon: <Lock size={16}/> },
+    ONGOING:   { label: 'Event Ongoing',     color: 'var(--success)',        bg: 'rgba(16,185,129,0.1)',       nextLabel: 'End Event',          nextStatus: 'COMPLETED',icon: <CheckCircle2 size={16}/> },
+    COMPLETED: { label: 'Event Completed',   color: 'var(--warning)',        bg: 'rgba(245,158,11,0.1)',       nextLabel: null, nextStatus: null },
+    CANCELLED: { label: 'Cancelled',         color: 'var(--danger)',         bg: 'rgba(239,68,68,0.1)',        nextLabel: null, nextStatus: null },
+  };
+  const sc = statusConfig[statusUpper] || statusConfig['PLANNED'];
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
@@ -122,6 +139,51 @@ const EventDashboard = () => {
           {event.status || 'Ongoing'}{currentRound ? ` — ${currentRound.name}` : ''}
         </div>
       </div>
+
+      {/* Auto-detect banner */}
+      {showRegBanner && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={18} color="var(--warning)" />
+            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--warning)' }}>Registration period has started</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>— the event is still in Planning status. Open registration so participants can sign up.</span>
+          </div>
+          <button className="btn btn-primary" style={{ background: 'var(--warning)', color: '#000', padding: '8px 16px', fontSize: '13px' }}
+            disabled={statusActionLoading} onClick={() => handleUpdateEvent({ status: 'UPCOMING' })}>
+            <Unlock size={14} /> Open Registration
+          </button>
+        </div>
+      )}
+
+      {/* Status Action Card */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: sc.bg, border: `1px solid ${sc.color}33`, borderRadius: '12px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <PlayCircle size={20} color={sc.color} />
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Current Phase</div>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: sc.color }}>{sc.label}</div>
+          </div>
+          {event.registrationStartDate && (
+            <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Registration</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{event.registrationStartDate} → {event.registrationEndDate || 'TBD'}</div>
+            </div>
+          )}
+          {event.startDate && (
+            <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Event Dates</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{event.startDate} → {event.endDate || 'TBD'}</div>
+            </div>
+          )}
+        </div>
+        {sc.nextStatus && (
+          <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            disabled={statusActionLoading} onClick={() => handleUpdateEvent({ status: sc.nextStatus })}>
+            {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}
+          </button>
+        )}
+      </div>
+
 
       <div className="stats-grid">
         <div className="stat-card glass-panel">
