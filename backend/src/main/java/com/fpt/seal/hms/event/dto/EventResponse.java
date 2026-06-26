@@ -22,6 +22,7 @@ public class EventResponse {
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Integer currentTeams;
 
     private java.util.List<com.fpt.seal.hms.round.dto.RoundResponse> rounds;
     private java.util.List<com.fpt.seal.hms.track.dto.TrackResponse> tracks;

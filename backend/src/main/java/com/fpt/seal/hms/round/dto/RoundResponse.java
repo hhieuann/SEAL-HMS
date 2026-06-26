@@ -15,7 +15,6 @@ public class RoundResponse {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private Integer promotionTopN;
-    private Integer eliminatedTeams;
     private RoundStatus status;
     private Integer roundSeq;
     private LocalDateTime createdAt;

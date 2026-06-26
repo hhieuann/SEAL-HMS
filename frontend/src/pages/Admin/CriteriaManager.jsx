@@ -58,14 +58,14 @@ const CriteriaManager = () => {
       const payload = {
         name: form.name.trim(),
         maxScore: parseFloat(form.maxScore) || 10,
-        weight: parseFloat(form.weight) || 0.5,
+        weight: (parseFloat(form.weight) || 50) / 100, // convert % input to 0-1 decimal for BE
       };
       const res = await criterionService.createCriterion(roundId, payload);
       setCriteria(prev => ({
         ...prev,
         [roundId]: [...(prev[roundId] || []), res.data]
       }));
-      setNewCriterion(prev => ({ ...prev, [roundId]: { name: '', maxScore: 10, weight: 1 } }));
+      setNewCriterion(prev => ({ ...prev, [roundId]: { name: '', maxScore: 10, weight: 50 } }));
       setToast('Criterion added!');
       setTimeout(() => setToast(''), 2500);
     } catch (e) {
@@ -128,7 +128,7 @@ const CriteriaManager = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {rounds.map((round) => {
             const roundCriteria = criteria[round.id] || [];
-            const form = newCriterion[round.id] || { name: '', maxScore: 10, weight: 1 };
+            const form = newCriterion[round.id] || { name: '', maxScore: 10, weight: 50 };
             const totalMax = roundCriteria.reduce((s, c) => s + (parseFloat(c.maxScore) || 0), 0);
 
             return (
@@ -153,7 +153,7 @@ const CriteriaManager = () => {
                         </div>
                         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                           <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Max: <strong style={{ color: 'var(--primary)' }}>{c.maxScore}</strong></span>
-                          {c.weight && <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Weight: {c.weight}</span>}
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Weight: <strong style={{ color: 'var(--primary)' }}>{Math.round((c.weight || 0) * 100)}%</strong></span>
                         </div>
                         <button
                           onClick={() => handleDelete(round.id, c.id)}
@@ -197,13 +197,14 @@ const CriteriaManager = () => {
                       />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Weight (0-1)</label>
-                      <input
-                        type="number" min="0.01" max="1" step="0.05"
-                        value={form.weight}
-                        onChange={e => handleNewChange(round.id, 'weight', e.target.value)}
-                        style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontSize: '13px' }}
-                      />
+                        <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Weight (%)</label>
+                       <input
+                         type="number" min="1" max="100" step="1"
+                         value={form.weight}
+                         onChange={e => handleNewChange(round.id, 'weight', e.target.value)}
+                         placeholder="e.g. 50"
+                         style={{ width: '100%', padding: '10px 12px', background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontSize: '13px' }}
+                       />
                     </div>
                     <button
                       onClick={() => handleAdd(round.id)}

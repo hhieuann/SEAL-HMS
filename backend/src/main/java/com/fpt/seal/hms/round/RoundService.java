@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -49,11 +50,12 @@ public class RoundService {
         round.setStartTime(request.getStartTime());
         round.setEndTime(request.getEndTime());
         round.setPromotionTopN(request.getPromotionTopN());
-        round.setEliminatedTeams(request.getEliminatedTeams());
         round.setStatus(RoundStatus.CREATED);
         round.setRoundSeq(nextSeq);
 
-        return mapToResponse(roundRepository.save(round));
+        Round savedRound = roundRepository.save(round);
+        validateSequentialPromotionTopN(event);
+        return mapToResponse(savedRound);
     }
 
     @Transactional
@@ -69,9 +71,10 @@ public class RoundService {
         round.setStartTime(request.getStartTime());
         round.setEndTime(request.getEndTime());
         round.setPromotionTopN(request.getPromotionTopN());
-        round.setEliminatedTeams(request.getEliminatedTeams());
 
-        return mapToResponse(roundRepository.save(round));
+        Round savedRound = roundRepository.save(round);
+        validateSequentialPromotionTopN(round.getEvent());
+        return mapToResponse(savedRound);
     }
 
     @Transactional
@@ -126,6 +129,24 @@ public class RoundService {
         }
     }
 
+    public void validateSequentialPromotionTopN(Event event) {
+        List<Round> rounds = roundRepository.findByEventId(event.getId());
+        rounds.sort(Comparator.comparing(Round::getRoundSeq));
+
+        int availablePool = event.getMaxTeams() != null ? event.getMaxTeams() : 0;
+
+        for (int i = 0; i < rounds.size() - 1; i++) {
+            Round round = rounds.get(i);
+            int promotion = round.getPromotionTopN() != null ? round.getPromotionTopN() : 0;
+            
+            if (promotion >= availablePool) {
+                throw new BusinessException(String.format("Round %d promotes %d teams but the available pool is only %d",
+                        round.getRoundSeq(), promotion, availablePool));
+            }
+            availablePool = promotion;
+        }
+    }
+
     private Round findRoundEntityById(Long id) {
         return roundRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found with id: " + id));
@@ -139,7 +160,6 @@ public class RoundService {
         response.setStartTime(round.getStartTime());
         response.setEndTime(round.getEndTime());
         response.setPromotionTopN(round.getPromotionTopN());
-        response.setEliminatedTeams(round.getEliminatedTeams());
         response.setStatus(round.getStatus());
         response.setRoundSeq(round.getRoundSeq());
         response.setCreatedAt(round.getCreatedAt());

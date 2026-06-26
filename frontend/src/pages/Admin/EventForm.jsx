@@ -14,6 +14,9 @@ const EventForm = () => {
     status: 'planned',
     startDate: '',
     endDate: '',
+    registrationStartDate: '',
+    registrationEndDate: '',
+    maxTeams: '',
     description: '',
     subTopics: [],
     rounds: []
@@ -56,6 +59,10 @@ const EventForm = () => {
             status: rawEvent.status?.toLowerCase() || 'planned',
             startDate: rawEvent.startDate || '',
             endDate: rawEvent.endDate || '',
+            // BE-NOTE: These fields require backend support (see bug report)
+            registrationStartDate: rawEvent.registrationStartDate || '',
+            registrationEndDate: rawEvent.registrationEndDate || '',
+            maxTeams: rawEvent.maxTeams || '',
             description: rawEvent.description || '',
             subTopics: subTopics,
             rounds: rawRounds.map(r => {
@@ -73,6 +80,8 @@ const EventForm = () => {
                 status: r.status?.toLowerCase() || 'planned', 
                 start: startStr || '', 
                 end: endStr || '', 
+                // BE-NOTE: eliminatedTeams maps to promotionTopN (teams kept = total - eliminated)
+                eliminatedTeams: r.eliminatedTeams ?? '',
                 criteria: [] // Pending BE support for criteria API
               };
             })
@@ -99,6 +108,13 @@ const EventForm = () => {
       return;
     }
 
+    if (!formData.maxTeams || parseInt(formData.maxTeams, 10) < 1) {
+      setError('Max Teams is required and must be at least 1.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       // 1. Map data to backend format
@@ -107,18 +123,31 @@ const EventForm = () => {
         type: formData.type,
         startDate: formData.startDate || null,
         endDate: formData.endDate || null,
+        // BE-NOTE: Backend must accept and persist registrationStartDate,
+        // registrationEndDate, and maxTeams in the Event entity & DTO.
+        // See bug_report_event_registration_config.md for full spec.
+        registrationStartDate: formData.registrationStartDate || null,
+        registrationEndDate: formData.registrationEndDate || null,
+        maxTeams: formData.maxTeams ? parseInt(formData.maxTeams, 10) : null,
         description: formData.description,
-        rounds: formData.rounds.map((r, index) => ({
-           name: r.name,
-           startTime: r.start || null,
-           endTime: r.end || null,
-           promotionTopN: 10,
-           criteria: r.criteria.map(c => ({
-              name: c.name,
-              weight: c.weight,
-              maxScore: 100 // 1-100 logic
-           }))
-        })),
+        rounds: formData.rounds.map((r, index) => {
+          const isFinalRound = index === formData.rounds.length - 1;
+          // BE-NOTE: promotionTopN = teams that advance. For non-final rounds,
+          // derive it from eliminatedTeams if provided. Final round has no elimination.
+          const eliminated = r.eliminatedTeams ? parseInt(r.eliminatedTeams, 10) : null;
+          return {
+            name: r.name,
+            startTime: r.start || null,
+            endTime: r.end || null,
+            eliminatedTeams: isFinalRound ? null : (eliminated || null),
+            promotionTopN: isFinalRound ? null : 10, // BE should compute from eliminatedTeams
+            criteria: r.criteria.map(c => ({
+               name: c.name,
+               weight: c.weight,
+               maxScore: 100
+            }))
+          };
+        }),
         tracks: [
           {
             name: 'General Track',
@@ -159,12 +188,18 @@ const EventForm = () => {
             try { 
                await eventService.updateRound(fr.id, roundPayload); 
                savedRoundId = fr.id;
-            } catch(e) { console.error('Failed to update round', e); }
+            } catch(e) { 
+               console.error('Failed to update round', e); 
+               throw e;
+            }
           } else {
             try { 
                const newRound = await eventService.createRound(eventId, roundPayload); 
                savedRoundId = newRound.data?.id;
-            } catch(e) { console.error('Failed to create round', e); }
+            } catch(e) { 
+               console.error('Failed to create round', e); 
+               throw e;
+            }
           }
 
           // FIX: Sync new criteria added in EventForm
@@ -267,7 +302,9 @@ const EventForm = () => {
       navigate(`/admin/event/${finalEventId}/dashboard`);
     } catch (err) {
       console.error(err);
-      setError('Failed to create event with real API');
+      const backendMessage = err?.response?.data?.message || err?.message || 'Failed to create event with real API';
+      setError(backendMessage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
     }
@@ -291,7 +328,7 @@ const EventForm = () => {
   const addRound = () => {
     setFormData(prev => ({
       ...prev,
-      rounds: [...prev.rounds, { id: Date.now(), name: 'New Round', status: 'planned', start: '', end: '', criteria: [] }]
+      rounds: [...prev.rounds, { id: Date.now(), name: 'New Round', status: 'planned', start: '', end: '', eliminatedTeams: '', criteria: [] }]
     }));
   };
 
@@ -448,6 +485,61 @@ const EventForm = () => {
               </div>
             </div>
 
+            {/* Registration Phase & Team Cap */}
+            <div style={{ background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '12px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Calendar size={16} color="var(--primary)" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>Registration Phase</h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>Define when participants can register and the team cap</p>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Registration Opens</label>
+                  <input
+                    type="date"
+                    style={formInputStyle}
+                    value={formData.registrationStartDate}
+                    onChange={e => setFormData({ ...formData, registrationStartDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Registration Closes</label>
+                  <input
+                    type="date"
+                    style={formInputStyle}
+                    value={formData.registrationEndDate}
+                    onChange={e => setFormData({ ...formData, registrationEndDate: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Max Teams <span style={{ color: 'var(--danger)' }}>*</span></label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    style={formInputStyle}
+                    placeholder="e.g. 50"
+                    value={formData.maxTeams}
+                    onChange={e => setFormData({ ...formData, maxTeams: e.target.value })}
+                  />
+                </div>
+              </div>
+              {formData.registrationStartDate && formData.registrationEndDate && formData.registrationEndDate < formData.registrationStartDate && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', color: 'var(--danger)', fontSize: '13px' }}>
+                  <AlertTriangle size={14} /> Registration close date must be after the open date.
+                </div>
+              )}
+              {formData.maxTeams !== '' && formData.maxTeams !== undefined && parseInt(formData.maxTeams, 10) <= 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px', color: 'var(--danger)', fontSize: '13px' }}>
+                  <AlertTriangle size={14} /> Max Teams must be greater than 1.
+                </div>
+              )}
+            </div>
+
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)', marginBottom: '8px' }}>Event Description</label>
               <textarea style={{ ...formInputStyle, resize: 'vertical' }} rows="4" placeholder="Brief description of the event..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea>
@@ -511,14 +603,36 @@ const EventForm = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                {formData.rounds.map((round, rIdx) => {
-                  const totalWeight = round.criteria.reduce((sum, c) => sum + (c.weight || 0), 0);
-                  const isWeightError = round.criteria.length > 0 && totalWeight !== 100;
-                  
-                  return (
-                    <div key={round.id} style={{ padding: '24px', background: '#F8FAFC', borderRadius: '16px', border: '1px solid var(--border-color)' }}>
+                {(() => {
+                  const totalEliminated = formData.rounds.reduce((sum, r) => sum + (parseInt(r.eliminatedTeams, 10) || 0), 0);
+                  const currentMaxTeams = parseInt(formData.maxTeams, 10) || 0;
+                  const isEliminationError = currentMaxTeams > 0 && totalEliminated >= currentMaxTeams;
+
+                  return formData.rounds.map((round, rIdx) => {
+                    const totalWeight = round.criteria.reduce((sum, c) => sum + (c.weight || 0), 0);
+                    const isWeightError = round.criteria.length > 0 && totalWeight !== 100;
+                    const isFinalRound = rIdx === formData.rounds.length - 1;
+                    const isTimeError = round.start && round.end && round.end <= round.start;
+                    const prevRound = rIdx > 0 ? formData.rounds[rIdx - 1] : null;
+                    const isSeqError = prevRound && prevRound.end && round.start && round.start <= prevRound.end;
+                    
+                    return (
+                    <div key={round.id} style={{ padding: '24px', background: '#F8FAFC', borderRadius: '16px', border: `1px solid ${isFinalRound ? 'rgba(255,215,0,0.3)' : 'var(--border-color)'}` }}>
+                      {/* Round label badge */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <span style={{
+                          fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px',
+                          padding: '3px 10px', borderRadius: '20px',
+                          background: isFinalRound ? 'rgba(255,215,0,0.15)' : 'rgba(99,102,241,0.1)',
+                          color: isFinalRound ? '#b8860b' : 'var(--primary)'
+                        }}>
+                          {isFinalRound ? '🏆 Final Round' : `Round ${rIdx + 1}`}
+                        </span>
+                        <button className="btn-icon" onClick={() => removeRound(round.id)} style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}><Trash2Icon /></button>
+                      </div>
+
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-                        <div style={{ display: 'flex', gap: '16px', flex: 1, marginRight: '24px' }}>
+                        <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
                           <div style={{ flex: 2 }}>
                             <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>Round Name</label>
                             <input type="text" style={formInputStyle} value={round.name} onChange={e => updateRound(round.id, 'name', e.target.value)} />
@@ -531,9 +645,42 @@ const EventForm = () => {
                             <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>End Time</label>
                             <input type="datetime-local" style={formInputStyle} value={round.end} onChange={e => updateRound(round.id, 'end', e.target.value)} />
                           </div>
+                          {/* Elimination config — hidden on Final Round */}
+                          {!isFinalRound && (
+                            <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
+                                Teams Eliminated
+                                <span style={{ display: 'block', fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '400', marginTop: '1px' }}>after this round</span>
+                              </label>
+                              <div style={{ position: 'relative' }}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  style={{ ...formInputStyle, paddingRight: '36px' }}
+                                  placeholder="e.g. 10"
+                                  value={round.eliminatedTeams}
+                                  onChange={e => updateRound(round.id, 'eliminatedTeams', e.target.value)}
+                                />
+                                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--text-secondary)', pointerEvents: 'none' }}>teams</span>
+                              </div>
+                            </div>
+                          )}
+                          {isFinalRound && (
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ fontSize: '12px', color: '#b8860b', fontStyle: 'italic', textAlign: 'center' }}>No elimination —<br/>this is the Final Round</span>
+                            </div>
+                          )}
                         </div>
-                        <button className="btn-icon" onClick={() => removeRound(round.id)} style={{ color: 'var(--danger)', background: 'rgba(239,68,68,0.1)' }}><Trash2Icon /></button>
                       </div>
+
+                      {/* Inline Validation Errors */}
+                      {(isTimeError || isSeqError || (!isFinalRound && isEliminationError)) && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', color: 'var(--danger)', fontSize: '13px' }}>
+                          {isTimeError && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> Round end time must be after start time.</div>}
+                          {isSeqError && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> Round start time must be after the previous round's end time.</div>}
+                          {!isFinalRound && isEliminationError && <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><AlertTriangle size={14} /> Total eliminated teams across all rounds ({totalEliminated}) cannot be equal to or exceed max teams ({currentMaxTeams}).</div>}
+                        </div>
+                      )}
 
                       {/* Criteria Section */}
                       <div style={{ background: 'var(--bg-subtle)', padding: '20px', borderRadius: '12px', border: `1px solid ${isWeightError ? 'var(--danger)' : 'var(--bg-hover)'}` }}>
@@ -567,7 +714,8 @@ const EventForm = () => {
                       </div>
                     </div>
                   );
-                })}
+                 });
+                })()}
               </div>
             )}
           </div>
