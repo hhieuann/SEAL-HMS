@@ -52,6 +52,7 @@ public class EventService {
     @Transactional(readOnly = true)
     public EventResponse getEventById(Long id) {
         Event event = findEventEntityById(id);
+        event = autoProgressEventStatus(event);
         EventResponse response = mapToResponse(event);
         response.setRounds(roundService.getRoundsByEventId(id));
         response.setTracks(trackService.getTracksByEventId(id));
@@ -211,5 +212,31 @@ public class EventService {
         response.setUpdatedAt(event.getUpdatedAt());
         response.setCurrentTeams((int) teamRepository.countByEventId(event.getId()));
         return response;
+    }
+
+    private Event autoProgressEventStatus(Event event) {
+        EventStatus status = event.getStatus();
+        java.time.LocalDate today = java.time.LocalDate.now();
+        boolean changed = false;
+
+        if (status == EventStatus.PLANNED && event.getRegistrationStartDate() != null && !today.isBefore(event.getRegistrationStartDate())) {
+            event.setStatus(EventStatus.UPCOMING);
+            changed = true;
+        } else if (status == EventStatus.UPCOMING) {
+            boolean regClosed = event.getRegistrationEndDate() != null && today.isAfter(event.getRegistrationEndDate());
+            boolean teamFull = event.getMaxTeams() != null && teamRepository.countByEventId(event.getId()) >= event.getMaxTeams();
+            if (regClosed || teamFull) {
+                event.setStatus(EventStatus.ONGOING);
+                changed = true;
+            }
+        } else if (status == EventStatus.ONGOING && event.getEndDate() != null && today.isAfter(event.getEndDate())) {
+            event.setStatus(EventStatus.COMPLETED);
+            changed = true;
+        }
+
+        if (changed) {
+            return eventRepository.save(event);
+        }
+        return event;
     }
 }
