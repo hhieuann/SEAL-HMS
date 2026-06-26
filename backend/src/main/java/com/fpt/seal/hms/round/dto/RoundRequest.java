@@ -19,6 +19,4 @@ public class RoundRequest {
     private LocalDateTime endTime;
 
     private Integer promotionTopN;
-
-    private Integer eliminatedTeams;
 }

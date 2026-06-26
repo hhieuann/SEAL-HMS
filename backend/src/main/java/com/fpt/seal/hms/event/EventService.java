@@ -10,6 +10,7 @@ import com.fpt.seal.hms.round.RoundService;
 import com.fpt.seal.hms.round.dto.RoundRequest;
 import com.fpt.seal.hms.track.TrackService;
 import com.fpt.seal.hms.track.dto.TrackRequest;
+import com.fpt.seal.hms.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,18 +25,27 @@ public class EventService {
     private final EventRepository eventRepository;
     private final RoundService roundService;
     private final TrackService trackService;
+    private final TeamRepository teamRepository;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
         return eventRepository.findAll().stream()
-                .map(this::mapToResponse)
+                .map(event -> {
+                    EventResponse response = mapToResponse(event);
+                    response.setRounds(roundService.getRoundsByEventId(event.getId()));
+                    return response;
+                })
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAssignedEvents(String email) {
         return eventRepository.findEventsAssignedToJudgeByEmail(email).stream()
-                .map(this::mapToResponse)
+                .map(event -> {
+                    EventResponse response = mapToResponse(event);
+                    response.setRounds(roundService.getRoundsByEventId(event.getId()));
+                    return response;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -54,8 +64,8 @@ public class EventService {
             request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
             throw new IllegalArgumentException("Registration end date must not be before start date.");
         }
-        if (request.getMaxTeams() != null && request.getMaxTeams() < 1) {
-            throw new IllegalArgumentException("Max teams must be at least 1.");
+        if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
+            throw new IllegalArgumentException("Max teams must be at least 2.");
         }
 
         Event event = new Event();
@@ -102,8 +112,8 @@ public class EventService {
             request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
             throw new IllegalArgumentException("Registration end date must not be before start date.");
         }
-        if (request.getMaxTeams() != null && request.getMaxTeams() < 1) {
-            throw new IllegalArgumentException("Max teams must be at least 1.");
+        if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
+            throw new IllegalArgumentException("Max teams must be at least 2.");
         }
 
         event.setName(request.getName());
@@ -114,6 +124,9 @@ public class EventService {
         event.setRegistrationEndDate(request.getRegistrationEndDate());
         event.setMaxTeams(request.getMaxTeams());
         event.setDescription(request.getDescription());
+
+        // Validate that the new maxTeams does not violate existing rounds' promotion pools
+        roundService.validateSequentialPromotionTopN(event);
 
         return mapToResponse(eventRepository.save(event));
     }
@@ -196,6 +209,7 @@ public class EventService {
         response.setDescription(event.getDescription());
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
+        response.setCurrentTeams((int) teamRepository.countByEventId(event.getId()));
         return response;
     }
 }

@@ -38,8 +38,6 @@ public class Round extends BaseEntity {
     @Column(name = "promotion_top_n")
     private Integer promotionTopN;
 
-    @Column(name = "eliminated_teams")
-    private Integer eliminatedTeams;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
