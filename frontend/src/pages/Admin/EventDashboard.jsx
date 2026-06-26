@@ -3,6 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, GraduationCap, X, Plus, UserCheck, Loader2 } from 'lucide-react';
 import './EventDashboard.css';
 
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + 
+           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch(e) { return dateStr; }
+};
+
 const EventDashboard = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
@@ -179,13 +189,13 @@ const EventDashboard = () => {
           {event.registrationStartDate && (
             <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Registration</div>
-              <div style={{ fontSize: '13px', fontWeight: '600' }}>{event.registrationStartDate} → {event.registrationEndDate || 'TBD'}</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{formatDate(event.registrationStartDate)} → {formatDate(event.registrationEndDate) || 'TBD'}</div>
             </div>
           )}
           {event.startDate && (
             <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Event Dates</div>
-              <div style={{ fontSize: '13px', fontWeight: '600' }}>{event.startDate} → {event.endDate || 'TBD'}</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{formatDate(event.startDate)} → {formatDate(event.endDate) || 'TBD'}</div>
             </div>
           )}
         </div>
@@ -286,7 +296,7 @@ const EventDashboard = () => {
                   <div className="timeline-content">
                     <h4>{round.name}</h4>
                     <p>
-                      {round.start && round.end ? `${round.start} — ${round.end}` : 'Dates TBD'}
+                      {round.start && round.end ? `${formatDate(round.start)} — ${formatDate(round.end)}` : 'Dates TBD'}
                       {round.criteria && round.criteria.length > 0 ? ` • ${round.criteria.length} criteria` : ''}
                     </p>
                   </div>
@@ -334,7 +344,7 @@ const EventDashboard = () => {
                   <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-primary)' }}>
                     {round.name}
                     <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                      ({round.start} → {round.end})
+                      ({formatDate(round.start)} → {formatDate(round.end)})
                     </span>
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
