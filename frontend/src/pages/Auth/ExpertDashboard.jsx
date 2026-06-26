@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut } from 'lucide-react';
+import apiClient from '../../api/apiClient';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { submissionService, scoreService } from '../../api/scoreService';
@@ -9,7 +10,7 @@ const ExpertDashboard = () => {
   const navigate = useNavigate();
 
   const handleEnterWorkspace = (ctx) => {
-    const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, path: ctx.path, eventId: ctx.eventId };
+    const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, trackId: ctx.trackId, path: ctx.path, eventId: ctx.eventId };
     localStorage.setItem('expertContext', JSON.stringify(contextData));
     navigate(ctx.path);
   };
@@ -37,12 +38,43 @@ const ExpertDashboard = () => {
   useEffect(() => {
     const fetchEvents = async () => {
       try {
-        const response = await eventService.getAssignedEvents();
-        const events = response.data || [];
+        const [eventsRes, assignmentsRes] = await Promise.all([
+          eventService.getAssignedEvents(),
+          apiClient.get('/api/v1/users/me/assignments').catch(() => ({ data: { data: [] } }))
+        ]);
+        const events = eventsRes.data || [];
+        const myAssignments = assignmentsRes.data?.data || [];
         
         const dynamicAssignments = [];
         
         for (const evt of events) {
+          // Find all tracks for this event that the user is assigned to.
+          // Wait, we don't have all tracks fetched here... But we do know the event.
+          // We can fetch tracks for the event to map trackId to trackName.
+          let eventTracks = [];
+          try {
+             const { trackService } = await import('../../api/trackService.js');
+             const tr = await trackService.getTracksByEvent(evt.id);
+             eventTracks = tr.data || [];
+          } catch(e) {}
+          
+          // Filter my assignments that match this event's tracks
+          const eventTrackIds = eventTracks.map(t => t.id);
+          const myAssignmentsForEvent = myAssignments.filter(a => eventTrackIds.includes(a.trackId));
+          
+          if (myAssignmentsForEvent.length === 0) {
+             // Fallback just in case
+             myAssignmentsForEvent.push({ role: currentUser.roles.includes('Judge') ? 'JUDGE' : 'MENTOR', trackId: null });
+          }
+
+          for (const assignment of myAssignmentsForEvent) {
+            const trackObj = eventTracks.find(t => t.id === assignment.trackId);
+            const trackName = trackObj ? trackObj.name : 'All Tracks';
+            const trackId = trackObj ? trackObj.id : null;
+            const assignmentRole = assignment.role === 'JUDGE' ? 'Judge' : 'Mentor';
+            
+            // Only show cards for roles the user actually has
+            if (!currentUser.roles.includes(assignmentRole)) continue;
           // Calculate Judge Stats if applicable
           let pending = '-', completed = '-';
           if (currentUser.roles.includes('Judge') && evt.status !== 'CREATED') {
@@ -63,6 +95,7 @@ const ExpertDashboard = () => {
                 const teamsList = teamsData?.data || teamsData || [];
                 
                 await Promise.all(teamsList.map(async (t) => {
+                  if (trackId && t.trackId !== trackId) return;
                   if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
                     try {
                       const subRes = await submissionService.getSubmission(activeRound.id, t.id);
@@ -81,29 +114,32 @@ const ExpertDashboard = () => {
             } catch (e) { console.error(e); }
           }
 
-          if (currentUser.roles.includes('Judge')) {
+          if (assignmentRole === 'Judge') {
             dynamicAssignments.push({
-              id: `judge-${evt.id}`,
+              id: `judge-${evt.id}-${trackId || 'any'}`,
               eventId: evt.id,
               event: evt.name,
               role: 'Judge',
-              track: 'General',
+              track: trackName,
+              trackId: trackId,
               path: '/judge/panel',
               stats: { pending, flagged: 0, completed },
               status: evt.status === 'CREATED' ? 'upcoming' : 'active'
             });
           }
-          if (currentUser.roles.includes('Mentor')) {
+          if (assignmentRole === 'Mentor') {
             dynamicAssignments.push({
-              id: `mentor-${evt.id}`,
+              id: `mentor-${evt.id}-${trackId || 'any'}`,
               eventId: evt.id,
               event: evt.name,
               role: 'Mentor',
-              track: 'General',
+              track: trackName,
+              trackId: trackId,
               path: '/mentor/tickets',
               stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
               status: evt.status === 'CREATED' ? 'upcoming' : 'active'
             });
+          }
           }
         }
         

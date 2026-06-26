@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2 } from 'lucide-react';
+import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, GraduationCap } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 
 const AccountManagement = () => {
   const [tab, setTab] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newAccount, setNewAccount] = useState({ name: 'Dr. John Doe', email: 'johndoe@gmail.com', role: 'Judge' });
+  const [newAccount, setNewAccount] = useState({ fullName: '', email: '', department: '', campus: '', phone: '' });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
+  const [tempPassword, setTempPassword] = useState(null); // shown after successful creation
+  const [copied, setCopied] = useState(false);
 
   const [pendingList, setPendingList] = useState([]);
   const [activeList, setActiveList] = useState([]);
@@ -69,35 +71,44 @@ const AccountManagement = () => {
     }
   };
 
-  const handleCreateAccount = (e) => {
+  const handleCreateAccount = async (e) => {
     e.preventDefault();
-    if (!newAccount.name || !newAccount.email) return;
-    
     setError('');
-    if (newAccount.email.includes('error')) {
-      setError('SMTP Error: Unable to send invitation email to this address.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
     setIsCreating(true);
-
-    setTimeout(() => {
-      const account = {
-        id: Date.now(),
-        name: newAccount.name,
-        email: newAccount.email,
-        role: newAccount.role,
+    try {
+      const result = await adminApi.createLecturerAccount(newAccount);
+      setTempPassword(result.tempPassword);
+      // Also add to active list immediately
+      setActiveList(prev => [{
+        id: result.accountId,
+        name: result.fullName,
+        email: result.email,
+        role: 'LECTURER',
         status: 'active',
         joined: 'Just now'
-      };
-      
-      setActiveList([account, ...activeList]);
+      }, ...prev]);
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Failed to create account';
+      setError(msg);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+    } finally {
       setIsCreating(false);
-      setShowCreateModal(false);
-      setNewAccount({ name: 'Dr. John Doe', email: 'johndoe@gmail.com', role: 'Judge' });
-    }, 1500);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+    setTempPassword(null);
+    setCopied(false);
+    setError('');
+    setNewAccount({ fullName: '', email: '', department: '', campus: '', phone: '' });
+  };
+
+  const handleCopyPassword = () => {
+    navigator.clipboard.writeText(tempPassword);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const roleColor = { Participant: 'var(--primary)', Judge: 'var(--warning)', Mentor: 'var(--accent-3)', Admin: 'var(--danger)' };
@@ -112,7 +123,7 @@ const AccountManagement = () => {
           <h1>Global Account Management</h1>
           <p className="subtitle">Manage user identities, approve participant registrations, and create expert accounts.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}><Plus size={18} /> Create Expert Account</button>
+        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}><GraduationCap size={18} /> Create Lecturer Account</button>
       </div>
 
       {/* Tabs */}
@@ -241,63 +252,89 @@ const AccountManagement = () => {
       {/* Create Account Modal */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={() => setShowCreateModal(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={handleCloseModal} />
           
-          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '500px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '24px', padding: '32px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
-            <button className="btn-icon" onClick={() => setShowCreateModal(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'var(--bg-subtle)' }}>
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '520px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '24px', padding: '32px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
+            <button className="btn-icon" onClick={handleCloseModal} style={{ position: 'absolute', top: '24px', right: '24px', background: 'var(--bg-subtle)' }}>
               <X size={20} />
             </button>
 
-            <h2 style={{ fontSize: '24px', marginBottom: '8px', color: 'var(--text-primary)' }}>Create Expert Account</h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Issue a new account for Mentors or Judges directly.</p>
-
-            {/* Error Message UI */}
-            {error && (
-              <div
-                className={shaking ? 'shake' : ''}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px',
-                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-                  borderRadius: '10px', marginBottom: '20px',
-                  animation: shaking ? 'shake 0.4s ease-in-out' : 'none',
-                }}
-              >
-                <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
-                <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500' }}>{error}</span>
+            {tempPassword ? (
+              /* Step 2: Show temp password */
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--success)' }}>
+                  <CheckCircle size={28} />
+                </div>
+                <h2 style={{ fontSize: '22px', marginBottom: '8px', color: 'var(--text-primary)' }}>Account Created!</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>
+                  Share this temporary password with the lecturer. <strong>It won't be shown again.</strong>
+                </p>
+                <div style={{ padding: '16px 20px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px' }}>Temporary Password</div>
+                    <div style={{ fontSize: '18px', fontWeight: '800', fontFamily: 'monospace', color: 'var(--text-primary)', letterSpacing: '2px' }}>{tempPassword}</div>
+                  </div>
+                  <button onClick={handleCopyPassword} style={{ padding: '8px 16px', background: copied ? 'rgba(16,185,129,0.1)' : 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: copied ? 'var(--success)' : 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', flexShrink: 0 }}>
+                    <Copy size={14} /> {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <div style={{ padding: '12px 16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', fontSize: '13px', color: 'var(--warning)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <KeyRound size={15} style={{ flexShrink: 0 }} /> Lecturer must change their password after first login.
+                </div>
+                <button onClick={handleCloseModal} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Done</button>
               </div>
+            ) : (
+              /* Step 1: Create form */
+              <>
+                <h2 style={{ fontSize: '24px', marginBottom: '8px', color: 'var(--text-primary)' }}>Create Lecturer Account</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Issue a new account for a Lecturer. A temporary password will be generated.</p>
+
+                {error && (
+                  <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', animation: shaking ? 'shake 0.4s ease-in-out' : 'none' }}>
+                    <AlertCircle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500' }}>{error}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateAccount} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Full Name *</label>
+                    <input type="text" placeholder="e.g. Dr. Nguyen Van A" value={newAccount.fullName} onChange={e => setNewAccount({...newAccount, fullName: e.target.value})} required style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Email Address *</label>
+                    <input type="email" placeholder="lecturer@example.com" value={newAccount.email} onChange={e => setNewAccount({...newAccount, email: e.target.value})} required style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Department</label>
+                      <input type="text" placeholder="e.g. Software Engineering" value={newAccount.department} onChange={e => setNewAccount({...newAccount, department: e.target.value})} style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Campus</label>
+                      <select value={newAccount.campus} onChange={e => setNewAccount({...newAccount, campus: e.target.value})} style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', cursor: 'pointer', appearance: 'none', boxSizing: 'border-box' }}>
+                        <option value="">Select campus</option>
+                        <option value="Hanoi">Hanoi (Hoa Lac)</option>
+                        <option value="Ho Chi Minh">Ho Chi Minh</option>
+                        <option value="Da Nang">Da Nang</option>
+                        <option value="Can Tho">Can Tho</option>
+                        <option value="Quy Nhon">Quy Nhon</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Phone</label>
+                    <input type="tel" placeholder="e.g. 0912345678" value={newAccount.phone} onChange={e => setNewAccount({...newAccount, phone: e.target.value})} style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                    <button type="button" style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={handleCloseModal}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={isCreating}>
+                      {isCreating ? <><Loader2 size={16} className="spin" /> Creating...</> : <><GraduationCap size={16} /> Create Account</>}
+                    </button>
+                  </div>
+                </form>
+              </>
             )}
-
-            <form onSubmit={handleCreateAccount} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Full Name</label>
-                <input type="text" placeholder="e.g. Dr. Nguyen Van A" value={newAccount.name} onChange={e => setNewAccount({...newAccount, name: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none' }} />
-              </div>
-              
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Email Address</label>
-                <input type="email" placeholder="email@example.com" value={newAccount.email} onChange={e => setNewAccount({...newAccount, email: e.target.value})} required style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', color: 'var(--text-primary)', outline: 'none' }} />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>Assign Role</label>
-                <select value={newAccount.role} onChange={e => setNewAccount({...newAccount, role: e.target.value})} style={{ width: '100%', padding: '12px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
-                  <option value="Judge" style={{ color: 'black' }}>Judge</option>
-                  <option value="Mentor" style={{ color: 'black' }}>Mentor</option>
-                  <option value="Admin" style={{ color: 'black' }}>Admin</option>
-                </select>
-              </div>
-
-              <div style={{ marginTop: '8px', padding: '16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '8px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '500' }}>An email will be sent automatically with a secure login link and temporary password.</div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-                <button type="button" style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setShowCreateModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={isCreating}>
-                  <Save size={18} /> {isCreating ? 'Processing...' : 'Issue Account'}
-                </button>
-              </div>
-            </form>
           </div>
           
           <style>{`

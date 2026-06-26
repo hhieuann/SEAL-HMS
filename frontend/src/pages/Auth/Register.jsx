@@ -34,19 +34,13 @@ const Register = () => {
 
     setIsSubmitting(true);
     try {
-      // 1. Create account (needs studentCode)
-      await authApi.register(fptEmail, password, 'STUDENT', studentId);
+      // 1. Create account and student profile in one step
+      await authApi.register(fptEmail, password, 'STUDENT', studentId, firstName, lastName, campus);
       
-      // 2. Login to get token for profile creation
-      await authApi.login(fptEmail, password);
-      
-      // 3. Create student profile
-      const { default: apiClient } = await import('../../api/apiClient');
-      await apiClient.post('/api/v1/students', { firstName, lastName, campus });
       
       setSuccess('Account created successfully! Redirecting...');
       setTimeout(() => {
-        authApi.logout(); // Clears state and redirects to /login
+        navigate('/login');
       }, 1500);
     } catch (err) {
       console.error('Registration Error:', err);
