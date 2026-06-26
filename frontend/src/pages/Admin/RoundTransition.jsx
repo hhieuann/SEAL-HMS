@@ -19,16 +19,34 @@ const RoundTransition = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [trackStandings, setTrackStandings] = useState([]);
+  const [hasJudges, setHasJudges] = useState(false); // Default false: strict block until API confirms
 
   useEffect(() => {
     const loadData = async () => {
       try {
         const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
         const eventRes = await eventService.getEventDetails(parsedEventId);
+        
+        // Fetch judge assignments to validate starting rounds
+        try {
+          const { adminApi } = await import('../../api/adminApi.js');
+          const assignments = await adminApi.getEventAssignments(parsedEventId);
+          const judges = assignments.filter(a => a.role === 'JUDGE');
+          setHasJudges(judges.length > 0);
+        } catch (e) {
+          console.warn("Could not load assignments", e);
+        }
         const evt = eventRes.data;
         setEvent(evt);
 
-        const rounds = evt.rounds || [];
+        let rounds = evt.rounds || [];
+        // Sort rounds chronologically or by ID to prevent inverted UI
+        rounds.sort((a, b) => {
+          if (a.startTime && b.startTime) return new Date(a.startTime) - new Date(b.startTime);
+          return a.id - b.id;
+        });
+        evt.rounds = rounds; // Ensure the sorted array is used everywhere
+
         let savedRoundIdx = 0;
         if (rounds.length > 0) {
           let lastStartedIdx = -1;
@@ -66,12 +84,31 @@ const RoundTransition = () => {
           { color: 'var(--warning)' },
         ];
 
-        const teamsList = (await teamService.getTeamsByEvent(parsedEventId))?.data || [];
-
+        const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
+        const teamsList = teamsRes?.data || [];
+        
+        let dbTracks = [];
+        try {
+          const { trackService } = await import('../../api/trackService.js');
+          dbTracks = (await trackService.getTracksByEvent(parsedEventId))?.data || [];
+        } catch (e) {}
+        
         const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
-        if (trackDrawStr) {
-          const drawn = JSON.parse(trackDrawStr);
-          const standings = drawn.map((track, i) => {
+        let baseDraw = null;
+        
+        if (trackDrawStr && savedRoundIdx > 0) {
+           baseDraw = JSON.parse(trackDrawStr);
+        } else if (dbTracks.length > 0) {
+           // Construct baseDraw from DB
+           baseDraw = dbTracks.map(dbTrack => ({
+             id: dbTrack.id,
+             name: dbTrack.name, // optionally append topic later if needed
+             teams: teamsList.filter(t => t.trackId === dbTrack.id).map(t => ({ id: t.id, name: t.name }))
+           }));
+        }
+
+        if (baseDraw) {
+          const standings = baseDraw.map((track, i) => {
             const teamEntries = (track.teams || []).map(teamItem => {
               const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
               const teamObj = teamsList.find(t => t.name === teamNameStr);
@@ -89,7 +126,6 @@ const RoundTransition = () => {
             });
 
             // Assign rank and detect ties at the cutoff.
-            // Use promotionTopN from the round if available, else fall back to all teams advancing.
             const roundObj = evt.rounds?.[savedRoundIdx];
             const promotionTopN = roundObj?.promotionTopN ?? teamEntries.length;
             const cutoff = promotionTopN;
@@ -109,7 +145,7 @@ const RoundTransition = () => {
 
             return {
               id: track.id,
-              name: `${track.name}${track.subTopic ? ' — ' + track.subTopic.name : ''}`,
+              name: track.name,
               color: track.color || trackColors[i % trackColors.length].color,
               teams: ranked,
             };
@@ -118,23 +154,7 @@ const RoundTransition = () => {
           setTrackStandings(standings);
           if (standings.length > 0) setActiveTrack(standings[0].id);
         } else {
-          const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
-          const teams = teamsRes.data || [];
-          if (teams.length > 0) {
-            const roundObj = evt.rounds?.[savedRoundIdx];
-            const promotionTopN = roundObj?.promotionTopN ?? teams.length;
-            const placeholder = [{
-              id: 'all',
-              name: 'All Teams (No track draw yet)',
-              color: 'var(--primary)',
-              teams: teams.map((t, i) => ({
-                rank: i + 1, team: t.name,
-                score: null, status: i < promotionTopN ? 'advance' : 'eliminate', tied: false,
-              }))
-            }];
-            setTrackStandings(placeholder);
-            setActiveTrack('all');
-          }
+          setTrackStandings([]);
         }
       } catch (err) {
         console.error('RoundTransition load error:', err);
@@ -190,13 +210,34 @@ const RoundTransition = () => {
     setLockError(false);
     
     try {
-      const currentRoundObj = rounds[currentRoundIndex];
-      // If the current round hasn't started yet, we START it.
-      if (currentRoundObj.status === 'CREATED' || currentRoundObj.status?.toLowerCase() === 'planned') {
-        await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
-        window.location.reload();
-        return;
-      }
+        const currentRoundObj = rounds[currentRoundIndex];
+        // If the current round hasn't started yet, we START it.
+        if (currentRoundObj.status === 'CREATED' || currentRoundObj.status?.toLowerCase() === 'planned') {
+          if (!hasJudges) {
+            setLockError(true);
+            setLockShaking(true);
+            setTimeout(() => setLockShaking(false), 500);
+            alert("Cannot start round: No judges have been assigned to tracks yet. Please assign judges in the Track Assignment menu first.");
+            return;
+          }
+          await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
+          window.location.reload();
+          return;
+        }
+
+        // Validate scores before advancing (ALL teams must have a score)
+        // Check if any team has null or 0 score
+        const hasMissingScores = isLastRound
+          ? finalsTeamList.some(t => t.score == null || t.score === 0)
+          : trackStandings.some(track => track.teams.some(t => t.score == null || t.score === 0));
+        
+        if (trackStandings.length === 0 || hasMissingScores) {
+          setLockError(true);
+          setLockShaking(true);
+          setTimeout(() => setLockShaking(false), 500);
+          alert("Cannot advance/finalize: Some teams have not been scored yet (score is 0), or Track Draw is missing. Please ensure Judges have finished grading all teams.");
+          return;
+        }
 
       setConfirmed(true);
       setLockToast(true);
@@ -475,23 +516,24 @@ const RoundTransition = () => {
                     <p>No teams assigned to this track yet.</p>
                   </div>
                 ) : activeTrackData.teams.map((s, i) => {
-                  const finalStatus = s.status === 'tiebreak'
+                  const isFinished = ['SCORING', 'UNDER_REVIEW', 'COMPLETED'].includes(currentRound?.status);
+                  const finalStatus = !isFinished ? 'neutral' : (s.status === 'tiebreak'
                     ? (resolvedTies[s.team] === 'Advanced' ? 'advance' : resolvedTies[s.team] === 'Eliminated' ? 'eliminate' : 'tiebreak')
-                    : s.status;
+                    : s.status);
 
                   return (
                     <React.Fragment key={i}>
-                      {i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
+                      {isFinished && i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
                         <div style={{ padding: '8px 24px', background: 'rgba(16,185,129,0.1)', borderTop: '1px dashed rgba(16,185,129,0.6)', borderBottom: '1px dashed rgba(16,185,129,0.6)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ChevronRight size={14} color="var(--success)" />
                           <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cutoff → {nextRound?.name}</span>
                         </div>
                       )}
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent', opacity: finalStatus === 'eliminate' ? 0.6 : 1 }}>
-                        <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: s.rank <= 2 ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
+                        <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: (!isFinished || s.rank <= 2) ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: '600', fontSize: '14px' }}>{s.team}</div>
-                          {s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
+                          {isFinished && s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
@@ -499,6 +541,7 @@ const RoundTransition = () => {
                           </div>
                           {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
                           {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
+                          {finalStatus === 'neutral' && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>—</span>}
                         </div>
                       </div>
                     </React.Fragment>

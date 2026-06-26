@@ -65,11 +65,29 @@ const JudgePanel = () => {
         // Load real teams from backend
         const teamsData = await teamService.getTeamsByEvent(evt.id);
         const teamsList = teamsData?.data || teamsData || [];
-        const approvedTeams = teamsList.filter(t => {
+        let approvedTeams = teamsList.filter(t => {
           const isStatusValid = ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status);
           const isTrackValid = (ctx && ctx.trackId) ? t.trackId === ctx.trackId : true;
           return isStatusValid && isTrackValid;
         });
+
+        // For rounds after Round 1, only show teams that advanced
+        if (activeRoundIdx > 0) {
+          const trackDrawStr = localStorage.getItem(`trackDraw_${evt.id}`);
+          if (trackDrawStr) {
+            const advancedDraw = JSON.parse(trackDrawStr);
+            const advancedTeamNames = new Set();
+            advancedDraw.forEach(track => {
+              (track.teams || []).forEach(t => {
+                const name = typeof t === 'object' ? t.name : t;
+                if (name) advancedTeamNames.add(name);
+              });
+            });
+            if (advancedTeamNames.size > 0) {
+              approvedTeams = approvedTeams.filter(t => advancedTeamNames.has(t.name));
+            }
+          }
+        }
 
         if (approvedTeams.length > 0) {
           // Load criteria for this round

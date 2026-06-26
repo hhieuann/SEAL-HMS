@@ -59,7 +59,7 @@ const TrackDraw = () => {
 
         setSubTopics(realSubTopics);
 
-        const validTeams = (teamsRes.data || []).filter(t => ['CREATED', 'REGISTERED', 'APPROVED', 'CONFIRMED'].includes(t.status));
+        const validTeams = (teamsRes.data || []).filter(t => ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status));
         const realTeams = validTeams.map(t => ({ id: t.id, name: t.name, trackId: t.trackId })); // Keep objects for ID usage
         setActiveTeamsList(realTeams);
         setIsConfigured(true);
