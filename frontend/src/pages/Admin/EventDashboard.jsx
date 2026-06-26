@@ -9,6 +9,7 @@ const EventDashboard = () => {
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
   const [statusActionLoading, setStatusActionLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -102,6 +103,13 @@ const EventDashboard = () => {
     }
   };
 
+  const executeConfirmAction = () => {
+    if (confirmAction) {
+      handleUpdateEvent(confirmAction);
+      setConfirmAction(null);
+    }
+  };
+
 
   if (!event) {
     return (
@@ -154,7 +162,7 @@ const EventDashboard = () => {
             <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>— the event is still in Planning status. Open registration so participants can sign up.</span>
           </div>
           <button className="btn btn-primary" style={{ background: 'var(--warning)', color: '#000', padding: '8px 16px', fontSize: '13px' }}
-            disabled={statusActionLoading} onClick={() => handleUpdateEvent({ status: 'UPCOMING' })}>
+            disabled={statusActionLoading} onClick={() => setConfirmAction({ status: 'UPCOMING', label: 'Open Registration' })}>
             <Unlock size={14} /> Open Registration
           </button>
         </div>
@@ -183,7 +191,7 @@ const EventDashboard = () => {
         </div>
         {sc.nextStatus && (
           <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-            disabled={statusActionLoading} onClick={() => handleUpdateEvent({ status: sc.nextStatus })}>
+            disabled={statusActionLoading} onClick={() => setConfirmAction({ status: sc.nextStatus, label: sc.nextLabel })}>
             {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}
           </button>
         )}
@@ -348,6 +356,27 @@ const EventDashboard = () => {
                 </div>
               )
             ))}
+          </div>
+        </div>
+      )}
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setConfirmAction(null)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '100%', maxWidth: '400px', background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--warning)' }}>
+              <AlertTriangle size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px', color: 'var(--text-primary)' }}>{confirmAction.label}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to proceed with this action? This will update the current phase of the event for all users.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button style={{ flex: 1, padding: '10px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={executeConfirmAction}>
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}
