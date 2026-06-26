@@ -211,6 +211,20 @@ public class EventService {
         response.setCreatedAt(event.getCreatedAt());
         response.setUpdatedAt(event.getUpdatedAt());
         response.setCurrentTeams((int) teamRepository.countByEventId(event.getId()));
+
+        boolean isRegOpen = true;
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (event.getRegistrationEndDate() != null && today.isAfter(event.getRegistrationEndDate())) {
+            isRegOpen = false;
+        }
+        if (event.getRegistrationStartDate() != null && today.isBefore(event.getRegistrationStartDate())) {
+            isRegOpen = false;
+        }
+        if (event.getMaxTeams() != null && response.getCurrentTeams() >= event.getMaxTeams()) {
+            isRegOpen = false;
+        }
+        response.setRegistrationOpen(isRegOpen);
+
         return response;
     }
 
