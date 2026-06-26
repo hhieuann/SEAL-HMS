@@ -70,7 +70,7 @@ const GlobalDashboard = () => {
               <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Calendar size={20} color="var(--primary)" /> Manage Events
               </h2>
-              <button className="btn btn-secondary" onClick={() => navigate('/admin/events/new')}>Create New Event</button>
+              <button className="btn btn-secondary" onClick={() => navigate('/admin/events/create')}>Create New Event</button>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '0 24px 24px 24px' }}>

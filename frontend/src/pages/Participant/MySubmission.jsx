@@ -122,6 +122,24 @@ const MySubmission = () => {
             }
           }
         }
+        
+        // Check if team is eliminated
+        if (tId && activeRoundIdx > 0) {
+          const trackDrawStr = localStorage.getItem(`trackDraw_${eventIdStr}`);
+          if (trackDrawStr) {
+            const nextRoundDraw = JSON.parse(trackDrawStr);
+            let found = false;
+            for (const track of nextRoundDraw) {
+               if (track.teams?.some(t => typeof t === 'object' ? t.id == tId || t.name === teamData?.name : t === teamData?.name)) {
+                 found = true;
+                 break;
+               }
+            }
+            if (!found) {
+               setExistingSubmission({ eliminated: true });
+            }
+          }
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -200,6 +218,18 @@ const MySubmission = () => {
         <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
         <h2 style={{ marginBottom: '8px' }}>No Active Round</h2>
         <p>There is no active round for submission right now. Please wait for the Admin to start a round.</p>
+      </div>
+    );
+  }
+
+  if (existingSubmission?.eliminated) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>
+        <XCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.7 }} />
+        <h2 style={{ marginBottom: '8px', color: 'var(--danger)', fontWeight: '800' }}>Team Eliminated</h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '0 auto' }}>
+          We're sorry, but your team did not advance to {currentRound.name}. Thank you for your participation and hard work!
+        </p>
       </div>
     );
   }

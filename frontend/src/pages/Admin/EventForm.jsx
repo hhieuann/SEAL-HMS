@@ -139,8 +139,7 @@ const EventForm = () => {
             promotionTopN: isFinalRound ? null : (r.promotionTopN ? parseInt(r.promotionTopN, 10) : null),
             criteria: r.criteria.map(c => ({ name: c.name, weight: c.weight, maxScore: 100 }))
           };
-        }),
-        tracks: [{ name: 'General Track', description: 'Default track for the event', topics: formData.subTopics.map(t => ({ name: t.name, description: t.desc })) }]
+        })
       };
 
       const { eventService } = await import('../../api/eventService.js');
