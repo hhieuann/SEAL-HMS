@@ -192,24 +192,23 @@
 
 /* Timeline */
 .timeline {
-  position: relative;
   padding-left: 20px;
   margin-top: 10px;
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 4px;
-  height: 100%;
-  width: 2px;
-  background: var(--border-color);
 }
 
 .timeline-item {
   position: relative;
   margin-bottom: 24px;
+}
+
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: -24px;
+  left: -16px;
+  width: 2px;
+  background: var(--border-color);
 }
 
 .timeline-item:last-child {
