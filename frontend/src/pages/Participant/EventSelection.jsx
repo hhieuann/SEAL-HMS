@@ -180,18 +180,27 @@ const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
   let currentRound = null;
   
   if (evt.rounds && evt.rounds.length > 0) {
-    currentRound = evt.rounds.find(r => {
-      const start = r.startTime ? new Date(r.startTime) : new Date(0);
-      const end = r.endTime ? new Date(r.endTime) : new Date(8640000000000000);
-      return now >= start && now <= end;
-    });
+    currentRound = evt.rounds.find(r => r.status && r.status.toUpperCase() === 'ACTIVE');
+    
+    if (!currentRound) {
+      currentRound = evt.rounds.find(r => {
+        const start = r.startTime ? new Date(r.startTime) : new Date(0);
+        const end = r.endTime ? new Date(r.endTime) : new Date(8640000000000000);
+        return now >= start && now <= end;
+      });
+    }
     if (!currentRound) {
        currentRound = evt.rounds.find(r => r.startTime && new Date(r.startTime) > now);
     }
   }
 
-  const targetTime = currentRound ? (now >= new Date(currentRound.startTime) ? currentRound.endTime : currentRound.startTime) : evt.endDate;
-  const countdownLabel = currentRound ? (now >= new Date(currentRound.startTime) ? "Ends in:" : "Starts in:") : "Ends in:";
+  const isActive = currentRound && (
+    (currentRound.status && currentRound.status.toUpperCase() === 'ACTIVE') ||
+    (now >= new Date(currentRound.startTime || 0) && now <= new Date(currentRound.endTime || 8640000000000000))
+  );
+
+  const targetTime = currentRound ? (isActive ? currentRound.endTime : currentRound.startTime) : evt.endDate;
+  const countdownLabel = currentRound ? (isActive ? "Ends in:" : "Starts in:") : "Ends in:";
   const roundTimeLeft = useCountdown(targetTime);
 
   return (

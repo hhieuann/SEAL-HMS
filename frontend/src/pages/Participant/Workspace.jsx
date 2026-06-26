@@ -26,7 +26,8 @@ const Workspace = () => {
     releasedAt: 'TBD',
     deadline: 'TBD',
     remainingHours: '0h 0m',
-    durationStr: '0h'
+    durationStr: '0h',
+    promotionTopN: '--'
   });
 
   const [showNotification, setShowNotification] = useState(false);
@@ -174,15 +175,26 @@ const Workspace = () => {
                 setCurrentRoundName(rName);
 
                 let durationStr = '0h';
-                let diffMins = 0;
+                let actualRemaining = '0h 0m';
                 if (round.startTime && round.endTime) {
                   const startD = new Date(round.startTime);
                   const endD = new Date(round.endTime);
-                  diffMins = Math.floor((endD - startD) / (1000 * 60));
+                  const now = new Date();
+                  
+                  const diffMins = Math.floor((endD - startD) / (1000 * 60));
                   if (diffMins > 0) {
                     const h = Math.floor(diffMins / 60);
                     const m = diffMins % 60;
                     durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  }
+                  
+                  const remainMins = Math.floor((endD - now) / (1000 * 60));
+                  if (remainMins > 0) {
+                    const h = Math.floor(remainMins / 60);
+                    const m = remainMins % 60;
+                    actualRemaining = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  } else {
+                    actualRemaining = 'Ended';
                   }
                 }
 
@@ -193,8 +205,10 @@ const Workspace = () => {
                     title: `${rName} - ${trackPart}`,
                     releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
                     deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
-                    remainingHours: durationStr,
-                    durationStr: durationStr
+                    remainingHours: actualRemaining,
+                    durationStr: durationStr,
+                    rawEndTime: round.endTime,
+                    promotionTopN: round.promotionTopN
                   };
                 });
               }
@@ -216,7 +230,35 @@ const Workspace = () => {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
-
+  useEffect(() => {
+    const updateRemaining = () => {
+      setProblemStatement(prev => {
+        if (!prev.rawEndTime) return prev;
+        
+        const endD = new Date(prev.rawEndTime);
+        const now = new Date();
+        const diffMins = Math.floor((endD - now) / (1000 * 60));
+        
+        let newRemaining = '0h 0m';
+        if (diffMins > 0) {
+          const h = Math.floor(diffMins / 60);
+          const m = diffMins % 60;
+          newRemaining = m > 0 ? `${h}h ${m}m` : `${h}h`;
+        } else {
+          newRemaining = 'Ended';
+        }
+        
+        if (prev.remainingHours !== newRemaining) {
+          return { ...prev, remainingHours: newRemaining };
+        }
+        return prev;
+      });
+    };
+    
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 60000);
+    return () => clearInterval(interval);
+  }, []);
   const [tasks, setTasks] = useState(() => {
     return JSON.parse(localStorage.getItem(`ws_tasks_${tId}`) || '[]');
   });
@@ -395,12 +437,8 @@ const Workspace = () => {
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Teams / Track</div>
                 </div>
                 <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>2</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>{problemStatement.promotionTopN || '--'}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>To Final Round</div>
-                </div>
-                <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--warning)' }}>{problemStatement.durationStr || '7h'}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Code</div>
                 </div>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>

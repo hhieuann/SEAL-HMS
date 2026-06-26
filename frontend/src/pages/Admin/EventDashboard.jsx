@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2 } from 'lucide-react';
+import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, GraduationCap, X, Plus, UserCheck, Loader2 } from 'lucide-react';
 import './EventDashboard.css';
 
 const EventDashboard = () => {
@@ -44,6 +44,14 @@ const EventDashboard = () => {
         const allTopics = await Promise.all(topicsPromises);
         const subTopics = allTopics.flat();
 
+        // Fetch Teams
+        try {
+          const teamsData = await teamService.getTeamsByEvent(parsedId);
+          setTeams(teamsData?.data || teamsData || []);
+        } catch (e) {
+          console.error("Failed to load teams", e);
+        }
+
         // Fetch Criteria
         const { criterionService } = await import('../../api/scoreService.js');
         const roundsWithCriteriaPromises = rawRounds.map(async r => {
@@ -69,11 +77,8 @@ const EventDashboard = () => {
         };
 
         setEvent(enrichedEvent);
-
-        // Fetch Teams
-        teamService.getTeamsByEvent(parsedId)
-          .then(res => setTeams(res.data || []))
-          .catch(err => console.error(err));
+        // Store raw tracks if needed
+        setTracks(tracks);
 
       } catch (err) {
         console.error("Failed to load event dashboard data", err);

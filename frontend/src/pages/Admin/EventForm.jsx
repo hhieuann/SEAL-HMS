@@ -57,12 +57,14 @@ const EventForm = () => {
   const hasRoundErrors = allRoundErrors.some(e => e.length > 0);
 
   const maxTeamsNum = parseInt(formData.maxTeams) || 0;
+  const trackCount = Math.max(1, formData.subTopics?.length || 1);
   const teamFlow = formData.rounds.reduce((acc, round, idx) => {
     const isFinal    = idx === formData.rounds.length - 1;
-    const prevLeft   = acc.length > 0 ? acc[acc.length - 1].promoted : maxTeamsNum;
-    const promoted = (!isFinal && round.promotionTopN) ? (parseInt(round.promotionTopN) || 0) : 0;
-    const isInvalid = !isFinal && (promoted < 1 || promoted >= prevLeft);
-    acc.push({ name: round.name || `Round ${idx + 1}`, isFinal, promoted, isInvalid });
+    const prevLeft   = acc.length > 0 ? acc[acc.length - 1].promotedTotal : maxTeamsNum;
+    const promotedPerTrack = (!isFinal && round.promotionTopN) ? (parseInt(round.promotionTopN) || 0) : 0;
+    const promotedTotal = promotedPerTrack * trackCount;
+    const isInvalid = !isFinal && (promotedTotal < 1 || promotedTotal >= prevLeft);
+    acc.push({ name: round.name || `Round ${idx + 1}`, isFinal, promotedPerTrack, promotedTotal, isInvalid });
     return acc;
   }, []);
   const hasTeamFlowError = teamFlow.some(r => r.isInvalid);
@@ -81,8 +83,8 @@ const EventForm = () => {
         const rawRounds = roundsRes.data || [];
         const tracksRes = await trackService.getTracksByEvent(eventId);
         const tracks    = tracksRes.data || [];
-        const allTopics = await Promise.all(tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || [])));
-        const subTopics = allTopics.flat().map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
+        const topicsRes = await trackService.getTopicsByEvent(eventId);
+        const subTopics = (topicsRes.data || []).map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
         setInitialTopics(subTopics);
         const parseTime = (val) => {
           if (!val) return '';
@@ -163,26 +165,18 @@ const EventForm = () => {
             } catch(e) { console.error(e); }
           }
         }
-        const tr = await trackService.getTracksByEvent(eventId);
-        let gt = tr.data?.find(t => t.name === 'General Track');
-        if (!gt) { const nt = await trackService.createTrack(eventId, { name: 'General Track', description: 'Default' }); gt = nt.data; }
-        if (gt?.id) {
-          const ctids = formData.subTopics.map(t => t.id);
-          for (const it of initialTopics) { if (!ctids.includes(it.id)) { try { await trackService.deleteTopic(it.id); } catch(e) { console.error(e); } } }
-          for (const ft of formData.subTopics) {
-            if (ft.id && ft.id < 1000000000) { try { await trackService.updateTopic(ft.id, { name: ft.name, description: ft.desc }); } catch(e) { console.error(e); } }
-            else { try { await trackService.createTopic(gt.id, { name: ft.name, description: ft.desc }); } catch(e) { console.error(e); } }
-          }
+        const ctids = formData.subTopics.map(t => t.id);
+        for (const it of initialTopics) { if (!ctids.includes(it.id)) { try { await trackService.deleteTopic(it.id); } catch(e) { console.error(e); } } }
+        for (const ft of formData.subTopics) {
+          if (ft.id && ft.id < 1000000000) { try { await trackService.updateTopic(ft.id, { name: ft.name, description: ft.desc }); } catch(e) { console.error(e); } }
+          else { try { await trackService.createTopicByEvent(eventId, { name: ft.name, description: ft.desc }); } catch(e) { console.error(e); } }
         }
       } else {
         response = await eventService.createEventBatch(requestData);
         const savedId = response.data?.id || eventId;
         if (formData.subTopics?.length > 0) {
           try {
-            const tr2 = await trackService.getTracksByEvent(savedId);
-            let gt2 = tr2.data?.find(t => t.name === 'General Track');
-            if (!gt2) { const nt2 = await trackService.createTrack(savedId, { name: 'General Track', description: 'Default' }); gt2 = nt2.data; }
-            if (gt2?.id) for (const topic of formData.subTopics) await trackService.createTopic(gt2.id, { name: topic.name, description: topic.desc });
+            for (const topic of formData.subTopics) await trackService.createTopicByEvent(savedId, { name: topic.name, description: topic.desc });
           } catch(e) { console.error(e); }
           try {
             const rr2 = await eventService.getEventRounds(savedId);
@@ -375,7 +369,7 @@ const EventForm = () => {
                       <span style={{fontSize:'11px',color:'var(--text-secondary)',padding:'0 2px'}}>→</span>
                       <span style={{fontSize:'13px',padding:'4px 10px',borderRadius:'8px',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px',background:r.isInvalid?'rgba(239,68,68,0.15)':r.isFinal?'rgba(255,215,0,0.15)':'var(--bg-hover)',color:r.isInvalid?'var(--danger)':r.isFinal?'#b8860b':'var(--text-primary)',border:`1px solid ${r.isInvalid?'rgba(239,68,68,0.4)':'transparent'}`}}>
                         {r.isFinal?'🏆':r.isInvalid?'❌':''}{r.name}
-                        {!r.isFinal&&<span style={{fontSize:'11px',color:r.isInvalid?'var(--danger)':'var(--text-secondary)'}}>({r.promoted} promoted)</span>}
+                        {!r.isFinal&&<span style={{fontSize:'11px',color:r.isInvalid?'var(--danger)':'var(--text-secondary)'}}>({r.promotedPerTrack} per track = {r.promotedTotal} total)</span>}
                       </span>
                     </React.Fragment>
                   ))}
@@ -415,7 +409,7 @@ const EventForm = () => {
                         </div>
                         {!isFinalRound?(
                           <div style={{flex:1,minWidth:'140px'}}>
-                            <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Teams Promoted<span style={{display:'block',fontSize:'10px',fontWeight:'400'}}>to next round</span></label>
+                            <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Teams Promoted <span style={{fontSize:'10px',fontWeight:'400'}}>(per track)</span></label>
                             <div style={{position:'relative'}}>
                               <input type="number" min="1" style={{...inp(),paddingRight:'40px'}} placeholder="e.g. 10" value={round.promotionTopN} onChange={e=>updateRound(round.id,'promotionTopN',e.target.value)}/>
                               <span style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',fontSize:'11px',color:'var(--text-secondary)',pointerEvents:'none'}}>teams</span>
