@@ -65,9 +65,11 @@ const JudgePanel = () => {
         // Load real teams from backend
         const teamsData = await teamService.getTeamsByEvent(evt.id);
         const teamsList = teamsData?.data || teamsData || [];
-        const approvedTeams = teamsList.filter(t =>
-          ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)
-        );
+        const approvedTeams = teamsList.filter(t => {
+          const isStatusValid = ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status);
+          const isTrackValid = (ctx && ctx.trackId) ? t.trackId === ctx.trackId : true;
+          return isStatusValid && isTrackValid;
+        });
 
         if (approvedTeams.length > 0) {
           // Load criteria for this round

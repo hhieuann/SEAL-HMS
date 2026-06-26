@@ -34,5 +34,39 @@ export const adminApi = {
   rejectAccount: async (accountId) => {
     const response = await apiClient.patch(`/api/v1/accounts/${accountId}/status`, { status: 'DISABLED' });
     return response.data;
+  },
+
+  // --- Lecturer Management ---
+
+  createLecturerAccount: async ({ email, fullName, department, campus, phone }) => {
+    const response = await apiClient.post('/api/v1/lecturers/admin-create', {
+      email, fullName, department, campus, phone
+    });
+    return response.data.data; // { accountId, email, fullName, tempPassword }
+  },
+
+  getLecturers: async () => {
+    const response = await apiClient.get('/api/v1/lecturers');
+    return response.data.data || []; // [{ id, accountId, email, fullName, department, campus, phone }]
+  },
+
+  // --- Track Assignments ---
+
+  getEventAssignments: async (eventId) => {
+    const response = await apiClient.get(`/api/v1/events/${eventId}/assignments`);
+    return response.data.data || [];
+  },
+
+  assignLecturerToTrack: async (trackId, lecturerId, role) => {
+    const response = await apiClient.post(`/api/v1/tracks/${trackId}/assignments`, {
+      lecturerId, role
+    });
+    return response.data.data;
+  },
+
+  removeAssignment: async (assignmentId) => {
+    const response = await apiClient.delete(`/api/v1/track-assignments/${assignmentId}`);
+    return response.data;
   }
 };
+
