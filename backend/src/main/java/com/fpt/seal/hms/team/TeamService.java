@@ -4,6 +4,7 @@ import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
 import com.fpt.seal.hms.chapter.ChapterRepository;
 import com.fpt.seal.hms.chapter.entity.Chapter;
+import com.fpt.seal.hms.common.enums.EventStatus;
 import com.fpt.seal.hms.common.enums.MemberRole;
 import com.fpt.seal.hms.common.enums.MemberStatus;
 import com.fpt.seal.hms.common.enums.TeamStatus;
@@ -126,6 +127,10 @@ public class TeamService {
     public TeamResponse assignRandomTrackAndTopic(Long teamId, Long eventId) {
         Team team = findTeamEntityById(teamId);
 
+        if (team.getEvent() != null && (team.getEvent().getStatus() == EventStatus.PLANNED || team.getEvent().getStatus() == EventStatus.UPCOMING)) {
+            throw new BusinessException("Cannot assign tracks while registration is still open. Please lock registration first.");
+        }
+
         if (team.getStatus() != TeamStatus.REGISTERED) {
             throw new BusinessException("Team must be APPROVED (REGISTERED) by staff before assigning track.");
         }
@@ -153,6 +158,11 @@ public class TeamService {
     @Transactional
     public TeamResponse assignTrack(Long teamId, Long trackId) {
         Team team = findTeamEntityById(teamId);
+
+        if (team.getEvent() != null && (team.getEvent().getStatus() == EventStatus.PLANNED || team.getEvent().getStatus() == EventStatus.UPCOMING)) {
+            throw new BusinessException("Cannot assign tracks while registration is still open. Please lock registration first.");
+        }
+
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
         team.setTrack(track);

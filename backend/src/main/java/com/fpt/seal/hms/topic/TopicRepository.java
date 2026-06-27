@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface TopicRepository extends JpaRepository<Topic, Long> {
     List<Topic> findByTrackId(Long trackId);
+    List<Topic> findByEventId(Long eventId);
 }

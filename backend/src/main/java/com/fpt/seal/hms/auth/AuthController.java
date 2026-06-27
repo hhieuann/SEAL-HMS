@@ -27,7 +27,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ApiResponse<AccountResponse> register(@Valid @RequestBody RegisterRequest request) {
-        Account account = accountService.register(request.email(), request.password(), request.role(), request.studentCode());
+        Account account = accountService.register(request.email(), request.password(), request.role(), request.studentCode(), request.firstName(), request.lastName(), request.campus());
         return ApiResponse.ok("Registered", AccountResponse.from(account));
     }
 

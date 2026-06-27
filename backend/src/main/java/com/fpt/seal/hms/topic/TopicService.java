@@ -1,6 +1,8 @@
 package com.fpt.seal.hms.topic;
 
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
+import com.fpt.seal.hms.event.EventRepository;
+import com.fpt.seal.hms.event.entity.Event;
 import com.fpt.seal.hms.topic.dto.TopicRequest;
 import com.fpt.seal.hms.topic.dto.TopicResponse;
 import com.fpt.seal.hms.topic.entity.Topic;
@@ -19,10 +21,18 @@ public class TopicService {
 
     private final TopicRepository topicRepository;
     private final TrackRepository trackRepository;
+    private final EventRepository eventRepository;
 
     @Transactional(readOnly = true)
     public List<TopicResponse> getTopicsByTrackId(Long trackId) {
         return topicRepository.findByTrackId(trackId).stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<TopicResponse> getTopicsByEventId(Long eventId) {
+        return topicRepository.findByEventId(eventId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -34,16 +44,39 @@ public class TopicService {
     }
 
     @Transactional
-    public TopicResponse createTopic(Long trackId, TopicRequest request) {
+    public TopicResponse createTopicUnderTrack(Long trackId, TopicRequest request) {
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
 
         Topic topic = new Topic();
         topic.setTrack(track);
+        topic.setEvent(track.getEvent());
         topic.setName(request.getName());
         topic.setDescription(request.getDescription());
 
         return mapToResponse(topicRepository.save(topic));
+    }
+
+    @Transactional
+    public TopicResponse createTopicUnderEvent(Long eventId, TopicRequest request) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + eventId));
+
+        Topic topic = new Topic();
+        topic.setEvent(event);
+        topic.setName(request.getName());
+        topic.setDescription(request.getDescription());
+
+        return mapToResponse(topicRepository.save(topic));
+    }
+
+    @Transactional
+    public void assignTrack(Long topicId, Long trackId) {
+        Topic topic = findTopicEntityById(topicId);
+        Track track = trackRepository.findById(trackId)
+                .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
+        topic.setTrack(track);
+        topicRepository.save(topic);
     }
 
     @Transactional
@@ -70,7 +103,9 @@ public class TopicService {
     private TopicResponse mapToResponse(Topic topic) {
         TopicResponse response = new TopicResponse();
         response.setId(topic.getId());
-        response.setTrackId(topic.getTrack().getId());
+        if (topic.getTrack() != null) {
+            response.setTrackId(topic.getTrack().getId());
+        }
         response.setName(topic.getName());
         response.setDescription(topic.getDescription());
         return response;

@@ -23,18 +23,40 @@ public class TopicController {
         return ResponseEntity.ok(ApiResponse.ok(topicService.getTopicsByTrackId(trackId)));
     }
 
+    @GetMapping("/events/{eventId}/topics")
+    public ResponseEntity<ApiResponse<List<TopicResponse>>> getTopicsByEventId(@PathVariable Long eventId) {
+        return ResponseEntity.ok(ApiResponse.ok(topicService.getTopicsByEventId(eventId)));
+    }
+
     @GetMapping("/topics/{id}")
     public ResponseEntity<ApiResponse<TopicResponse>> getTopicById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(topicService.getTopicById(id)));
     }
 
     @PostMapping("/tracks/{trackId}/topics")
-    public ResponseEntity<ApiResponse<TopicResponse>> createTopic(
+    public ResponseEntity<ApiResponse<TopicResponse>> createTopicUnderTrack(
             @PathVariable Long trackId,
             @Valid @RequestBody TopicRequest request) {
-        TopicResponse created = topicService.createTopic(trackId, request);
+        TopicResponse created = topicService.createTopicUnderTrack(trackId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Topic created successfully", created));
+    }
+
+    @PostMapping("/events/{eventId}/topics")
+    public ResponseEntity<ApiResponse<TopicResponse>> createTopicUnderEvent(
+            @PathVariable Long eventId,
+            @Valid @RequestBody TopicRequest request) {
+        TopicResponse created = topicService.createTopicUnderEvent(eventId, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Topic created successfully", created));
+    }
+
+    @PatchMapping("/topics/{id}/assign-track")
+    public ResponseEntity<ApiResponse<Void>> assignTrack(
+            @PathVariable Long id,
+            @RequestParam Long trackId) {
+        topicService.assignTrack(id, trackId);
+        return ResponseEntity.ok(ApiResponse.ok("Topic assigned to track successfully", null));
     }
 
     @PutMapping("/topics/{id}")

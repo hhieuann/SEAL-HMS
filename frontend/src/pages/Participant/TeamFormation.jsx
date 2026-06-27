@@ -50,7 +50,7 @@ const TeamFormation = () => {
       
       setActiveTab('success_create');
     } catch (err) {
-      setError(err.message || 'Failed to create team');
+      setError(err.response?.data?.message || err.message || 'Failed to create team');
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
     } finally {

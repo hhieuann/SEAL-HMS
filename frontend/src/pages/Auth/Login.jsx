@@ -18,18 +18,24 @@ const Login = () => {
     david: { name: 'David Kim', type: 'expert', roles: ['Mentor'], avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
   };
 
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     
+    // Đọc trực tiếp từ DOM (chống lỗi Autofill không kích hoạt onChange của React)
+    // Và trim() khoảng trắng thừa (rất hay gặp khi lưu nhầm pass có dấu cách ở đuôi vào trình duyệt)
+    const form = e.target;
+    const cleanEmail = form.email?.value?.trim() || email.trim();
+    const cleanPassword = form.password?.value?.trim() || password.trim();
+
     setIsSubmitting(true);
 
     try {
       // Call real backend API
-      const { role } = await authApi.login(emailInput, passwordInput);
+      const { role } = await authApi.login(cleanEmail, cleanPassword);
       
       // Giả lập lưu currentUser để tương thích giao diện cũ
       let user = accounts['participant'];
@@ -79,9 +85,11 @@ const Login = () => {
           <input 
             type="email" 
             id="email" 
+            name="email" 
+            autoComplete="username" 
             placeholder=" " 
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} 
           />
           <label htmlFor="email">Email Address</label>
@@ -90,9 +98,11 @@ const Login = () => {
           <input 
             type="password" 
             id="password" 
+            name="password" 
+            autoComplete="current-password" 
             placeholder=" " 
-            value={passwordInput}
-            onChange={(e) => setPasswordInput(e.target.value)}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
           <label htmlFor="password">Password</label>
         </div>
