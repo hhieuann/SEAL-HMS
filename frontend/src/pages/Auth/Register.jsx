@@ -17,20 +17,43 @@ const Register = () => {
     setError('');
     setSuccess('');
 
-    // Nếu chưa chọn file ảnh (bỏ qua cho dễ test)
-    // if (!proofFile) {
-    //   setError('Please upload your Student ID or FAP Screenshot.');
-    //   setShaking(true);
-    //   setTimeout(() => setShaking(false), 500);
-    //   return;
-    // }
-
-    const firstName = document.getElementById('firstName').value;
-    const lastName = document.getElementById('lastName').value;
-    const fptEmail = document.getElementById('fptEmail').value;
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName = document.getElementById('lastName').value.trim();
+    const fptEmail = document.getElementById('fptEmail').value.trim();
     const password = document.getElementById('regPassword').value;
-    const studentId = document.getElementById('studentId').value;
+    const studentId = document.getElementById('studentId').value.trim();
     const campus = document.getElementById('campus').value;
+
+    if (!firstName || !lastName || !fptEmail || !password || !studentId || !campus) {
+      setError('Please fill in all required fields.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(fptEmail)) {
+      setError('Please enter a valid email address.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    const studentIdRegex = /^SE\d{6}$/i;
+    if (!studentIdRegex.test(studentId)) {
+      setError('Student ID must be in the format SEXXXXXX (e.g., SE204911)');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    // Require proof of student status
+    if (!proofFile) {
+      setError('Please upload your Student ID or FAP Screenshot as proof.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
