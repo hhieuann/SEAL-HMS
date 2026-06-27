@@ -45,6 +45,9 @@ public class AccountService {
             if (normalizedCode == null || normalizedCode.isBlank()) {
                 throw new BusinessException("Student code is required to register as a STUDENT");
             }
+            if (!normalizedCode.toUpperCase().matches("^SE\\d{6}$")) {
+                throw new BusinessException("Student code must be in the format SEXXXXXX (e.g. SE204911)");
+            }
             if (studentRepository.existsByStudentCode(normalizedCode)) {
                 throw new BusinessException("Student code already registered: " + normalizedCode);
             }
