@@ -23,6 +23,7 @@ public class EventResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer currentTeams;
+    private Boolean registrationOpen;
 
     private java.util.List<com.fpt.seal.hms.round.dto.RoundResponse> rounds;
     private java.util.List<com.fpt.seal.hms.track.dto.TrackResponse> tracks;

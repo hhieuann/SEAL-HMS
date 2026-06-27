@@ -1,10 +1,15 @@
 package com.fpt.seal.hms.lecturer;
 
+import com.fpt.seal.hms.account.Account;
+import com.fpt.seal.hms.account.AccountService;
 import com.fpt.seal.hms.common.dto.ApiResponse;
+import com.fpt.seal.hms.lecturer.dto.AdminCreateLecturerRequest;
+import com.fpt.seal.hms.lecturer.dto.AdminCreateLecturerResponse;
 import com.fpt.seal.hms.lecturer.dto.LecturerRequest;
 import com.fpt.seal.hms.lecturer.dto.LecturerResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +22,20 @@ import java.util.List;
 public class LecturerController {
 
     private final LecturerService lecturerService;
+    private final AccountService accountService;
+
+    /** Admin: create a lecturer account + profile in one step. Returns temp password. */
+    @PostMapping("/admin-create")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<AdminCreateLecturerResponse> adminCreate(@Valid @RequestBody AdminCreateLecturerRequest req) {
+        Object[] result = accountService.adminCreateLecturer(
+                req.email(), req.fullName(), req.department(), req.campus(), req.phone());
+        Account account = (Account) result[0];
+        String tempPassword = (String) result[1];
+        return ApiResponse.ok("Lecturer account created",
+                AdminCreateLecturerResponse.from(account, req.fullName(), tempPassword));
+    }
 
     /** Create the current user's lecturer profile. */
     @PostMapping

@@ -21,6 +21,21 @@ export const trackService = {
     return response.data;
   },
 
+  getTopicsByEvent: async (eventId) => {
+    const response = await apiClient.get(`/api/v1/events/${eventId}/topics`);
+    return response.data;
+  },
+
+  createTopicByEvent: async (eventId, topicData) => {
+    const response = await apiClient.post(`/api/v1/events/${eventId}/topics`, topicData);
+    return response.data;
+  },
+
+  assignTopicToTrack: async (topicId, trackId) => {
+    const response = await apiClient.patch(`/api/v1/topics/${topicId}/assign-track?trackId=${trackId}`);
+    return response.data;
+  },
+
   updateTopic: async (id, topicData) => {
     const response = await apiClient.put(`/api/v1/topics/${id}`, topicData);
     return response.data;

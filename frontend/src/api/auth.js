@@ -64,10 +64,13 @@ export const authApi = {
     }
   },
 
-  register: async (email, password, role = 'STUDENT', studentCode) => {
+  register: async (email, password, role = 'STUDENT', studentCode, firstName, lastName, campus) => {
     try {
       const payload = { email, password, role };
       if (studentCode) payload.studentCode = studentCode;
+      if (firstName) payload.firstName = firstName;
+      if (lastName) payload.lastName = lastName;
+      if (campus) payload.campus = campus;
       
       const response = await apiClient.post('/api/v1/auth/register', payload);
       // The register API returns the ID (unlike the login API). Store it immediately so new accounts work!

@@ -13,7 +13,7 @@ public class SealHmsApplication {
         // it as the deprecated alias "Asia/Saigon", which PostgreSQL 18 rejects outright
         // (before it ever reads the URL's ?options=TimeZone). Forcing a valid IANA zone
         // here is the only fix that works at that stage.
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        TimeZone.setDefault(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
         SpringApplication.run(SealHmsApplication.class, args);
     }
 }

@@ -160,52 +160,86 @@ const Scores = () => {
             const dbScoreMap = {};
             dbStandings.forEach(s => { if (s.teamId && s.score != null) dbScoreMap[s.teamId] = parseFloat(s.score); });
 
-            const trackDrawStr = localStorage.getItem(`trackDraw_${evt.id}`);
             let finalLeaderboard = [];
+            const isFinalsRound = savedRoundIdx === (evt.rounds.length - 1);
             
-            if (trackDrawStr) {
-              const drawn = JSON.parse(trackDrawStr);
-              const isFinalsRound = savedRoundIdx === (evt.rounds.length - 1);
-              
-              const standings = drawn.map(track => {
-                return (track.teams || []).map(teamItem => {
-                  const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
-                  const teamObj = myTeamsList.find(t => t.name === teamNameStr);
-                  const tId = teamObj?.id || (typeof teamItem === 'object' ? teamItem.id : undefined);
-                  const score = (tId && dbScoreMap[tId] != null) ? dbScoreMap[tId] : null;
-                  return { team: teamNameStr, teamId: tId, score, fromTrack: track.name };
-                });
-              });
+            // Try loading tracks from DB (works on any browser, not just admin's)
+            let dbTracks = [];
+            try {
+              const { trackService } = await import('../../api/trackService');
+              dbTracks = (await trackService.getTracksByEvent(evt.id))?.data || [];
+            } catch (e) {}
 
-              if (isFinalsRound) {
-                finalLeaderboard = standings.flat();
-                finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-                finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+            if (savedRoundIdx > 0) {
+              // Round 2+: Only show teams that have scores for THIS round (= teams that advanced)
+              // Teams eliminated in Round 1 won't have submissions/scores in Round 2
+              const teamsWithScores = myTeamsList.filter(t => dbScoreMap[t.id] != null);
+              
+              if (teamsWithScores.length > 0) {
+                finalLeaderboard = teamsWithScores.map(t => ({
+                  team: t.name, teamId: t.id, 
+                  score: dbScoreMap[t.id] ?? null,
+                  fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Finals'
+                }));
               } else {
-                const myTeamName = localStorage.getItem('myTeamName');
-                const myTrackIdx = drawn.findIndex(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
-                
-                if (myTrackIdx !== -1) {
-                  finalLeaderboard = standings[myTrackIdx];
-                  finalLeaderboard.sort((a, b) => {
-                    if (a.score === null && b.score === null) return 0;
-                    if (a.score === null) return 1;
-                    if (b.score === null) return -1;
-                    return b.score - a.score;
-                  });
-                  finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+                // No scores yet — fallback: use localStorage trackDraw if available (admin browser)
+                const trackDrawStr = localStorage.getItem(`trackDraw_${evt.id}`);
+                if (trackDrawStr) {
+                  const drawn = JSON.parse(trackDrawStr);
+                  finalLeaderboard = drawn.flatMap(track => 
+                    (track.teams || []).map(teamItem => {
+                      const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
+                      const teamObj = myTeamsList.find(t => t.name === teamNameStr);
+                      const tId = teamObj?.id;
+                      return { team: teamNameStr, teamId: tId, score: tId ? (dbScoreMap[tId] ?? null) : null, fromTrack: track.name };
+                    })
+                  );
                 }
               }
-            }
-            
-            // Fallback: If trackDraw doesn't exist (e.g. Incognito browser) or myTrackIdx was not found
-            if (finalLeaderboard.length === 0 && myTeamsList.length > 0) {
-              finalLeaderboard = myTeamsList.map(t => {
-                const score = dbScoreMap[t.id] != null ? dbScoreMap[t.id] : null;
-                return { team: t.name, teamId: t.id, score, fromTrack: 'Global' };
-              });
+
               finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
               finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+            } else {
+              // Round 1: show teams grouped by their DB track
+              if (dbTracks.length > 0) {
+                const myTeamName = localStorage.getItem('myTeamName');
+                const myTeam = myTeamsList.find(t => t.name === myTeamName);
+                const myTrackId = myTeam?.trackId;
+
+                if (myTrackId) {
+                  // Show only teams in same track
+                  const sameTrackTeams = myTeamsList.filter(t => t.trackId === myTrackId);
+                  finalLeaderboard = sameTrackTeams.map(t => ({
+                    team: t.name, teamId: t.id,
+                    score: dbScoreMap[t.id] ?? null,
+                    fromTrack: dbTracks.find(tr => tr.id === myTrackId)?.name || 'My Track'
+                  }));
+                } else {
+                  // Can't determine track, show all
+                  finalLeaderboard = myTeamsList.map(t => ({
+                    team: t.name, teamId: t.id,
+                    score: dbScoreMap[t.id] ?? null,
+                    fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Global'
+                  }));
+                }
+
+                finalLeaderboard.sort((a, b) => {
+                  if (a.score === null && b.score === null) return 0;
+                  if (a.score === null) return 1;
+                  if (b.score === null) return -1;
+                  return b.score - a.score;
+                });
+                finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+              } else {
+                // No DB tracks — show all teams globally
+                finalLeaderboard = myTeamsList.map(t => ({
+                  team: t.name, teamId: t.id,
+                  score: dbScoreMap[t.id] ?? null,
+                  fromTrack: 'Global'
+                }));
+                finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+                finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
+              }
             }
 
             setLeaderboard(finalLeaderboard);
