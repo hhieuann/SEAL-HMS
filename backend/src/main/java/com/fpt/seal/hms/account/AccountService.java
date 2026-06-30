@@ -247,6 +247,15 @@ public class AccountService {
         return account;
     }
 
+    /** Delete an account and its associated profile completely. */
+    @Transactional
+    public void deleteAccount(Long id) {
+        Account account = getById(id);
+        studentRepository.findByAccount_Id(id).ifPresent(studentRepository::delete);
+        lecturerRepository.findByAccount_Id(id).ifPresent(lecturerRepository::delete);
+        accountRepository.delete(account);
+    }
+
     @Transactional(readOnly = true)
     public String getFullName(Account acc) {
         if (acc.getRole() == Role.STUDENT) {

@@ -65,4 +65,12 @@ public class AccountController {
         return ApiResponse.ok("Role updated",
                 AccountResponse.from(accountService.updateRole(id, request.role())));
     }
+
+    /** Delete an account and its profile completely (e.g. Reject a pending student). */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<Void> deleteAccount(@PathVariable Long id) {
+        accountService.deleteAccount(id);
+        return ApiResponse.ok("Account deleted successfully", null);
+    }
 }

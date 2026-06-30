@@ -34,7 +34,7 @@ export const adminApi = {
   },
 
   rejectAccount: async (accountId) => {
-    const response = await apiClient.patch(`/api/v1/accounts/${accountId}/status`, { status: 'DISABLED' });
+    const response = await apiClient.delete(`/api/v1/accounts/${accountId}`);
     return response.data;
   },
 

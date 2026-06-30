@@ -7,6 +7,10 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seal_hms}?options=-c%20TimeZone=UTC
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
   jpa:
     hibernate:
       ddl-auto: validate          # NEVER 'update' on the shared repo
