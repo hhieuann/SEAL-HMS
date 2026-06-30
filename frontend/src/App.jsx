@@ -78,7 +78,7 @@ function App() {
           <Route path="scores" element={<Scores />} />
           <Route path="mentor" element={<ContactMentor />} />
           <Route path="faq" element={<FAQ />} />
-          <Route path="archive" element={<EventArchive />} />
+          <Route path="archive/:eventId" element={<EventArchive />} />
         </Route>
 
         {/* Admin/Coordinator Routes */}
