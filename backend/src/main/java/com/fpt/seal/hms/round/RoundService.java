@@ -94,6 +94,10 @@ public class RoundService {
 
         validateOneWayStatusTransition(currentStatus, newStatus);
         
+        if (newStatus == RoundStatus.ACTIVE && currentStatus == RoundStatus.CREATED) {
+            round.setStartTime(java.time.LocalDateTime.now());
+        }
+
         round.setStatus(newStatus);
         return mapToResponse(roundRepository.save(round));
     }
