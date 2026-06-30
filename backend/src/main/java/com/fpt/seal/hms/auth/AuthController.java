@@ -24,21 +24,33 @@ public class AuthController {
     private final AccountService accountService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final com.fpt.seal.hms.common.service.FileStorageService fileStorageService;
 
-    @PostMapping("/register")
-    public ApiResponse<AccountResponse> register(@Valid @RequestBody RegisterRequest request) {
-        Account account = accountService.register(request.email(), request.password(), request.role(), request.studentCode(), request.firstName(), request.lastName(), request.campus());
+    @PostMapping(value = "/register", consumes = "multipart/form-data")
+    public ApiResponse<AccountResponse> register(@Valid @org.springframework.web.bind.annotation.ModelAttribute RegisterRequest request) {
+        String proofUrl = null;
+        if (request.proofFile() != null && !request.proofFile().isEmpty()) {
+            proofUrl = fileStorageService.storeFile(request.proofFile());
+        }
+        Account account = accountService.register(request.email(), request.password(), request.role(), request.studentCode(), request.firstName(), request.lastName(), request.campus(), proofUrl);
         return ApiResponse.ok("Registered", AccountResponse.from(account));
     }
 
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         Account account = accountService.findByEmail(request.email())
-                .orElseThrow(() -> new BusinessException("Invalid email or password"));
+                .orElseThrow(() -> new BusinessException("Account not found with this email."));
         if (!passwordEncoder.matches(request.password(), account.getPassword())) {
-            throw new BusinessException("Invalid email or password");
+            throw new BusinessException("Incorrect password.");
+        }
+        
+        if (account.getStatus() == com.fpt.seal.hms.common.enums.AccountStatus.PENDING) {
+            throw new BusinessException("Your account is pending approval. Please wait for an administrator to review your registration.");
+        } else if (account.getStatus() == com.fpt.seal.hms.common.enums.AccountStatus.DISABLED) {
+            throw new BusinessException("Your account has been disabled.");
         }
         String token = jwtService.generateToken(account.getEmail(), account.getRole().name());
-        return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId()));
+        String name = accountService.getFullName(account);
+        return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId(), name));
     }
 }
