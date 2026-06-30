@@ -5,11 +5,11 @@ export const adminApi = {
     const response = await apiClient.get('/api/v1/accounts?status=PENDING');
     return response.data.data.map(acc => ({
       id: acc.id,
-      name: 'N/A (Update later)',
+      name: acc.fullName || 'N/A (Update later)',
       email: acc.email,
-      studentId: 'N/A',
-      campus: 'N/A',
-      proof: 'Verification Proof',
+      studentId: acc.studentCode || 'N/A',
+      campus: acc.campus || 'N/A',
+      proof: 'Student ID', // We don't have proof files uploaded yet
       registered: 'Just now'
     }));
   },
@@ -18,7 +18,7 @@ export const adminApi = {
     const response = await apiClient.get('/api/v1/accounts?status=ACTIVE');
     return response.data.data.map(acc => ({
       id: acc.id,
-      name: 'N/A (Update later)',
+      name: acc.fullName || 'N/A (Update later)',
       email: acc.email,
       role: acc.role,
       status: acc.status.toLowerCase(),
