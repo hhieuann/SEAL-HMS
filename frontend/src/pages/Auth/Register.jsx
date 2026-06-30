@@ -3,6 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle } from 'lucide-react';
 import { authApi } from '../../api/auth';
 
+const FieldError = ({ message }) => {
+  if (!message) return null;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', padding: '4px 8px', fontSize: '12px', color: '#ef4444', fontWeight: '500' }}>
+      <AlertCircle size={13} style={{ flexShrink: 0 }} />
+      <span>{message}</span>
+    </div>
+  );
+};
+
 const Register = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -10,12 +20,62 @@ const Register = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
   const navigate = useNavigate();
+
+  const errBorder = { borderColor: 'rgba(239,68,68,0.5)', boxShadow: '0 0 0 2px rgba(239,68,68,0.15)' };
+
+  const validate = () => {
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName = document.getElementById('lastName').value.trim();
+    const fptEmail = document.getElementById('fptEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const studentId = document.getElementById('studentId').value.trim();
+    const campus = document.getElementById('campus').value;
+
+    const errs = {};
+
+    if (!firstName) errs.firstName = 'First Name is required.';
+    if (!lastName) errs.lastName = 'Last Name is required.';
+
+    if (!fptEmail) {
+      errs.email = 'Email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fptEmail)) {
+      errs.email = 'Please enter a valid email address (e.g. name@example.com).';
+    }
+
+    if (!password) {
+      errs.password = 'Password is required.';
+    } else if (password.length < 6) {
+      errs.password = 'Password must be at least 6 characters.';
+    }
+
+    if (!studentId) {
+      errs.studentId = 'Student ID is required.';
+    } else if (!/^SE\d{6}$/i.test(studentId)) {
+      errs.studentId = 'Must follow format SEXXXXXX (e.g. SE204911).';
+    }
+
+    if (!campus) errs.campus = 'Please select a campus.';
+
+    if (!proofFile) errs.proof = 'Please upload your Student ID or FAP Screenshot.';
+
+    return errs;
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setFieldErrors({});
+
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
 
     const firstName = document.getElementById('firstName').value.trim();
     const lastName = document.getElementById('lastName').value.trim();
@@ -24,52 +84,15 @@ const Register = () => {
     const studentId = document.getElementById('studentId').value.trim();
     const campus = document.getElementById('campus').value;
 
-    if (!firstName || !lastName || !fptEmail || !password || !studentId || !campus) {
-      setError('Please fill in all required fields.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(fptEmail)) {
-      setError('Please enter a valid email address.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
-    const studentIdRegex = /^SE\d{6}$/i;
-    if (!studentIdRegex.test(studentId)) {
-      setError('Student ID must be in the format SEXXXXXX (e.g., SE204911)');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
-    // Require proof of student status
-    if (!proofFile) {
-      setError('Please upload your Student ID or FAP Screenshot as proof.');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      // 1. Create account and student profile in one step
       await authApi.register(fptEmail, password, 'STUDENT', studentId, firstName, lastName, campus);
-      
-      
       setSuccess('Account created successfully! Redirecting...');
-      setTimeout(() => {
-        navigate('/login');
-      }, 1500);
+      setTimeout(() => { navigate('/login'); }, 1500);
     } catch (err) {
       console.error('Registration Error:', err);
       const errorDetail = err.response?.data?.message || err.message || JSON.stringify(err);
-      const debugUrl = err.config ? `${err.config.baseURL || ''}${err.config.url}` : 'unknown url';
-      setError(`Registration failed: ${errorDetail} (${debugUrl})`);
+      setError(`Registration failed: ${errorDetail}`);
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
     } finally {
@@ -81,6 +104,7 @@ const Register = () => {
     const file = e.target.files[0];
     if (file) {
       setProofFile(file);
+      setFieldErrors(prev => { const n = { ...prev }; delete n.proof; return n; });
       if (file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (event) => setProofPreview(event.target.result);
@@ -96,7 +120,7 @@ const Register = () => {
       <h2>Registration</h2>
       <p className="auth-subtitle">Join the internal SEAL ecosystem</p>
       
-      {/* Error Message UI */}
+      {/* Global Error (from server) */}
       {error && (
         <div
           className={shaking ? 'shake' : ''}
@@ -126,45 +150,67 @@ const Register = () => {
         </div>
       )}
       
-      <form onSubmit={handleRegister} className="auth-form">
+      <form onSubmit={handleRegister} className="auth-form" noValidate>
         <div className="form-row">
-          <div className="form-floating">
-            <input type="text" id="firstName" placeholder=" " required />
-            <label htmlFor="firstName">First Name</label>
+          <div style={{ flex: 1 }}>
+            <div className="form-floating">
+              <input type="text" id="firstName" placeholder=" " style={fieldErrors.firstName ? errBorder : {}} onChange={() => setFieldErrors(p => { const n={...p}; delete n.firstName; return n; })} />
+              <label htmlFor="firstName">First Name *</label>
+            </div>
+            <FieldError message={fieldErrors.firstName} />
           </div>
-          <div className="form-floating">
-            <input type="text" id="lastName" placeholder=" " required />
-            <label htmlFor="lastName">Last Name</label>
+          <div style={{ flex: 1 }}>
+            <div className="form-floating">
+              <input type="text" id="lastName" placeholder=" " style={fieldErrors.lastName ? errBorder : {}} onChange={() => setFieldErrors(p => { const n={...p}; delete n.lastName; return n; })} />
+              <label htmlFor="lastName">Last Name *</label>
+            </div>
+            <FieldError message={fieldErrors.lastName} />
           </div>
         </div>
-        <div className="form-floating">
-          <input type="email" id="fptEmail" placeholder=" " required style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
-          <label htmlFor="fptEmail">Email Address</label>
+
+        <div>
+          <div className="form-floating">
+            <input type="text" id="fptEmail" placeholder=" " style={fieldErrors.email ? errBorder : {}} onChange={() => setFieldErrors(p => { const n={...p}; delete n.email; return n; })} />
+            <label htmlFor="fptEmail">Email Address *</label>
+          </div>
+          <FieldError message={fieldErrors.email} />
         </div>
-        <div className="form-floating">
-          <input type="password" id="regPassword" placeholder=" " required minLength="6" />
-          <label htmlFor="regPassword">Password (Min 6 chars)</label>
+
+        <div>
+          <div className="form-floating">
+            <input type="password" id="regPassword" placeholder=" " style={fieldErrors.password ? errBorder : {}} onChange={() => setFieldErrors(p => { const n={...p}; delete n.password; return n; })} />
+            <label htmlFor="regPassword">Password (Min 6 chars) *</label>
+          </div>
+          <FieldError message={fieldErrors.password} />
         </div>
+
         <div className="form-row" style={{ marginTop: '16px' }}>
-          <div className="form-floating">
-            <input type="text" id="studentId" placeholder=" " required />
-            <label htmlFor="studentId">Student ID</label>
+          <div style={{ flex: 1 }}>
+            <div className="form-floating">
+              <input type="text" id="studentId" placeholder=" " style={fieldErrors.studentId ? errBorder : {}} onChange={() => setFieldErrors(p => { const n={...p}; delete n.studentId; return n; })} />
+              <label htmlFor="studentId">Student ID *</label>
+            </div>
+            <FieldError message={fieldErrors.studentId} />
           </div>
-          <div className="form-floating">
-            <select id="campus" required defaultValue="" className="form-select" style={{ width: '100%', padding: '20px 16px 8px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer' }}>
-              <option value="" disabled style={{ color: 'black' }}></option>
-              <option value="Hanoi" style={{ color: 'black' }}>Hanoi (Hoa Lac)</option>
-              <option value="Ho Chi Minh" style={{ color: 'black' }}>Ho Chi Minh</option>
-              <option value="Da Nang" style={{ color: 'black' }}>Da Nang</option>
-              <option value="Can Tho" style={{ color: 'black' }}>Can Tho</option>
-              <option value="Quy Nhon" style={{ color: 'black' }}>Quy Nhon</option>
-            </select>
-            <label htmlFor="campus">Campus</label>
+          <div style={{ flex: 1 }}>
+            <div className="form-floating">
+              <select id="campus" defaultValue="" className="form-select" style={{ width: '100%', padding: '20px 16px 8px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer', ...(fieldErrors.campus ? errBorder : {}) }} onChange={() => setFieldErrors(p => { const n={...p}; delete n.campus; return n; })}>
+                <option value="" disabled style={{ color: 'black' }}></option>
+                <option value="Hanoi" style={{ color: 'black' }}>Hanoi (Hoa Lac)</option>
+                <option value="Ho Chi Minh" style={{ color: 'black' }}>Ho Chi Minh</option>
+                <option value="Da Nang" style={{ color: 'black' }}>Da Nang</option>
+                <option value="Can Tho" style={{ color: 'black' }}>Can Tho</option>
+                <option value="Quy Nhon" style={{ color: 'black' }}>Quy Nhon</option>
+              </select>
+              <label htmlFor="campus">Campus *</label>
+            </div>
+            <FieldError message={fieldErrors.campus} />
           </div>
         </div>
+
         <div className="form-group" style={{ marginTop: '16px' }}>
-          <label>Verification Proof (Student ID or FAP Screenshot)</label>
-          <div style={{ padding: proofPreview ? '10px' : '20px', border: '1px dashed var(--border-color)', borderRadius: '8px', background: 'var(--bg-subtle)', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+          <label>Verification Proof (Student ID or FAP Screenshot) *</label>
+          <div style={{ padding: proofPreview ? '10px' : '20px', border: `1px dashed ${fieldErrors.proof ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', background: fieldErrors.proof ? 'rgba(239,68,68,0.03)' : 'var(--bg-subtle)', textAlign: 'center', position: 'relative', overflow: 'hidden', transition: 'border-color 0.2s, background 0.2s' }}>
             <input type="file" id="proof" accept="image/*,.pdf" onChange={handleFileChange} style={{ display: 'none' }} />
             
             {proofPreview ? (
@@ -181,14 +227,16 @@ const Register = () => {
                </div>
             ) : (
               <>
-                <label htmlFor="proof" style={{ cursor: 'pointer', color: 'var(--primary)', fontWeight: '600', display: 'inline-block' }}>
+                <label htmlFor="proof" style={{ cursor: 'pointer', color: fieldErrors.proof ? '#ef4444' : 'var(--primary)', fontWeight: '600', display: 'inline-block' }}>
                   Click to upload file
                 </label>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>Accepted formats: JPG, PNG, PDF (Max 5MB)</div>
               </>
             )}
           </div>
+          <FieldError message={fieldErrors.proof} />
         </div>
+
         <button type="submit" className="btn btn-primary full-width mt-4" disabled={isSubmitting}>
           {isSubmitting ? 'Creating Account...' : 'Create Account'}
         </button>
