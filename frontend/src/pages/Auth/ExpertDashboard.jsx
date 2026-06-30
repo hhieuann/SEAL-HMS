@@ -28,8 +28,6 @@ const ExpertDashboard = () => {
     if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
     if (role === 'MENTOR') roles.push('Mentor');
     
-    const userName = localStorage.getItem('userName');
-    
     return { 
       name: userName || email.split('@')[0], 
       roles,
