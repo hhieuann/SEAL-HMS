@@ -56,7 +56,8 @@ public class SubmissionService {
             throw new BusinessException("Cannot submit: Round start time or duration is not configured.");
         }
 
-        LocalDateTime endTime = round.getStartTime().plusHours(round.getDurationHours());
+        long minutes = (long)(round.getDurationHours() * 60);
+        LocalDateTime endTime = round.getStartTime().plusMinutes(minutes);
         if (LocalDateTime.now().isAfter(endTime)) {
             throw new BusinessException("Deadline has passed. Submissions are now locked for this round.");
         }

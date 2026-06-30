@@ -33,7 +33,7 @@ public class Round extends BaseEntity {
     private LocalDateTime startTime;
 
     @Column(name = "duration_hours")
-    private Integer durationHours;
+    private Double durationHours;
 
     @Column(name = "promotion_top_n")
     private Integer promotionTopN;

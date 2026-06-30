@@ -16,7 +16,7 @@ public class RoundRequest {
     private String name;
 
     private LocalDateTime startTime;
-    private Integer durationHours;
+    private Double durationHours;
 
     private Integer promotionTopN;
 }
