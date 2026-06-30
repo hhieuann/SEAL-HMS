@@ -104,9 +104,20 @@ public class EventService {
     public EventResponse updateEvent(Long id, EventRequest request) {
         Event event = findEventEntityById(id);
 
-        // Guard: Prevent updating details if ONGOING or COMPLETED
+        // Guard: Prevent updating structural details if ONGOING or COMPLETED
         if (event.getStatus() == EventStatus.ONGOING || event.getStatus() == EventStatus.COMPLETED) {
-            throw new BusinessException("Cannot update event details when status is " + event.getStatus());
+            if (request.getStartDate() != null && !request.getStartDate().equals(event.getStartDate())) {
+                throw new BusinessException("Cannot update start date of an ongoing or completed event.");
+            }
+            if (request.getMaxTeams() != null && !request.getMaxTeams().equals(event.getMaxTeams())) {
+                throw new BusinessException("Cannot update max teams of an ongoing or completed event.");
+            }
+            if (request.getRegistrationStartDate() != null && !request.getRegistrationStartDate().equals(event.getRegistrationStartDate())) {
+                throw new BusinessException("Cannot update registration start date of an ongoing or completed event.");
+            }
+            if (request.getRegistrationEndDate() != null && !request.getRegistrationEndDate().equals(event.getRegistrationEndDate())) {
+                throw new BusinessException("Cannot update registration end date of an ongoing or completed event.");
+            }
         }
 
         if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&

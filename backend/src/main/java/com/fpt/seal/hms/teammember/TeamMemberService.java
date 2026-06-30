@@ -27,6 +27,7 @@ public class TeamMemberService {
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRepository teamRepository;
     private final AccountRepository accountRepository;
+    private final com.fpt.seal.hms.account.AccountService accountService;
 
     @Transactional(readOnly = true)
     public List<TeamMemberResponse> getMembersByTeamId(Long teamId) {
@@ -91,7 +92,8 @@ public class TeamMemberService {
         response.setId(member.getId());
         response.setTeamId(member.getTeam().getId());
         response.setAccountId(member.getAccount().getId());
-        response.setAccountName(member.getAccount().getEmail());
+        response.setAccountName(accountService.getFullName(member.getAccount()));
+        response.setEmail(member.getAccount().getEmail());
         response.setRole(member.getRole());
         response.setStatus(member.getStatus());
         return response;

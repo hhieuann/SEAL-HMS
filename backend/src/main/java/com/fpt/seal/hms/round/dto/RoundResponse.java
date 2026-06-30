@@ -13,7 +13,7 @@ public class RoundResponse {
     private Long eventId;
     private String name;
     private LocalDateTime startTime;
-    private LocalDateTime endTime;
+    private Integer durationHours;
     private Integer promotionTopN;
     private RoundStatus status;
     private Integer roundSeq;
