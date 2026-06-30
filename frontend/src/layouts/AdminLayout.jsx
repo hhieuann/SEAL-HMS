@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle, Target } from 'lucide-react';
+import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle, Target, Edit2 } from 'lucide-react';
 import { authApi } from '../api/auth';
 
 import './AdminLayout.css';
@@ -205,8 +205,8 @@ const AdminLayout = () => {
                 <NavLink to={`/admin/event/${eventId}/track-draw`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Shuffle size={20} /><span>Track Draw</span>
                 </NavLink>
-                <NavLink to={`/admin/event/${eventId}/criteria`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Target size={20} /><span>Criteria Manager</span>
+                <NavLink to={`/admin/event/${eventId}/edit`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Edit2 size={20} /><span>Edit Event</span>
                 </NavLink>
                 <NavLink to={`/admin/event/${eventId}/courtroom`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Scale size={20} /><span>The Courtroom</span>

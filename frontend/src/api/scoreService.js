@@ -50,6 +50,12 @@ export const criterionService = {
     return response.data;
   },
 
+  // Update a criterion
+  updateCriterion: async (criterionId, data) => {
+    const response = await apiClient.put(`/api/v1/criteria/${criterionId}`, data);
+    return response.data;
+  },
+
   // Delete a criterion
   deleteCriterion: async (criterionId) => {
     const response = await apiClient.delete(`/api/v1/criteria/${criterionId}`);

@@ -17,9 +17,12 @@ const EventForm = () => {
     registrationEndDate: '',
     maxTeams: '',
     description: '',
+    status: '',
     subTopics: [],
     rounds: []
   });
+
+  const isLocked = ['ongoing', 'completed'].includes(formData.status);
 
   const [newTopicName, setNewTopicName] = useState('');
   const [newTopicDesc, setNewTopicDesc] = useState('');
@@ -41,14 +44,21 @@ const EventForm = () => {
   const getRoundErrors = (round, index) => {
     const errs = [];
     if (!round.start) errs.push('Start time is required');
-    if (!round.end)   errs.push('End time is required');
-    if (round.start && round.end && round.end <= round.start) errs.push('End time must be after start time');
+    if (!round.durationHours || parseInt(round.durationHours, 10) < 1) errs.push('Duration must be at least 1 hour');
     if (round.start && evtStart && datePart(round.start) < evtStart) errs.push('Start is before the event start date');
-    if (round.end   && evtEnd   && datePart(round.end)   > evtEnd)   errs.push('End is after the event end date');
+    // Calculate end based on duration for further checks if needed
+    if (round.start && round.durationHours) {
+      const endT = new Date(new Date(round.start).getTime() + round.durationHours * 3600000);
+      const endD = endT.toISOString().split('T')[0];
+      if (evtEnd && endD > evtEnd) errs.push('Calculated end is after the event end date');
+    }
     if (index > 0) {
       const prev = formData.rounds[index - 1];
-      if (prev.end && round.start && round.start < prev.end)
-        errs.push(`Must start after "${prev.name || `Round ${index}`}" ends`);
+      if (prev.start && prev.durationHours && round.start) {
+        const prevEnd = new Date(new Date(prev.start).getTime() + prev.durationHours * 3600000);
+        if (new Date(round.start) < prevEnd)
+          errs.push(`Must start after "${prev.name || `Round ${index}`}" ends`);
+      }
     }
     return errs;
   };
@@ -90,14 +100,25 @@ const EventForm = () => {
           if (!val) return '';
           return val.length > 16 ? val.slice(0, 16) : val;
         };
+        const { criterionService } = await import('../../api/scoreService.js');
+        const rawRoundsWithCriteria = await Promise.all(rawRounds.map(async (r) => {
+          let criteria = [];
+          try {
+            const critRes = await criterionService.getCriteria(r.id);
+            criteria = (critRes.data || []).map(c => ({ id: c.id, name: c.name, weight: c.weight * 100 }));
+          } catch(e) { console.error('Failed to load criteria for round', r.id, e); }
+          return { id: r.id, name: r.name, status: r.status?.toLowerCase() || 'planned', start: parseTime(r.startTime), durationHours: r.durationHours || '', promotionTopN: r.promotionTopN ?? '', criteria };
+        }));
+
         setFormData({
           name: rawEvent.name || '', type: rawEvent.type || 'Hackathon',
           startDate: rawEvent.startDate || '', endDate: rawEvent.endDate || '',
           registrationStartDate: rawEvent.registrationStartDate || '',
           registrationEndDate:   rawEvent.registrationEndDate   || '',
           maxTeams: rawEvent.maxTeams || '', description: rawEvent.description || '',
+          status: rawEvent.status?.toLowerCase() || '',
           subTopics,
-          rounds: rawRounds.map(r => ({ id: r.id, name: r.name, status: r.status?.toLowerCase() || 'planned', start: parseTime(r.startTime), end: parseTime(r.endTime), promotionTopN: r.promotionTopN ?? '', criteria: [] }))
+          rounds: rawRoundsWithCriteria
         });
         setInitialRounds(rawRounds.map(r => ({ id: r.id })));
       } catch (e) { console.error('Failed to load event:', e); }
@@ -120,7 +141,7 @@ const EventForm = () => {
     if (!formData.startDate || !formData.endDate)               { triggerError('Event start and end dates are required.', 1); return; }
     if (hasDateErrors)                                          { triggerError('Please fix the date errors on Step 1 before saving.', 1); return; }
     if (formData.rounds.length === 0)                           { triggerError('At least one round is required. Please add a round in Step 3.', 3); return; }
-    if (hasRoundErrors)                                         { triggerError('Please fix the round time errors in Step 3 before saving.', 3); return; }
+    if (hasRoundErrors)                                         { triggerError('Please fix the round errors in Step 3 before saving.', 3); return; }
     if (hasTeamFlowError)                                       { triggerError('Promoted teams must be strictly less than the available pool from the previous round.', 3); return; }
 
     setIsSubmitting(true);
@@ -135,7 +156,7 @@ const EventForm = () => {
         rounds: formData.rounds.map((r, index) => {
           const isFinalRound = index === formData.rounds.length - 1;
           return {
-            name: r.name, startTime: r.start || null, endTime: r.end || null,
+            name: r.name, startTime: r.start || null, durationHours: r.durationHours ? parseInt(r.durationHours, 10) : null,
             promotionTopN: isFinalRound ? null : (r.promotionTopN ? parseInt(r.promotionTopN, 10) : null),
             criteria: r.criteria.map(c => ({ name: c.name, weight: c.weight, maxScore: 100 }))
           };
@@ -153,14 +174,27 @@ const EventForm = () => {
           if (!currentRoundIds.includes(ir.id)) { try { await eventService.deleteRound(ir.id); } catch(e) { console.error(e); } }
         }
         for (const fr of formData.rounds) {
-          const rp = { name: fr.name, startTime: fr.start || null, endTime: fr.end || null, promotionTopN: fr.promotionTopN ? parseInt(fr.promotionTopN) : null };
+          const rp = { name: fr.name, startTime: fr.start || null, durationHours: fr.durationHours ? parseInt(fr.durationHours, 10) : null, promotionTopN: fr.promotionTopN ? parseInt(fr.promotionTopN) : null };
           let sid = null;
           if (fr.id && fr.id < 1000000000) { try { await eventService.updateRound(fr.id, rp); sid = fr.id; } catch(e) { console.error(e); } }
           else { try { const nr = await eventService.createRound(eventId, rp); sid = nr.data?.id; } catch(e) { console.error(e); } }
-          if (sid && fr.criteria?.length > 0) {
+          if (sid) {
             try {
               const { criterionService } = await import('../../api/scoreService.js');
-              for (const c of fr.criteria) { if (c.id > 1000000000) await criterionService.createCriterion(sid, { name: c.name, weight: (c.weight||0)/100, maxScore: 100 }); }
+              const currentCritRes = await criterionService.getCriteria(sid);
+              const existingCriteria = currentCritRes.data || [];
+              const formCritIds = fr.criteria?.filter(c => c.id < 1000000000).map(c => c.id) || [];
+              
+              for (const ec of existingCriteria) {
+                if (!formCritIds.includes(ec.id)) { try { await criterionService.deleteCriterion(ec.id); } catch(e) { console.error(e); } }
+              }
+              
+              if (fr.criteria?.length > 0) {
+                for (const c of fr.criteria) {
+                  if (c.id > 1000000000) await criterionService.createCriterion(sid, { name: c.name, weight: (c.weight||0)/100, maxScore: 100 });
+                  else await criterionService.updateCriterion(c.id, { name: c.name, weight: (c.weight||0)/100, maxScore: 100 });
+                }
+              }
             } catch(e) { console.error(e); }
           }
         }
@@ -177,16 +211,17 @@ const EventForm = () => {
           try {
             for (const topic of formData.subTopics) await trackService.createTopicByEvent(savedId, { name: topic.name, description: topic.desc });
           } catch(e) { console.error(e); }
-          try {
-            const rr2 = await eventService.getEventRounds(savedId);
-            const sr2 = rr2.data || [];
-            const { criterionService } = await import('../../api/scoreService.js');
-            for (const fr of formData.rounds) {
-              const sr = sr2.find(s => s.name === fr.name);
-              if (sr && fr.criteria?.length > 0) for (const c of fr.criteria) await criterionService.createCriterion(sr.id, { name: c.name, weight: (c.weight||0)/100, maxScore: 100 });
-            }
-          } catch(e) { console.error(e); }
         }
+        
+        try {
+          const rr2 = await eventService.getEventRounds(savedId);
+          const sr2 = rr2.data || [];
+          const { criterionService } = await import('../../api/scoreService.js');
+          for (const fr of formData.rounds) {
+            const sr = sr2.find(s => s.name === fr.name);
+            if (sr && fr.criteria?.length > 0) for (const c of fr.criteria) await criterionService.createCriterion(sr.id, { name: c.name, weight: (c.weight||0)/100, maxScore: 100 });
+          }
+        } catch(e) { console.error(e); }
       }
 
       localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData));
@@ -200,7 +235,7 @@ const EventForm = () => {
 
   const addSubTopic    = () => { if (newTopicName.trim() && newTopicDesc.trim()) { setFormData(p => ({ ...p, subTopics: [...(p.subTopics||[]), { id: Date.now(), name: newTopicName.trim(), desc: newTopicDesc.trim() }] })); setNewTopicName(''); setNewTopicDesc(''); } };
   const removeSubTopic = id  => setFormData(p => ({ ...p, subTopics: p.subTopics.filter(t => t.id !== id) }));
-  const addRound       = ()  => setFormData(p => ({ ...p, rounds: [...p.rounds, { id: Date.now(), name: `Round ${p.rounds.length+1}`, status: 'planned', start: '', end: '', promotionTopN: '', criteria: [] }] }));
+  const addRound       = ()  => setFormData(p => ({ ...p, rounds: [...p.rounds, { id: Date.now(), name: `Round ${p.rounds.length+1}`, status: 'planned', start: '', durationHours: '', promotionTopN: '', criteria: [] }] }));
   const updateRound    = (id,f,v) => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===id ? { ...r,[f]:v } : r) }));
   const removeRound    = id  => setFormData(p => ({ ...p, rounds: p.rounds.filter(r => r.id !== id) }));
   const addCriterion   = rid => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===rid ? { ...r, criteria: [...r.criteria, { id: Date.now(), name: 'New Criterion', weight: 0 }] } : r) }));
@@ -218,11 +253,11 @@ const EventForm = () => {
 
       <div className="page-header" style={{marginBottom:'32px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <div style={{display:'flex',alignItems:'center',gap:'16px'}}>
-          <button className="btn-icon" onClick={()=>navigate('/admin/events')} style={{background:'var(--bg-hover)',border:'1px solid var(--border-color)',borderRadius:'12px',padding:'10px'}}><ArrowLeft size={20}/></button>
+          <button className="btn-icon" onClick={()=>navigate(isEditMode ? `/admin/event/${eventId}/dashboard` : '/admin/events')} style={{background:'var(--bg-hover)',border:'1px solid var(--border-color)',borderRadius:'12px',padding:'10px'}}><ArrowLeft size={20}/></button>
           <div><h1>{isEditMode?'Edit Event':'Create New Event'}</h1><p className="subtitle">{isEditMode?'Modify event configurations':'Set up a new hackathon or code camp'}</p></div>
         </div>
         <div style={{display:'flex',gap:'12px'}}>
-          <button className="btn btn-secondary" onClick={()=>navigate('/admin/events')}>Cancel</button>
+          <button className="btn btn-secondary" onClick={()=>navigate(isEditMode ? `/admin/event/${eventId}/dashboard` : '/admin/events')}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave} style={{background:'var(--success)',color:'#000'}} disabled={isSubmitting}><Save size={18}/> {isSubmitting?'Saving…':'Save Event'}</button>
         </div>
       </div>
@@ -230,6 +265,18 @@ const EventForm = () => {
       {error && (
         <div className={shaking?'shake':''} style={{display:'flex',alignItems:'center',gap:'10px',padding:'12px 16px',background:'rgba(239,68,68,0.1)',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'10px',marginBottom:'24px',animation:shaking?'shake 0.4s ease-in-out':'none'}}>
           <AlertCircle size={18} color="#ef4444" style={{flexShrink:0}}/><span style={{fontSize:'13px',color:'#ef4444',fontWeight:'500'}}>{error}</span>
+        </div>
+      )}
+
+      {isLocked && (
+        <div style={{display:'flex',alignItems:'flex-start',gap:'12px',padding:'16px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)',borderRadius:'12px',marginBottom:'24px'}}>
+          <AlertTriangle size={20} color="#d97706" style={{flexShrink:0,marginTop:'2px'}}/>
+          <div>
+            <span style={{fontSize:'14px',color:'#b45309',fontWeight:'700',display:'block',marginBottom:'4px',textTransform:'capitalize'}}>Event is {formData.status}</span>
+            <span style={{fontSize:'13px',color:'#92400e',lineHeight:'1.5',display:'block'}}>
+              Because this event has already started, structural settings (Max Teams, Round structures, and Scoring Criteria) have been locked to protect judges' scores and tournament flow. You may still update the name, description, end dates, and round durations.
+            </span>
+          </div>
         </div>
       )}
 
@@ -272,16 +319,16 @@ const EventForm = () => {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'24px'}}>
                 <div>
                   <label style={lbl}>Registration Opens {req}</label>
-                  <input type="date" style={inp()} min={isEditMode ? undefined : new Date().toISOString().split('T')[0]} value={formData.registrationStartDate} onChange={e=>setFormData({...formData,registrationStartDate:e.target.value})}/>
+                  <input type="date" disabled={isLocked} style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} min={isEditMode ? undefined : new Date().toISOString().split('T')[0]} value={formData.registrationStartDate} onChange={e=>setFormData({...formData,registrationStartDate:e.target.value})}/>
                 </div>
                 <div>
                   <label style={lbl}>Registration Closes {req}</label>
-                  <input type="date" style={inp(regEndBeforeStart?errBorder:{})} value={formData.registrationEndDate} min={regStart || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,registrationEndDate:e.target.value})}/>
+                  <input type="date" disabled={isLocked} style={inp(regEndBeforeStart?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} value={formData.registrationEndDate} min={regStart || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,registrationEndDate:e.target.value})}/>
                   {regEndBeforeStart && <InlineWarn msg="Must be after registration open date"/>}
                 </div>
                 <div>
                   <label style={lbl}>Max Teams {req}</label>
-                  <input type="number" min="1" style={inp()} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
+                  <input type="number" disabled={isLocked} min="1" style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
                 </div>
               </div>
             </div>
@@ -298,7 +345,7 @@ const EventForm = () => {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px'}}>
                 <div>
                   <label style={lbl}>Event Start Date {req}</label>
-                  <input type="date" style={inp(evtStartNotAfterReg?errBorder:{})} value={formData.startDate} min={regEnd || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,startDate:e.target.value})}/>
+                  <input type="date" disabled={isLocked} style={inp(evtStartNotAfterReg?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} value={formData.startDate} min={regEnd || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,startDate:e.target.value})}/>
                   {evtStartNotAfterReg && <InlineWarn msg="Must be at least 1 day after registration closes"/>}
                 </div>
                 <div>
@@ -324,17 +371,17 @@ const EventForm = () => {
               <p style={{fontSize:'13px',color:'var(--text-secondary)',marginBottom:'16px'}}>These topics will be used for randomized drawing and automated Track assignment.</p>
               <div style={{background:'rgba(245,158,11,0.05)',padding:'20px',borderRadius:'12px',border:'1px dashed rgba(245,158,11,0.3)',display:'flex',gap:'16px',alignItems:'flex-start',marginBottom:'16px'}}>
                 <div style={{flex:1,display:'flex',flexDirection:'column',gap:'12px'}}>
-                  <div><label style={{...lbl,color:'var(--warning)'}}>Topic Name</label><input type="text" style={{...inp(),background:'#F8FAFC'}} placeholder="e.g. Legal Document RAG System" value={newTopicName} onChange={e=>setNewTopicName(e.target.value)}/></div>
-                  <div><label style={{...lbl,color:'var(--warning)'}}>Detailed Description</label><textarea style={{...inp(),background:'#F8FAFC',resize:'vertical'}} rows="2" placeholder="Detailed requirements…" value={newTopicDesc} onChange={e=>setNewTopicDesc(e.target.value)}/></div>
+                  <div><label style={{...lbl,color:'var(--warning)'}}>Topic Name</label><input type="text" disabled={isLocked} style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{background:'#F8FAFC'})} placeholder="e.g. Legal Document RAG System" value={newTopicName} onChange={e=>setNewTopicName(e.target.value)}/></div>
+                  <div><label style={{...lbl,color:'var(--warning)'}}>Detailed Description</label><textarea disabled={isLocked} style={{...inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{background:'#F8FAFC'}),resize:'vertical'}} rows="2" placeholder="Detailed requirements…" value={newTopicDesc} onChange={e=>setNewTopicDesc(e.target.value)}/></div>
                 </div>
-                <button className="btn btn-primary" onClick={addSubTopic} disabled={!newTopicName.trim()||!newTopicDesc.trim()} style={{background:'var(--warning)',color:'#000',marginTop:'26px'}}><Plus size={18}/> Add Topic</button>
+                <button className="btn btn-primary" onClick={addSubTopic} disabled={isLocked||!newTopicName.trim()||!newTopicDesc.trim()} style={{background:isLocked?'var(--bg-hover)':'var(--warning)',color:isLocked?'var(--text-secondary)':'#000',marginTop:'26px'}}><Plus size={18}/> Add Topic</button>
               </div>
               {(!formData.subTopics||formData.subTopics.length===0)
                 ? <div style={{padding:'24px',textAlign:'center',color:'var(--text-secondary)',background:'#F8FAFC',borderRadius:'12px',border:'1px solid var(--border-color)'}}>No topics yet. Add a topic above.</div>
                 : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'16px'}}>
                     {formData.subTopics.map(topic=>(
                       <div key={topic.id} style={{padding:'16px',background:'var(--bg-subtle)',border:'1px solid var(--border-color)',borderRadius:'12px',position:'relative'}}>
-                        <button onClick={()=>removeSubTopic(topic.id)} style={{position:'absolute',top:'12px',right:'12px',background:'rgba(239,68,68,0.1)',border:'none',color:'var(--text-secondary)',cursor:'pointer',display:'flex',padding:'4px',borderRadius:'50%'}}><X size={14}/></button>
+                        {!isLocked && <button onClick={()=>removeSubTopic(topic.id)} style={{position:'absolute',top:'12px',right:'12px',background:'rgba(239,68,68,0.1)',border:'none',color:'var(--text-secondary)',cursor:'pointer',display:'flex',padding:'4px',borderRadius:'50%'}}><X size={14}/></button>}
                         <h4 style={{fontSize:'14px',marginBottom:'8px',paddingRight:'24px'}}>{topic.name}</h4>
                         <p style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:'1.5'}}>{topic.desc}</p>
                       </div>
@@ -354,7 +401,7 @@ const EventForm = () => {
                 <h3 style={{fontSize:'16px',marginBottom:'4px'}}>Competition Rounds</h3>
                 {formData.rounds.length===0 && <p style={{fontSize:'12px',color:'var(--danger)',margin:0,display:'flex',alignItems:'center',gap:'4px'}}><AlertTriangle size={12}/> At least one round is required</p>}
               </div>
-              <button className="btn btn-secondary" onClick={addRound}><Plus size={16}/> Add Round</button>
+              <button className="btn btn-secondary" onClick={addRound} disabled={isLocked}><Plus size={16}/> Add Round</button>
             </div>
 
             {/* Team Flow Indicator */}
@@ -390,27 +437,27 @@ const EventForm = () => {
                     <div key={round.id} style={{padding:'24px',background:'#F8FAFC',borderRadius:'16px',border:`1px solid ${hasErrs?'rgba(239,68,68,0.4)':isFinalRound?'rgba(255,215,0,0.3)':'var(--border-color)'}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
                         <span style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'1px',padding:'3px 10px',borderRadius:'20px',background:isFinalRound?'rgba(255,215,0,0.15)':'rgba(99,102,241,0.1)',color:isFinalRound?'#b8860b':'var(--primary)'}}>{isFinalRound?'🏆 Final Round':`Round ${rIdx+1}`}</span>
-                        <button className="btn-icon" onClick={()=>removeRound(round.id)} style={{color:'var(--danger)',background:'rgba(239,68,68,0.1)'}}><Trash2Icon/></button>
+                        {!isLocked && <button className="btn-icon" onClick={()=>removeRound(round.id)} style={{color:'var(--danger)',background:'rgba(239,68,68,0.1)'}}><Trash2Icon/></button>}
                       </div>
 
                       <div style={{display:'flex',gap:'16px',marginBottom:'16px',flexWrap:'wrap'}}>
                         <div style={{flex:2,minWidth:'160px'}}>
                           <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Round Name</label>
-                          <input type="text" style={inp()} value={round.name} onChange={e=>updateRound(round.id,'name',e.target.value)}/>
+                          <input type="text" disabled={isLocked} style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} value={round.name} onChange={e=>updateRound(round.id,'name',e.target.value)}/>
                         </div>
                         <div style={{flex:1,minWidth:'160px'}}>
                           <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Start Time {req}</label>
-                          <input type="datetime-local" style={inp(roundErrs.some(e=>e.toLowerCase().includes('start'))?errBorder:{})} value={round.start} min={evtStart?`${evtStart}T00:00`:undefined} max={evtEnd?`${evtEnd}T23:59`:undefined} onChange={e=>updateRound(round.id,'start',e.target.value)}/>
+                          <input type="datetime-local" disabled={isLocked} style={inp(roundErrs.some(e=>e.toLowerCase().includes('start'))?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} value={round.start} min={evtStart?`${evtStart}T00:00`:undefined} max={evtEnd?`${evtEnd}T23:59`:undefined} onChange={e=>updateRound(round.id,'start',e.target.value)}/>
                         </div>
                         <div style={{flex:1,minWidth:'160px'}}>
-                          <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>End Time {req}</label>
-                          <input type="datetime-local" style={inp(roundErrs.some(e=>e.toLowerCase().includes('end'))?errBorder:{})} value={round.end} min={round.start||(evtStart?`${evtStart}T00:00`:undefined)} max={evtEnd?`${evtEnd}T23:59`:undefined} onChange={e=>updateRound(round.id,'end',e.target.value)}/>
+                          <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Duration (Hours) {req}</label>
+                          <input type="number" min="1" style={inp(roundErrs.some(e=>e.toLowerCase().includes('duration'))?errBorder:{})} value={round.durationHours} placeholder="e.g. 48" onChange={e=>updateRound(round.id,'durationHours',e.target.value)}/>
                         </div>
                         {!isFinalRound?(
                           <div style={{flex:1,minWidth:'140px'}}>
                             <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Teams Promoted <span style={{fontSize:'10px',fontWeight:'400'}}>(per track)</span></label>
                             <div style={{position:'relative'}}>
-                              <input type="number" min="1" style={{...inp(),paddingRight:'40px'}} placeholder="e.g. 10" value={round.promotionTopN} onChange={e=>updateRound(round.id,'promotionTopN',e.target.value)}/>
+                              <input type="number" min="1" disabled={isLocked} style={{...inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}),paddingRight:'40px'}} placeholder="e.g. 10" value={round.promotionTopN} onChange={e=>updateRound(round.id,'promotionTopN',e.target.value)}/>
                               <span style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',fontSize:'11px',color:'var(--text-secondary)',pointerEvents:'none'}}>teams</span>
                             </div>
                           </div>
@@ -434,19 +481,19 @@ const EventForm = () => {
                             {weightErr&&<span style={{fontSize:'12px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'4px',background:'rgba(239,68,68,0.1)',padding:'2px 8px',borderRadius:'20px'}}><AlertTriangle size={12}/> {totalWeight}% (need 100%)</span>}
                             {!weightErr&&round.criteria.length>0&&<span style={{fontSize:'12px',color:'var(--success)',background:'rgba(16,185,129,0.1)',padding:'2px 8px',borderRadius:'20px'}}>✓ 100%</span>}
                           </h4>
-                          <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>addCriterion(round.id)}><Plus size={14}/> Add Criterion</button>
+                          <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>addCriterion(round.id)} disabled={isLocked}><Plus size={14}/> Add Criterion</button>
                         </div>
                         {round.criteria.length===0
                           ? <div style={{fontSize:'13px',color:'var(--text-secondary)',fontStyle:'italic'}}>No criteria yet. Add criteria for judges to evaluate.</div>
                           : <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
                               {round.criteria.map(c=>(
                                 <div key={c.id} style={{display:'flex',gap:'16px',alignItems:'center'}}>
-                                  <div style={{flex:1}}><input type="text" style={inp()} placeholder="Criterion Name (e.g. Technical Complexity)" value={c.name} onChange={e=>updateCriterion(round.id,c.id,'name',e.target.value)}/></div>
+                                  <div style={{flex:1}}><input type="text" disabled={isLocked} style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} placeholder="Criterion Name (e.g. Technical Complexity)" value={c.name} onChange={e=>updateCriterion(round.id,c.id,'name',e.target.value)}/></div>
                                   <div style={{width:'120px',position:'relative'}}>
-                                    <input type="number" style={{...inp(),paddingRight:'28px'}} placeholder="Weight" value={c.weight||''} onChange={e=>updateCriterion(round.id,c.id,'weight',e.target.value)}/>
+                                    <input type="number" disabled={isLocked} style={{...inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}),paddingRight:'28px'}} placeholder="Weight" value={c.weight||''} onChange={e=>updateCriterion(round.id,c.id,'weight',e.target.value)}/>
                                     <span style={{position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--text-secondary)',fontSize:'14px',pointerEvents:'none'}}>%</span>
                                   </div>
-                                  <button className="btn-icon" onClick={()=>removeCriterion(round.id,c.id)} style={{color:'var(--text-secondary)'}}><X size={16}/></button>
+                                  {!isLocked && <button className="btn-icon" onClick={()=>removeCriterion(round.id,c.id)} style={{color:'var(--text-secondary)'}}><X size={16}/></button>}
                                 </div>
                               ))}
                             </div>
