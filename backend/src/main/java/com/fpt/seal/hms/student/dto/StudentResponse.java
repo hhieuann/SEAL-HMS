@@ -4,7 +4,7 @@ import com.fpt.seal.hms.student.Student;
 
 public record StudentResponse(
         Long id, Long accountId, String email,
-        String firstName, String lastName, String campus) {
+        String firstName, String lastName, String campus, String studentCode) {
 
     public static StudentResponse from(Student s) {
         return new StudentResponse(
@@ -13,6 +13,7 @@ public record StudentResponse(
                 s.getAccount().getEmail(),
                 s.getFirstName(),
                 s.getLastName(),
-                s.getCampus());
+                s.getCampus(),
+                s.getStudentCode());
     }
 }

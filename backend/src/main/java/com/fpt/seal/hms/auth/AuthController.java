@@ -4,14 +4,17 @@ import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountService;
 import com.fpt.seal.hms.account.dto.AccountResponse;
 import com.fpt.seal.hms.auth.dto.AuthResponse;
+import com.fpt.seal.hms.auth.dto.ChangePasswordRequest;
 import com.fpt.seal.hms.auth.dto.LoginRequest;
 import com.fpt.seal.hms.auth.dto.RegisterRequest;
 import com.fpt.seal.hms.common.dto.ApiResponse;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -52,5 +55,12 @@ public class AuthController {
         String token = jwtService.generateToken(account.getEmail(), account.getRole().name());
         String name = accountService.getFullName(account);
         return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId(), name));
+    }
+
+    /** Change the current user's password (requires authentication). */
+    @PutMapping("/change-password")
+    public ApiResponse<Void> changePassword(Authentication auth, @Valid @RequestBody ChangePasswordRequest request) {
+        accountService.changePassword(auth.getName(), request.oldPassword(), request.newPassword());
+        return ApiResponse.ok("Password changed", null);
     }
 }
