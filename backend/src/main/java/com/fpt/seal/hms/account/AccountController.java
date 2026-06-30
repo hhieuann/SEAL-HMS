@@ -29,10 +29,8 @@ public class AccountController {
     /** List accounts, optionally filtered by status (e.g. ?status=PENDING). Coordinator only. */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-    public ApiResponse<List<AccountResponse>> list(@RequestParam(required = false) AccountStatus status) {
-        List<AccountResponse> result = accountService.list(status).stream()
-                .map(AccountResponse::from)
-                .toList();
+    public ApiResponse<List<com.fpt.seal.hms.account.dto.AccountProfileResponse>> list(@RequestParam(required = false) AccountStatus status) {
+        List<com.fpt.seal.hms.account.dto.AccountProfileResponse> result = accountService.getAccountProfiles(status);
         return ApiResponse.ok(result);
     }
 

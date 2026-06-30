@@ -13,5 +13,6 @@ public record RegisterRequest(
         @Size(max = 20, message = "student code must be at most 20 chars") String studentCode,
         String firstName,
         String lastName,
-        String campus) {
+        String campus,
+        org.springframework.web.multipart.MultipartFile proofFile) {
 }
