@@ -52,11 +52,12 @@ public class SubmissionService {
             throw new BusinessException("Cannot submit: The round is not currently active.");
         }
 
-        if (round.getEndTime() == null) {
-            throw new BusinessException("Cannot submit: Round does not have an end time (deadline) configured.");
+        if (round.getStartTime() == null || round.getDurationHours() == null) {
+            throw new BusinessException("Cannot submit: Round start time or duration is not configured.");
         }
 
-        if (LocalDateTime.now().isAfter(round.getEndTime())) {
+        LocalDateTime endTime = round.getStartTime().plusHours(round.getDurationHours());
+        if (LocalDateTime.now().isAfter(endTime)) {
             throw new BusinessException("Deadline has passed. Submissions are now locked for this round.");
         }
 

@@ -54,7 +54,7 @@ public class RoundService {
         round.setEvent(event);
         round.setName(request.getName());
         round.setStartTime(request.getStartTime());
-        round.setEndTime(request.getEndTime());
+        round.setDurationHours(request.getDurationHours());
         round.setPromotionTopN(request.getPromotionTopN());
         round.setStatus(RoundStatus.CREATED);
         round.setRoundSeq(nextSeq);
@@ -75,7 +75,7 @@ public class RoundService {
         // We don't allow moving a round to another event, so ignore request.getEventId() here
         round.setName(request.getName());
         round.setStartTime(request.getStartTime());
-        round.setEndTime(request.getEndTime());
+        round.setDurationHours(request.getDurationHours());
         round.setPromotionTopN(request.getPromotionTopN());
 
         Round savedRound = roundRepository.save(round);
@@ -175,7 +175,7 @@ public class RoundService {
         response.setEventId(round.getEvent().getId());
         response.setName(round.getName());
         response.setStartTime(round.getStartTime());
-        response.setEndTime(round.getEndTime());
+        response.setDurationHours(round.getDurationHours());
         response.setPromotionTopN(round.getPromotionTopN());
         response.setStatus(round.getStatus());
         response.setRoundSeq(round.getRoundSeq());

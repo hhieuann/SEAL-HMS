@@ -12,6 +12,7 @@ public class TeamMemberResponse {
     private Long teamId;
     private Long accountId;
     private String accountName;
+    private String email;
     private MemberRole role;
     private MemberStatus status;
 }

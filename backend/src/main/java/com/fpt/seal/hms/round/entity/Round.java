@@ -32,8 +32,8 @@ public class Round extends BaseEntity {
     @Column(name = "start_time")
     private LocalDateTime startTime;
 
-    @Column(name = "end_time")
-    private LocalDateTime endTime;
+    @Column(name = "duration_hours")
+    private Integer durationHours;
 
     @Column(name = "promotion_top_n")
     private Integer promotionTopN;
