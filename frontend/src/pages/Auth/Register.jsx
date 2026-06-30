@@ -52,8 +52,8 @@ const Register = () => {
 
     if (!studentId) {
       errs.studentId = 'Student ID is required.';
-    } else if (!/^SE\d{6}$/i.test(studentId)) {
-      errs.studentId = 'Must follow format SEXXXXXX (e.g. SE204911).';
+    } else if (!/^[A-Za-z]{2}\d{6}$/.test(studentId)) {
+      errs.studentId = 'Must be 2 letters + 6 digits (e.g. SE204911, QE302001).';
     }
 
     if (!campus) errs.campus = 'Please select a campus.';
