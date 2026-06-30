@@ -26,7 +26,7 @@ public class AccountService {
     private final LecturerRepository lecturerRepository;
 
     @Transactional
-    public Account register(String email, String rawPassword, Role role, String studentCode, String firstName, String lastName, String campus) {
+    public Account register(String email, String rawPassword, Role role, String studentCode, String firstName, String lastName, String campus, String proofUrl) {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
@@ -68,6 +68,7 @@ public class AccountService {
             student.setFirstName(firstName);
             student.setLastName(lastName);
             student.setCampus(campus);
+            student.setProofUrl(proofUrl);
             studentRepository.save(student);
         }
         
@@ -144,6 +145,52 @@ public class AccountService {
         return status == null ? accountRepository.findAll() : accountRepository.findByStatus(status);
     }
 
+    @Transactional(readOnly = true)
+    public List<com.fpt.seal.hms.account.dto.AccountProfileResponse> getAccountProfiles(AccountStatus status) {
+        List<Account> accounts = list(status);
+        return accounts.stream().map(acc -> {
+            final String[] fullName = {null};
+            final String[] studentCode = {null};
+            final String[] campus = {null};
+            final String[] proof = {null};
+            final String[] department = {null};
+            final String[] phone = {null};
+
+            if (acc.getRole() == Role.STUDENT) {
+                studentRepository.findByAccount_Id(acc.getId()).ifPresent(student -> {
+                    fullName[0] = (student.getFirstName() != null ? student.getFirstName() + " " : "") + 
+                                  (student.getLastName() != null ? student.getLastName() : "");
+                    if (fullName[0].trim().isEmpty()) fullName[0] = null;
+                    else fullName[0] = fullName[0].trim();
+                    
+                    studentCode[0] = student.getStudentCode();
+                    campus[0] = student.getCampus();
+                    proof[0] = student.getProofUrl();
+                });
+            } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
+                lecturerRepository.findByAccount_Id(acc.getId()).ifPresent(lecturer -> {
+                    fullName[0] = lecturer.getFullName();
+                    campus[0] = lecturer.getCampus();
+                    department[0] = lecturer.getDepartment();
+                    phone[0] = lecturer.getPhone();
+                });
+            }
+
+            return new com.fpt.seal.hms.account.dto.AccountProfileResponse(
+                    acc.getId(),
+                    acc.getEmail(),
+                    acc.getRole().name(),
+                    acc.getStatus().name(),
+                    fullName[0],
+                    studentCode[0],
+                    campus[0],
+                    proof[0],
+                    department[0],
+                    phone[0]
+            );
+        }).toList();
+    }
+
     /** Event Coordinator approves a PENDING account so the user can participate (AU-03). */
     @Transactional
     public Account approve(Long id) {
@@ -169,5 +216,21 @@ public class AccountService {
         Account account = getById(id);
         account.setRole(role);
         return account;
+    }
+
+    @Transactional(readOnly = true)
+    public String getFullName(Account acc) {
+        if (acc.getRole() == Role.STUDENT) {
+            return studentRepository.findByAccount_Id(acc.getId())
+                    .map(s -> ((s.getFirstName() != null ? s.getFirstName() + " " : "") + 
+                               (s.getLastName() != null ? s.getLastName() : "")).trim())
+                    .filter(name -> !name.isEmpty())
+                    .orElse(null);
+        } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
+            return lecturerRepository.findByAccount_Id(acc.getId())
+                    .map(com.fpt.seal.hms.lecturer.Lecturer::getFullName)
+                    .orElse(null);
+        }
+        return null;
     }
 }

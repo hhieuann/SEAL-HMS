@@ -150,10 +150,10 @@ const ParticipantLayout = () => {
         
         <div style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
-            <div className="user-info" style={{ textAlign: 'left' }}>
-              <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>
-                {localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant'}
+            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+            <div className="user-details" style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+              <span className="user-name" style={{ color: 'white', fontWeight: '600', fontSize: '13px' }}>
+                {localStorage.getItem('userName') || (localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant')}
               </span>
               <span className="user-role" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Participant</span>
             </div>

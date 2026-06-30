@@ -44,4 +44,7 @@ public class Student extends BaseEntity {
 
     @Column(length = 100)
     private String campus;
+
+    @Column(name = "proof_url", length = 500)
+    private String proofUrl;
 }
