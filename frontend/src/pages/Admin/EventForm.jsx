@@ -44,7 +44,7 @@ const EventForm = () => {
   const getRoundErrors = (round, index) => {
     const errs = [];
     if (!round.start) errs.push('Start time is required');
-    if (!round.durationHours || parseInt(round.durationHours, 10) < 1) errs.push('Duration must be at least 1 hour');
+    if (!round.durationHours || parseFloat(round.durationHours) <= 0) errs.push('Duration must be greater than 0');
     if (round.start && evtStart && datePart(round.start) < evtStart) errs.push('Start is before the event start date');
     // Calculate end based on duration for further checks if needed
     if (round.start && round.durationHours) {
@@ -156,7 +156,7 @@ const EventForm = () => {
         rounds: formData.rounds.map((r, index) => {
           const isFinalRound = index === formData.rounds.length - 1;
           return {
-            name: r.name, startTime: r.start || null, durationHours: r.durationHours ? parseInt(r.durationHours, 10) : null,
+            name: r.name, startTime: r.start || null, durationHours: r.durationHours ? parseFloat(r.durationHours) : null,
             promotionTopN: isFinalRound ? null : (r.promotionTopN ? parseInt(r.promotionTopN, 10) : null),
             criteria: r.criteria.map(c => ({ name: c.name, weight: c.weight, maxScore: 100 }))
           };
@@ -174,7 +174,7 @@ const EventForm = () => {
           if (!currentRoundIds.includes(ir.id)) { try { await eventService.deleteRound(ir.id); } catch(e) { console.error(e); } }
         }
         for (const fr of formData.rounds) {
-          const rp = { name: fr.name, startTime: fr.start || null, durationHours: fr.durationHours ? parseInt(fr.durationHours, 10) : null, promotionTopN: fr.promotionTopN ? parseInt(fr.promotionTopN) : null };
+          const rp = { name: fr.name, startTime: fr.start || null, durationHours: fr.durationHours ? parseFloat(fr.durationHours) : null, promotionTopN: fr.promotionTopN ? parseInt(fr.promotionTopN) : null };
           let sid = null;
           if (fr.id && fr.id < 1000000000) { try { await eventService.updateRound(fr.id, rp); sid = fr.id; } catch(e) { console.error(e); } }
           else { try { const nr = await eventService.createRound(eventId, rp); sid = nr.data?.id; } catch(e) { console.error(e); } }
@@ -451,7 +451,7 @@ const EventForm = () => {
                         </div>
                         <div style={{flex:1,minWidth:'160px'}}>
                           <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Duration (Hours) {req}</label>
-                          <input type="number" min="1" style={inp(roundErrs.some(e=>e.toLowerCase().includes('duration'))?errBorder:{})} value={round.durationHours} placeholder="e.g. 48" onChange={e=>updateRound(round.id,'durationHours',e.target.value)}/>
+                          <input type="number" min="0.1" step="any" style={inp(roundErrs.some(e=>e.toLowerCase().includes('duration'))?errBorder:{})} value={round.durationHours} placeholder="e.g. 1.5" onChange={e=>updateRound(round.id,'durationHours',e.target.value)}/>
                         </div>
                         {!isFinalRound?(
                           <div style={{flex:1,minWidth:'140px'}}>
