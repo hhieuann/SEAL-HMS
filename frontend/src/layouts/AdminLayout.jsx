@@ -20,6 +20,23 @@ const AdminLayout = () => {
   const [bellOpen, setBellOpen] = useState(false);
   const [alerts, setAlerts] = useState(systemAlerts);
   const unreadCount = alerts.filter(a => a.unread).length;
+  
+  const [eventName, setEventName] = useState(null);
+
+  React.useEffect(() => {
+    if (eventId) {
+      // Dynamically load eventService to avoid top-level import issues if any
+      import('../api/eventService.js').then(({ eventService }) => {
+        eventService.getEventDetails(eventId).then(res => {
+          if (res.data && res.data.name) {
+            setEventName(res.data.name);
+          }
+        }).catch(err => console.error('Failed to load event name for layout', err));
+      });
+    } else {
+      setEventName(null);
+    }
+  }, [eventId, location.pathname]); // Re-fetch if pathname changes (e.g. after edit save)
 
   const markRead = (id) => setAlerts(prev => prev.map(a => a.id === id ? { ...a, unread: false } : a));
   const dismiss = (id, e) => { e.stopPropagation(); setAlerts(prev => prev.filter(a => a.id !== id)); };
@@ -27,6 +44,8 @@ const AdminLayout = () => {
   // Breadcrumbs generation
   const pathnames = location.pathname.split('/').filter(x => x);
   const currentPath = pathnames[pathnames.length - 1] || 'Dashboard';
+  
+  const displayEventName = eventName || (eventId ? `Event: ${eventId.toUpperCase()}` : '');
 
   return (
     <div className="app-container">
@@ -44,7 +63,7 @@ const AdminLayout = () => {
           <span>/</span>
           {eventId ? (
             <>
-              <span style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', color: 'white' }}>Event: {eventId.toUpperCase()}</span>
+              <span style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.15)', borderRadius: '6px', color: 'white', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayEventName}</span>
               <span>/</span>
               <span style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.25)', borderRadius: '6px', textTransform: 'capitalize', color: 'white' }}>{currentPath}</span>
             </>
@@ -188,7 +207,9 @@ const AdminLayout = () => {
               </div>
 
               <div className="nav-section">
-                <p className="nav-section-title" style={{ color: 'var(--primary)' }}>EVENT: {eventId.toUpperCase()}</p>
+                <p className="nav-section-title" style={{ color: 'var(--primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {displayEventName.toUpperCase()}
+                </p>
                 <NavLink to={`/admin/event/${eventId}/dashboard`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
                   <BarChart2 size={20} /><span>Event Dashboard</span>
                 </NavLink>

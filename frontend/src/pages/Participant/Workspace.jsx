@@ -450,17 +450,17 @@ const Workspace = () => {
                 <strong>Topic:</strong> {teamTrack.topic}
               </p>
             </div>
-          ) : hasRoundStarted ? (
-            <div className="glass-panel ws-panel" style={{ background: 'rgba(239,68,68,0.05)', border: '1px dashed rgba(239,68,68,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
-              <Target size={32} color="var(--danger)" style={{ marginBottom: '12px', opacity: 0.7 }} />
-              <h3 style={{ fontSize: '15px', color: 'var(--danger)', marginBottom: '8px' }}>Round Started!</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>The hackathon round is currently live! Check the problem statement above and start building.</p>
-            </div>
           ) : (
-            <div className="glass-panel ws-panel" style={{ background: 'rgba(139,92,246,0.05)', border: '1px dashed rgba(139,92,246,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
-              <Clock size={32} color="var(--accent-1)" style={{ marginBottom: '12px', opacity: 0.7 }} />
-              <h3 style={{ fontSize: '15px', color: 'var(--accent-1)', marginBottom: '8px' }}>Waiting for Track Draw</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>Your Problem Statement and Leaderboard will appear here once the Admin conducts the track draw.</p>
+            <div className="glass-panel ws-panel" style={{ background: hasRoundStarted ? 'rgba(16,185,129,0.05)' : 'rgba(139,92,246,0.05)', border: `1px dashed ${hasRoundStarted ? 'rgba(16,185,129,0.3)' : 'rgba(139,92,246,0.3)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
+              <Clock size={32} color={hasRoundStarted ? 'var(--success)' : 'var(--accent-1)'} style={{ marginBottom: '12px', opacity: 0.7 }} />
+              <h3 style={{ fontSize: '15px', color: hasRoundStarted ? 'var(--success)' : 'var(--accent-1)', marginBottom: '8px' }}>
+                {hasRoundStarted ? 'Round In Progress — Awaiting Track Draw' : 'Waiting for Track Draw'}
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                {hasRoundStarted 
+                  ? 'The round is live! Your track assignment and leaderboard will appear here once the Admin conducts the track draw.' 
+                  : 'Your Problem Statement and Leaderboard will appear here once the Admin conducts the track draw.'}
+              </p>
             </div>
           )}
 

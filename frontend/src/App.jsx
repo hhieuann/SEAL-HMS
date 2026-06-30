@@ -110,7 +110,7 @@ function App() {
         {/* Judge Routes */}
         <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER']}><ExpertDashboard /></ProtectedRoute>} />
         
-        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE']}><JudgeLayout /></ProtectedRoute>}>
+        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE', 'LECTURER']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
           <Route path="history" element={<ScoringHistory />} />
