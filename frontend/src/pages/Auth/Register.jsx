@@ -86,7 +86,7 @@ const Register = () => {
 
     setIsSubmitting(true);
     try {
-      await authApi.register(fptEmail, password, 'STUDENT', studentId, firstName, lastName, campus);
+      await authApi.register(fptEmail, password, 'STUDENT', studentId, firstName, lastName, campus, proofFile);
       setSuccess('Account created successfully! Redirecting...');
       setTimeout(() => { navigate('/login'); }, 1500);
     } catch (err) {

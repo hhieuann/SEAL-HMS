@@ -9,7 +9,9 @@ export const adminApi = {
       email: acc.email,
       studentId: acc.studentCode || 'N/A',
       campus: acc.campus || 'N/A',
-      proof: 'Student ID', // We don't have proof files uploaded yet
+      role: acc.role,
+      proof: 'Student ID', 
+      proofUrl: acc.proof || null,
       registered: 'Just now'
     }));
   },
