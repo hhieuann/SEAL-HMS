@@ -30,7 +30,7 @@ class StudentServiceTest {
     @InjectMocks
     private StudentService studentService;
 
-    private final StudentRequest req = new StudentRequest("An", "Nguyen", "HCMC");
+    private final StudentRequest req = new StudentRequest("An", "Nguyen", "HCMC", null, null);
 
     private Account account(Role role) {
         Account a = new Account();

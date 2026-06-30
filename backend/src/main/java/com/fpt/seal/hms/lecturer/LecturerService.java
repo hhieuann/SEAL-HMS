@@ -43,8 +43,10 @@ public class LecturerService {
 
     @Transactional
     public LecturerResponse updateMyProfile(String email, LecturerRequest req) {
-        Lecturer l = myProfileEntity(requireAccount(email).getId());
+        Account account = requireAccount(email);
+        Lecturer l = myProfileEntity(account.getId());
         apply(l, req);
+        accountService.updateEmail(account, req.email());
         return LecturerResponse.from(l);
     }
 
