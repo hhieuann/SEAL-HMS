@@ -5,6 +5,7 @@ import { adminApi } from '../../api/adminApi';
 const AccountManagement = () => {
   const [tab, setTab] = useState('pending');
   const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newAccount, setNewAccount] = useState({ fullName: '', email: '', department: '', campus: '', phone: '' });
   const [isCreating, setIsCreating] = useState(false);
@@ -18,6 +19,7 @@ const AccountManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null); // Lưu ID của account cần reject
+  const [showProofUrl, setShowProofUrl] = useState(null);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -111,10 +113,25 @@ const AccountManagement = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const roleColor = { Participant: 'var(--primary)', Judge: 'var(--warning)', Mentor: 'var(--accent-3)', Admin: 'var(--danger)' };
+  const roleColor = { 
+    STUDENT: '#3b82f6', 
+    LECTURER: '#10b981', 
+    ADMIN: '#ef4444', 
+    STAFF: '#f59e0b', 
+    JUDGE: '#8b5cf6', 
+    GUEST_JUDGE: '#d946ef', 
+    MENTOR: '#06b6d4' 
+  };
 
-  const filteredPending = pendingList.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()));
-  const filteredActive = activeList.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredPending = pendingList.filter(a => 
+    (a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (roleFilter === 'ALL' || a.role === roleFilter || (a.role === undefined && roleFilter === 'STUDENT'))
+  );
+  
+  const filteredActive = activeList.filter(a => 
+    (a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
+    (roleFilter === 'ALL' || a.role === roleFilter)
+  );
 
   return (
     <div className="animate-fade-in">
@@ -138,9 +155,21 @@ const AccountManagement = () => {
 
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FFFFFF', padding: '10px 16px', borderRadius: '10px', border: '1px solid var(--border-color)', width: '320px' }}>
-            <Search size={16} color="var(--text-secondary)" />
-            <input type="text" placeholder="Search by name or email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', outline: 'none', fontSize: '13px' }} />
+          <div style={{ display: 'flex', gap: '16px', flex: 1, alignItems: 'center' }}>
+            <div className="filter-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FFFFFF', padding: '0 16px', borderRadius: '10px', border: '1px solid var(--border-color)', width: '320px' }}>
+              <Search size={16} color="var(--text-secondary)" />
+              <input type="text" className="no-border-input" placeholder="Search by name or email..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ color: 'var(--text-primary)', width: '100%', fontSize: '13px' }} />
+            </div>
+            <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className="filter-select" style={{ borderRadius: '10px', border: '1px solid var(--border-color)', outline: 'none', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '13px', cursor: 'pointer' }}>
+              <option value="ALL">All Roles</option>
+              <option value="STUDENT">Student</option>
+              <option value="LECTURER">Lecturer</option>
+              <option value="STAFF">Staff</option>
+              <option value="ADMIN">Admin</option>
+              <option value="JUDGE">Judge</option>
+              <option value="GUEST_JUDGE">Guest Judge</option>
+              <option value="MENTOR">Mentor</option>
+            </select>
           </div>
         </div>
         
@@ -175,7 +204,15 @@ const AccountManagement = () => {
                   <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginTop: '2px' }}>{u.studentId}</div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ fontSize: '12px', padding: '4px 10px', background: 'rgba(59,130,246,0.1)', color: 'var(--primary)', borderRadius: '10px', cursor: 'pointer', border: '1px solid rgba(59,130,246,0.2)' }}>
+                  <span 
+                    onClick={() => u.proofUrl && setShowProofUrl(u.proofUrl)}
+                    style={{ 
+                      fontSize: '12px', padding: '4px 10px', 
+                      background: 'rgba(59,130,246,0.1)', color: 'var(--primary)', 
+                      borderRadius: '10px', border: '1px solid rgba(59,130,246,0.2)',
+                      cursor: u.proofUrl ? 'pointer' : 'default',
+                      textDecoration: u.proofUrl ? 'underline' : 'none'
+                    }}>
                     {u.proof}
                   </span>
                 </td>
@@ -211,7 +248,15 @@ const AccountManagement = () => {
                   </div>
                 </td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ padding: '4px 10px', borderRadius: '10px', fontSize: '12px', color: roleColor[u.role] || 'white', background: 'var(--bg-hover)' }}>
+                  <span style={{ 
+                    padding: '4px 10px', 
+                    borderRadius: '10px', 
+                    fontSize: '12px', 
+                    fontWeight: '600',
+                    color: roleColor[u.role] || '#64748b', 
+                    background: `${roleColor[u.role] || '#64748b'}15`, 
+                    border: `1px solid ${roleColor[u.role] || '#64748b'}30` 
+                  }}>
                     {u.role}
                   </span>
                 </td>
@@ -369,6 +414,26 @@ const AccountManagement = () => {
               <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--danger)', borderColor: 'var(--danger)', padding: '10px' }} onClick={confirmReject}>
                 Yes, Reject
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Proof Image Modal */}
+      {showProofUrl && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setShowProofUrl(null)} />
+          
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '600px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '24px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '18px', color: 'var(--text-primary)' }}>Verification Proof</h3>
+              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => setShowProofUrl(null)}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div style={{ background: 'var(--bg-subtle)', borderRadius: '12px', padding: '12px', minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src={showProofUrl} alt="Verification Proof" style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }} />
             </div>
           </div>
         </div>

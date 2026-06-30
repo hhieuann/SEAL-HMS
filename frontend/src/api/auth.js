@@ -6,11 +6,12 @@ export const authApi = {
   login: async (email, password) => {
     try {
       const response = await apiClient.post('/api/v1/auth/login', { email, password });
-      const { token, role, accountId, email: returnedEmail } = response.data.data;
+      const { token, role, accountId, email: returnedEmail, name: returnedName } = response.data.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('userRole', role);
       localStorage.setItem('userEmail', returnedEmail || email);
+      if (returnedName) localStorage.setItem('userName', returnedName);
       
       if (accountId) {
         localStorage.setItem('accountId', accountId);
@@ -64,15 +65,23 @@ export const authApi = {
     }
   },
 
-  register: async (email, password, role = 'STUDENT', studentCode, firstName, lastName, campus) => {
+  register: async (email, password, role = 'STUDENT', studentCode, firstName, lastName, campus, proofFile) => {
     try {
-      const payload = { email, password, role };
-      if (studentCode) payload.studentCode = studentCode;
-      if (firstName) payload.firstName = firstName;
-      if (lastName) payload.lastName = lastName;
-      if (campus) payload.campus = campus;
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+      if (studentCode) formData.append('studentCode', studentCode);
+      if (firstName) formData.append('firstName', firstName);
+      if (lastName) formData.append('lastName', lastName);
+      if (campus) formData.append('campus', campus);
+      if (proofFile) formData.append('proofFile', proofFile);
       
-      const response = await apiClient.post('/api/v1/auth/register', payload);
+      const response = await apiClient.post('/api/v1/auth/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       // The register API returns the ID (unlike the login API). Store it immediately so new accounts work!
       const data = response.data?.data || {};
       if (data.id) {
