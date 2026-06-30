@@ -27,11 +27,13 @@ const ExpertDashboard = () => {
     if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
     if (role === 'MENTOR') roles.push('Mentor');
     
+    const userName = localStorage.getItem('userName');
+    
     return { 
-      name: email.split('@')[0], 
+      name: userName || email.split('@')[0], 
       roles,
       userId,
-      avatar: `https://ui-avatars.com/api/?name=${email.split('@')[0]}&background=14b8a6&color=fff` 
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || email.split('@')[0])}&background=14b8a6&color=fff` 
     };
   });
 
