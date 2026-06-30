@@ -65,10 +65,10 @@ const ParticipantLayout = () => {
               try {
                 const membersRes = await teamService.getMembers(team.id);
                 const members = membersRes.data || [];
-                const isMember = members.some(m => m.accountId === accountId || m.accountName === userEmail);
+                const isMember = members.some(m => m.accountId === accountId || m.email === userEmail);
 
                 if (isMember) {
-                  const me = members.find(m => m.accountId === accountId || m.accountName === userEmail);
+                  const me = members.find(m => m.accountId === accountId || m.email === userEmail);
 
                   if (!accountId && me?.accountId) {
                     localStorage.setItem('accountId', me.accountId);

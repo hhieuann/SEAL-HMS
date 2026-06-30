@@ -54,11 +54,8 @@ const EventDashboard = () => {
         const rawRounds = roundsRes.data || [];
 
         // Fetch Topics
-        const tracksRes = await trackService.getTracksByEvent(parsedId);
-        const tracks = tracksRes.data || [];
-        const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || []));
-        const allTopics = await Promise.all(topicsPromises);
-        const subTopics = allTopics.flat();
+        const topicsRes = await trackService.getTopicsByEvent(parsedId);
+        const subTopics = topicsRes.data || [];
 
         // Fetch Teams
         try {
@@ -85,10 +82,8 @@ const EventDashboard = () => {
           subTopics: subTopics,
           rounds: roundsWithCriteria.map(r => {
             let startStr = r.startTime;
-            let endStr = r.endTime;
             if (startStr && startStr.length > 16) startStr = startStr.slice(0, 16);
-            if (endStr && endStr.length > 16) endStr = endStr.slice(0, 16);
-            return { ...r, start: startStr, end: endStr };
+            return { ...r, start: startStr, durationHours: r.durationHours };
           })
         };
 
@@ -301,7 +296,7 @@ const EventDashboard = () => {
                   <div className="timeline-content">
                     <h4>{round.name}</h4>
                     <p>
-                      {round.start && round.end ? `${formatDate(round.start)} — ${formatDate(round.end)}` : 'Dates TBD'}
+                      {round.start && round.durationHours ? `${formatDate(round.start)} — (${round.durationHours} hours)` : 'Dates TBD'}
                       {round.criteria && round.criteria.length > 0 ? ` • ${round.criteria.length} criteria` : ''}
                     </p>
                   </div>
@@ -349,7 +344,7 @@ const EventDashboard = () => {
                   <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-primary)' }}>
                     {round.name}
                     <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                      ({formatDate(round.start)} → {formatDate(round.end)})
+                      ({formatDate(round.start)} → {round.durationHours ? `+${round.durationHours}h` : 'TBD'})
                     </span>
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
