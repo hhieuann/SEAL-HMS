@@ -176,19 +176,15 @@ const Workspace = () => {
 
                 let durationStr = '0h';
                 let actualRemaining = '0h 0m';
-                if (round.startTime && round.endTime) {
+                let calculatedEnd = null;
+                if (round.startTime && round.durationHours) {
                   const startD = new Date(round.startTime);
-                  const endD = new Date(round.endTime);
+                  calculatedEnd = new Date(startD.getTime() + round.durationHours * 3600000);
                   const now = new Date();
                   
-                  const diffMins = Math.floor((endD - startD) / (1000 * 60));
-                  if (diffMins > 0) {
-                    const h = Math.floor(diffMins / 60);
-                    const m = diffMins % 60;
-                    durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
-                  }
+                  durationStr = `${round.durationHours}h`;
                   
-                  const remainMins = Math.floor((endD - now) / (1000 * 60));
+                  const remainMins = Math.floor((calculatedEnd - now) / (1000 * 60));
                   if (remainMins > 0) {
                     const h = Math.floor(remainMins / 60);
                     const m = remainMins % 60;
@@ -204,10 +200,10 @@ const Workspace = () => {
                     ...prev,
                     title: `${rName} - ${trackPart}`,
                     releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
-                    deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
+                    deadline: calculatedEnd ? calculatedEnd.toLocaleString() : 'TBD',
                     remainingHours: actualRemaining,
                     durationStr: durationStr,
-                    rawEndTime: round.endTime,
+                    rawEndTime: calculatedEnd,
                     promotionTopN: round.promotionTopN
                   };
                 });
@@ -237,13 +233,14 @@ const Workspace = () => {
         
         const endD = new Date(prev.rawEndTime);
         const now = new Date();
-        const diffMins = Math.floor((endD - now) / (1000 * 60));
+        const diffMs = endD - now;
         
-        let newRemaining = '0h 0m';
-        if (diffMins > 0) {
-          const h = Math.floor(diffMins / 60);
-          const m = diffMins % 60;
-          newRemaining = m > 0 ? `${h}h ${m}m` : `${h}h`;
+        let newRemaining = '0h0m0s';
+        if (diffMs > 0) {
+          const h = Math.floor(diffMs / (1000 * 60 * 60));
+          const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diffMs % (1000 * 60)) / 1000);
+          newRemaining = `${h}h${m}m${s}s`;
         } else {
           newRemaining = 'Ended';
         }
@@ -256,7 +253,7 @@ const Workspace = () => {
     };
     
     updateRemaining();
-    const interval = setInterval(updateRemaining, 60000);
+    const interval = setInterval(updateRemaining, 1000);
     return () => clearInterval(interval);
   }, []);
   const [tasks, setTasks] = useState(() => {
@@ -414,7 +411,7 @@ const Workspace = () => {
                   ))}
                   <div style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', fontSize: '12px', color: 'var(--danger)', display: 'flex', gap: '8px' }}>
                     <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
-                    Submission Deadline: <strong>{PROBLEM_STATEMENT.deadline}</strong>
+                    Submission Deadline: <strong>{problemStatement.deadline}</strong>
                   </div>
                 </div>
               )}
@@ -475,7 +472,7 @@ const Workspace = () => {
                     {(m.name || m.accountName) ? (m.name || m.accountName).charAt(0).toUpperCase() : '?'}
                   </div>
                   <div className="member-info">
-                    <span className="member-name">{m.name || m.accountName || 'Unknown'} {(m.name || m.accountName) === localStorage.getItem('userEmail') ? '(You)' : ''}</span>
+                    <span className="member-name">{m.name || m.accountName || 'Unknown'} {m.email === localStorage.getItem('userEmail') ? '(You)' : ''}</span>
                     <span className="member-role">{m.role || 'Member'}</span>
                   </div>
                 </div>

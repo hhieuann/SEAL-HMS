@@ -20,6 +20,7 @@ const ExpertDashboard = () => {
 
   const [currentUser, setCurrentUser] = useState(() => {
     const email = localStorage.getItem('userEmail') || 'Expert';
+    const userName = localStorage.getItem('userName');
     const role = localStorage.getItem('userRole') || 'JUDGE';
     const userId = parseInt(localStorage.getItem('userId') || '1');
     

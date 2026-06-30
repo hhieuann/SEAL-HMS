@@ -15,7 +15,7 @@ import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import TrackDraw from './pages/Admin/TrackDraw';
-import CriteriaManager from './pages/Admin/CriteriaManager';
+
 import LandingPage from './pages/LandingPage';
 import AuthLayout from './layouts/AuthLayout';
 import Login from './pages/Auth/Login';
@@ -88,7 +88,6 @@ function App() {
           <Route path="events">
             <Route index element={<EventsConfig />} />
             <Route path="create" element={<EventForm />} />
-            <Route path="edit/:eventId" element={<EventForm />} />
           </Route>
           <Route path="accounts" element={<AccountManagement />} />
           <Route path="activity-log" element={<AnalyticsLog />} />
@@ -104,7 +103,7 @@ function App() {
             <Route path="analytics" element={<AnalyticsLog />} />
             <Route path="broadcast" element={<AdminBroadcast />} />
             <Route path="track-draw" element={<TrackDraw />} />
-            <Route path="criteria" element={<CriteriaManager />} />
+            <Route path="edit" element={<EventForm />} />
           </Route>
         </Route>
 
