@@ -134,6 +134,35 @@ public class AccountService {
         return accountRepository.findByEmail(email);
     }
 
+    /** Verify the current password then store the new one (hashed). */
+    @Transactional
+    public void changePassword(String email, String oldPassword, String newPassword) {
+        Account account = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + email));
+        if (!passwordEncoder.matches(oldPassword, account.getPassword())) {
+            throw new BusinessException("Old password is incorrect");
+        }
+        account.setPassword(passwordEncoder.encode(newPassword));
+        accountRepository.save(account);
+    }
+
+    /** Change an account's login email if a different, non-blank, not-yet-used value is given. */
+    @Transactional
+    public void updateEmail(Account account, String newEmail) {
+        if (newEmail == null || newEmail.isBlank()) {
+            return; // not changing the email
+        }
+        String trimmed = newEmail.trim();
+        if (trimmed.equalsIgnoreCase(account.getEmail())) {
+            return; // unchanged
+        }
+        if (accountRepository.existsByEmail(trimmed)) {
+            throw new BusinessException("Email already in use: " + trimmed);
+        }
+        account.setEmail(trimmed);
+        accountRepository.save(account);
+    }
+
     @Transactional(readOnly = true)
     public Account getById(Long id) {
         return accountRepository.findById(id)
