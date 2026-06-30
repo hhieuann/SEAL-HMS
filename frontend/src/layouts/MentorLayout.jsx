@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Code, LogOut, Bell, Ticket, ArrowLeft } from 'lucide-react';
+import { Code, LogOut, Bell, Ticket, ArrowLeft, User } from 'lucide-react';
 import { authApi } from '../api/auth';
 import './MentorLayout.css';
 
@@ -66,6 +66,9 @@ const MentorLayout = () => {
           <NavLink to="/mentor/announcements" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements
             <span style={{ background: 'var(--danger)', color: 'white', fontSize: '10px', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>2</span>
+          </NavLink>
+          <NavLink to="/mentor/settings" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
+            <User size={18} /> Settings
           </NavLink>
         </nav>
 

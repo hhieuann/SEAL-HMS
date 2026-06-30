@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X, User } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
 import './ParticipantLayout.css';
@@ -10,6 +10,13 @@ const ParticipantLayout = () => {
   const location = useLocation();
   const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
   const [isEliminated, setIsEliminated] = useState(false);
+  const [displayName, setDisplayName] = useState(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+      if (u.name) return u.name;
+    } catch(e) {}
+    return localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant';
+  });
 
   // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
   useEffect(() => {
@@ -36,6 +43,10 @@ const ParticipantLayout = () => {
     const handleStateUpdate = () => {
       checkElimination();
       setIsReady(localStorage.getItem('p_hasTeam') === 'true');
+      try {
+        const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        if (u.name) setDisplayName(u.name);
+      } catch(e) {}
     };
     
     checkElimination();
@@ -47,6 +58,21 @@ const ParticipantLayout = () => {
 
     const rehydrate = async () => {
       try {
+        const { profileApi } = await import('../api/profileApi');
+        try {
+          const res = await profileApi.getStudentProfile();
+          const data = res.data?.data || res.data;
+          if (data && (data.firstName || data.lastName)) {
+            const newName = `${data.firstName || ''} ${data.lastName || ''}`.trim();
+            const storedUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            storedUser.name = newName;
+            localStorage.setItem('currentUser', JSON.stringify(storedUser));
+            setDisplayName(newName);
+          }
+        } catch(e) {
+          console.error('Failed to fetch profile in layout', e);
+        }
+
         const { eventService } = await import('../api/eventService');
         const eventsRes = await eventService.getEvents();
         const allEvents = eventsRes.data || [];
@@ -153,7 +179,7 @@ const ParticipantLayout = () => {
             <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
             <div className="user-info" style={{ textAlign: 'left' }}>
               <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>
-                {localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant'}
+                {displayName}
               </span>
               <span className="user-role" style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Participant</span>
             </div>
@@ -231,6 +257,14 @@ const ParticipantLayout = () => {
             <NavLink to="/participant/faq" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <HelpCircle size={20} />
               <span>FAQ & Rules</span>
+            </NavLink>
+          </div>
+
+          <div className="nav-section">
+            <p className="nav-section-title">ACCOUNT</p>
+            <NavLink to="/participant/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <User size={20} />
+              <span>My Settings</span>
             </NavLink>
           </div>
         </nav>
