@@ -13,6 +13,7 @@ const Workspace = () => {
   const [teamData, setTeamData] = useState(null);
   const [eventData, setEventData] = useState(null);
   const [currentRoundName, setCurrentRoundName] = useState('Main Event');
+  const [hasRoundStarted, setHasRoundStarted] = useState(false);
   const [problemStatement, setProblemStatement] = useState({
     title: 'Main Event Problem Statement',
     body: 'Build a specialized AI RAG (Retrieval-Augmented Generation) system based on a domain-specific dataset. The system must have mechanisms to detect and prevent hallucination, support multi-hop reasoning, and feature a user-friendly interface.',
@@ -168,6 +169,13 @@ const Workspace = () => {
                     break;
                   }
                 }
+                
+                if (lastStartedIdx !== -1) {
+                  setHasRoundStarted(true);
+                } else {
+                  setHasRoundStarted(false);
+                }
+                
                 activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
                 
                 const round = rounds[activeRoundIdx] || rounds[0];
@@ -380,7 +388,7 @@ const Workspace = () => {
         <div className="ws-col-left">
 
           {/* 🔴 Problem Statement Widget */}
-          {PROBLEM_RELEASED && teamTrack.name !== 'Awaiting Draw...' && (
+          {PROBLEM_RELEASED && (teamTrack.name !== 'Awaiting Draw...' || hasRoundStarted) && (
             <div className="glass-panel ws-panel" style={{ background: '#FFFFFF', border: '1px solid rgba(245,158,11,0.35)', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, var(--warning), var(--danger))' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -441,6 +449,12 @@ const Workspace = () => {
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
                 <strong>Topic:</strong> {teamTrack.topic}
               </p>
+            </div>
+          ) : hasRoundStarted ? (
+            <div className="glass-panel ws-panel" style={{ background: 'rgba(239,68,68,0.05)', border: '1px dashed rgba(239,68,68,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
+              <Target size={32} color="var(--danger)" style={{ marginBottom: '12px', opacity: 0.7 }} />
+              <h3 style={{ fontSize: '15px', color: 'var(--danger)', marginBottom: '8px' }}>Round Started!</h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>The hackathon round is currently live! Check the problem statement above and start building.</p>
             </div>
           ) : (
             <div className="glass-panel ws-panel" style={{ background: 'rgba(139,92,246,0.05)', border: '1px dashed rgba(139,92,246,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
