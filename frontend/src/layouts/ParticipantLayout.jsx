@@ -3,6 +3,8 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
+import { eventService } from '../api/eventService';
+import { standingsService } from '../api/scoreService';
 import './ParticipantLayout.css';
 
 const ParticipantLayout = () => {
@@ -13,32 +15,47 @@ const ParticipantLayout = () => {
 
   // Re-hydrate participant state from backend after login (localStorage was cleared on logout)
   useEffect(() => {
-    const checkElimination = () => {
-      const eId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1';
-      const trackDrawConfirmed = localStorage.getItem(`trackDrawConfirmed_${eId}`) === 'true';
-      if (!trackDrawConfirmed) {
-        setIsEliminated(false);
-        return;
-      }
-      const trackDrawStr = localStorage.getItem(`trackDraw_${eId}`);
-      if (trackDrawStr) {
-        try {
-          const parsedDraw = JSON.parse(trackDrawStr);
-          const myTeamName = localStorage.getItem('myTeamName');
-          if (myTeamName) {
-            const inDraw = parsedDraw.some(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
-            setIsEliminated(!inDraw);
+    const checkEliminationFromBackend = async () => {
+      const eId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
+      const tId = localStorage.getItem('p_teamId');
+      if (!eId || !tId) { setIsEliminated(false); return; }
+
+      try {
+        const roundsRes = await eventService.getEventRounds(eId);
+        const rounds = roundsRes.data || [];
+        // Find the latest started round
+        let lastStartedIdx = -1;
+        for (let i = rounds.length - 1; i >= 0; i--) {
+          if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+            lastStartedIdx = i; break;
           }
-        } catch(e) {}
+        }
+        // Only check elimination if we're beyond round 1
+        if (lastStartedIdx > 0) {
+          const prevRound = rounds[lastStartedIdx - 1];
+          const standingsRes = await standingsService.getStandings(prevRound.id);
+          const standings = standingsRes?.data || [];
+          const myStanding = standings.find(s => String(s.teamId) === String(tId));
+          if (myStanding && myStanding.promoted === false) {
+            setIsEliminated(true);
+          } else {
+            setIsEliminated(false);
+          }
+        } else {
+          setIsEliminated(false);
+        }
+      } catch (e) {
+        // If API fails, don't mark as eliminated
+        setIsEliminated(false);
       }
     };
-    
+
     const handleStateUpdate = () => {
-      checkElimination();
+      checkEliminationFromBackend();
       setIsReady(localStorage.getItem('p_hasTeam') === 'true');
     };
     
-    checkElimination();
+    checkEliminationFromBackend();
     window.addEventListener('storage', handleStateUpdate);
     window.addEventListener('participant_state_updated', handleStateUpdate);
 

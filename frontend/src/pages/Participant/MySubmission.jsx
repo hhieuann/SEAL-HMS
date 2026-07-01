@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send } from 'lucide-react';
-import { submissionService, criterionService } from '../../api/scoreService';
+import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle } from 'lucide-react';
+import { submissionService, criterionService, standingsService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 
@@ -62,10 +62,12 @@ const MySubmission = () => {
         }
         setCurrentRound(round);
 
+        let currentTeam = null;
         if (tId) {
           try {
             const teamRes = await teamService.getTeam(tId);
-            setTeamData(teamRes?.data || null);
+            currentTeam = teamRes?.data || null;
+            setTeamData(currentTeam);
           } catch (e) {}
         }
 
@@ -123,21 +125,22 @@ const MySubmission = () => {
           }
         }
         
-        // Check if team is eliminated
+        // Check if team is eliminated (using backend standings, not localStorage)
         if (tId && activeRoundIdx > 0) {
-          const trackDrawStr = localStorage.getItem(`trackDraw_${eventIdStr}`);
-          if (trackDrawStr) {
-            const nextRoundDraw = JSON.parse(trackDrawStr);
-            let found = false;
-            for (const track of nextRoundDraw) {
-               if (track.teams?.some(t => typeof t === 'object' ? t.id == tId || t.name === teamData?.name : t === teamData?.name)) {
-                 found = true;
-                 break;
-               }
+          try {
+            const prevRoundId = evt.rounds[activeRoundIdx - 1]?.id;
+            if (prevRoundId) {
+              const standingsRes = await standingsService.getStandings(prevRoundId);
+              const standings = standingsRes?.data || [];
+              const myStanding = standings.find(s => String(s.teamId) === String(tId));
+              // If team exists in standings and was NOT promoted, they are eliminated
+              if (myStanding && myStanding.promoted === false) {
+                setExistingSubmission({ eliminated: true });
+              }
+              // If team not found in standings at all, don't mark eliminated (scores may not be computed yet)
             }
-            if (!found) {
-               setExistingSubmission({ eliminated: true });
-            }
+          } catch (e) {
+            console.error('Failed to check elimination status:', e);
           }
         }
       } catch (e) {
