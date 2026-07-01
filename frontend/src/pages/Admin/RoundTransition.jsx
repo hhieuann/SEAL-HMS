@@ -242,6 +242,13 @@ const RoundTransition = () => {
       setConfirmed(true);
       setLockToast(true);
       
+      // Compute round ranking in backend before advancing (sets promoted flags)
+      try {
+        await standingsService.computeRoundRanking(currentRoundObj.id);
+      } catch (e) {
+        console.error('Failed to compute round ranking:', e);
+      }
+
       const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
       const startIdx = statuses.indexOf(currentRoundObj.status);
       if (startIdx !== -1) {
