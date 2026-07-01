@@ -70,8 +70,8 @@ export const standingsService = {
     return response.data;
   },
   // Compute and persist round ranking (sets promoted flags)
-  computeRoundRanking: async (roundId) => {
-    const response = await apiClient.post(`/api/v1/rounds/${roundId}/ranking/compute`);
+  computeRoundRanking: async (roundId, promotedTeamIds = []) => {
+    const response = await apiClient.post(`/api/v1/rounds/${roundId}/ranking/compute`, promotedTeamIds);
     return response.data;
   },
 };

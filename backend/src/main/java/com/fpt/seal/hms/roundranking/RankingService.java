@@ -35,7 +35,7 @@ public class RankingService {
 
     /** Rank every team in the round by score (desc) and mark the top-N as promoted. */
     @Transactional
-    public List<RoundStandingDto> computeRoundRanking(Long roundId) {
+    public List<RoundStandingDto> computeRoundRanking(Long roundId, List<Long> promotedTeamIds) {
         Round round = roundRepository.findById(roundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found: " + roundId));
 
@@ -44,11 +44,14 @@ public class RankingService {
 
         Integer topN = round.getPromotionTopN();
 
-
         assignRanks(rankings, this::scoreOf, RoundRanking::setRank);
         for (RoundRanking rr : rankings) {
             Integer rank = rr.getRank();
-            rr.setIsPromoted(topN != null && topN > 0 && rank != null && rank <= topN);
+            if (promotedTeamIds != null && !promotedTeamIds.isEmpty()) {
+                rr.setIsPromoted(promotedTeamIds.contains(rr.getTeam().getId()));
+            } else {
+                rr.setIsPromoted(topN != null && topN > 0 && rank != null && rank <= topN);
+            }
         }
         roundRankingRepository.saveAll(rankings);
         return rankings.stream().map(this::toRoundDto).toList();
