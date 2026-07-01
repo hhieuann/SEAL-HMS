@@ -5,6 +5,10 @@ const PARTICIPANT_KEYS = ['p_hasJoinedEvent', 'p_hasTeam', 'p_teamInviteCode', '
 export const authApi = {
   login: async (email, password) => {
     try {
+      // Clear old state before login to prevent cross-account bleeding
+      localStorage.removeItem('currentUser');
+      PARTICIPANT_KEYS.forEach(key => localStorage.removeItem(key));
+      
       const response = await apiClient.post('/api/v1/auth/login', { email, password });
       const { token, role, accountId, email: returnedEmail, name: returnedName } = response.data.data;
       
@@ -84,6 +88,15 @@ export const authApi = {
         localStorage.setItem('accountId', data.id);
         localStorage.setItem('userId', data.id);
       }
+      return response.data;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  changePassword: async (oldPassword, newPassword) => {
+    try {
+      const response = await apiClient.put('/api/v1/auth/change-password', { oldPassword, newPassword });
       return response.data;
     } catch (err) {
       throw err;

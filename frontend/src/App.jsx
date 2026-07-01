@@ -22,6 +22,7 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import RegistrationSuccess from './pages/Auth/RegistrationSuccess';
 import ExpertDashboard from './pages/Auth/ExpertDashboard';
+import Settings from './pages/Shared/Settings';
 
 import ParticipantLayout from './layouts/ParticipantLayout';
 import EventSelection from './pages/Participant/EventSelection';
@@ -79,6 +80,7 @@ function App() {
           <Route path="mentor" element={<ContactMentor />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="archive/:eventId" element={<EventArchive />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
 
         {/* Admin/Coordinator Routes */}
@@ -122,6 +124,7 @@ function App() {
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
     </Router>

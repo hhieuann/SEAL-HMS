@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut } from 'lucide-react';
+import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut, User, Settings as SettingsIcon } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { submissionService, scoreService } from '../../api/scoreService';
+import Settings from '../Shared/Settings';
 
 const ExpertDashboard = () => {
   const navigate = useNavigate();
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const handleEnterWorkspace = (ctx) => {
     const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, trackId: ctx.trackId, path: ctx.path, eventId: ctx.eventId };
@@ -171,25 +174,57 @@ const ExpertDashboard = () => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: '14px', fontWeight: '600' }}>{currentUser.name}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Senior Expert</div>
-          </div>
-          <img src={currentUser.avatar} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
           <button 
             className="btn-icon" 
-            onClick={() => navigate('/login')} 
-            title="Logout" 
-            style={{ marginLeft: '8px', background: 'var(--bg-hover)', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            title="My Settings" 
+            onClick={() => setShowSettings(!showSettings)} 
+            style={{ background: showSettings ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%' }}
           >
-            <LogOut size={18} color="var(--text-secondary)" />
+            <SettingsIcon size={20} />
+          </button>
+          
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '14px', fontWeight: '600' }}>{currentUser.name}</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Expert User</div>
+          </div>
+          
+          <img 
+            src={currentUser.avatar} 
+            alt="Avatar" 
+            style={{ width: '40px', height: '40px', borderRadius: '50%' }} 
+          />
+          
+          <button 
+            className="btn-icon" 
+            title="Logout" 
+            onClick={() => {
+              import('../../api/auth').then(({ authApi }) => {
+                authApi.logout();
+              });
+            }} 
+            style={{ background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '8px', borderRadius: '50%', marginLeft: '8px' }}
+          >
+            <LogOut size={20} />
           </button>
         </div>
       </div>
 
       <div style={{ width: '100%', maxWidth: '1000px' }}>
-        <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Welcome back, {currentUser.name.split(' ')[0]}! 👋</h1>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '16px', marginBottom: '40px' }}>Here is an overview of your current assignments and pending tasks.</p>
+        {showSettings ? (
+          <div>
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="btn btn-secondary"
+              style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              &larr; Back to Dashboard
+            </button>
+            <Settings />
+          </div>
+        ) : (
+          <>
+            <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Welcome back, {currentUser.name.split(' ')[0]}! 👋</h1>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '16px', marginBottom: '40px' }}>Here is an overview of your current assignments and pending tasks.</p>
 
         {/* JUDGE SECTION */}
         {hasJudge && (
@@ -197,59 +232,65 @@ const ExpertDashboard = () => {
           <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
             <Shield size={24} /> Judge Assignments
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-            {assignments.filter(item => item.role === 'Judge').map(item => (
-              <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--warning)' }} />
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div style={{ background: 'rgba(245,158,11,0.1)', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '13px', fontWeight: '600' }}>
-                    <Shield size={16} /> Judge
+          {assignments.filter(item => item.role === 'Judge').length === 0 ? (
+            <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              No Judge assignments at the moment.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              {assignments.filter(item => item.role === 'Judge').map(item => (
+                <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--warning)' }} />
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ background: 'rgba(245,158,11,0.1)', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#f59e0b', fontSize: '13px', fontWeight: '600' }}>
+                      <Shield size={16} /> Judge
+                    </div>
+                    {item.status === 'upcoming' && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px' }}>Upcoming</span>
+                    )}
                   </div>
-                  {item.status === 'upcoming' && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px' }}>Upcoming</span>
-                  )}
+
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>{item.event}</h2>
+                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
+
+                  <div style={{ flex: 1 }}>
+                    {item.status === 'active' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Pending</span>
+                          <span style={{ fontWeight: '600' }}>{item.stats.pending}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Flagged</span>
+                          <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.flagged}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Completed</span>
+                          <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.completed}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.status === 'upcoming' && (
+                      <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        Starts in {item.startsIn}
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => handleEnterWorkspace(item)}
+                    className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
+                    style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                    disabled={item.status === 'upcoming'}
+                  >
+                    Enter Workspace <ArrowRight size={16} />
+                  </button>
                 </div>
-
-                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>{item.event}</h2>
-                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
-
-                <div style={{ flex: 1 }}>
-                  {item.status === 'active' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Pending</span>
-                        <span style={{ fontWeight: '600' }}>{item.stats.pending}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Flagged</span>
-                        <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.flagged}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Completed</span>
-                        <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.completed}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {item.status === 'upcoming' && (
-                    <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Starts in {item.startsIn}
-                    </div>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => handleEnterWorkspace(item)}
-                  className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
-                  style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
-                  disabled={item.status === 'upcoming'}
-                >
-                  Enter Workspace <ArrowRight size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
         )}
 
@@ -259,60 +300,68 @@ const ExpertDashboard = () => {
           <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#14b8a6' }}>
             <BookOpen size={24} /> Mentor Assignments
           </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-            {assignments.filter(item => item.role === 'Mentor').map(item => (
-              <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--accent-3)' }} />
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <div style={{ background: 'rgba(20,184,166,0.1)', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#14b8a6', fontSize: '13px', fontWeight: '600' }}>
-                    <BookOpen size={16} /> Mentor
+          {assignments.filter(item => item.role === 'Mentor').length === 0 ? (
+            <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              No Mentor assignments at the moment.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              {assignments.filter(item => item.role === 'Mentor').map(item => (
+                <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: 'var(--accent-3)' }} />
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ background: 'rgba(20,184,166,0.1)', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#14b8a6', fontSize: '13px', fontWeight: '600' }}>
+                      <BookOpen size={16} /> Mentor
+                    </div>
+                    {item.status === 'upcoming' && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px' }}>Upcoming</span>
+                    )}
                   </div>
-                  {item.status === 'upcoming' && (
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px' }}>Upcoming</span>
-                  )}
+
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>{item.event}</h2>
+                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
+
+                  <div style={{ flex: 1 }}>
+                    {item.status === 'active' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Open Tickets</span>
+                          <span style={{ fontWeight: '600' }}>{item.stats.openTickets}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Urgent</span>
+                          <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.urgentTickets}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Resolved</span>
+                          <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.resolved}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.status === 'upcoming' && (
+                      <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        Starts in {item.startsIn}
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => handleEnterWorkspace(item)}
+                    className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
+                    style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                    disabled={item.status === 'upcoming'}
+                  >
+                    Enter Workspace <ArrowRight size={16} />
+                  </button>
                 </div>
-
-                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>{item.event}</h2>
-                <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
-
-                <div style={{ flex: 1 }}>
-                  {item.status === 'active' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Open Tickets</span>
-                        <span style={{ fontWeight: '600' }}>{item.stats.openTickets}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Urgent</span>
-                        <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.urgentTickets}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Resolved</span>
-                        <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.resolved}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {item.status === 'upcoming' && (
-                    <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      Starts in {item.startsIn}
-                    </div>
-                  )}
-                </div>
-
-                <button 
-                  onClick={() => handleEnterWorkspace(item)}
-                  className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
-                  style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
-                  disabled={item.status === 'upcoming'}
-                >
-                  Enter Workspace <ArrowRight size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
+        )}
+          </>
         )}
       </div>
     </div>
