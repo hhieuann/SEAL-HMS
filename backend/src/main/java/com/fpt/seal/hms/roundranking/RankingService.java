@@ -45,10 +45,24 @@ public class RankingService {
         Integer topN = round.getPromotionTopN();
 
         assignRanks(rankings, this::scoreOf, RoundRanking::setRank);
+
+        // Build a safe Set<Long> from the input list.
+        // Jackson may deserialize small JSON numbers as Integer, but Team.getId() returns Long.
+        // Integer.equals(Long) is always false in Java, so we normalise via Number::longValue.
+        final java.util.Set<Long> promotedSet;
+        if (promotedTeamIds != null && !promotedTeamIds.isEmpty()) {
+            promotedSet = new java.util.HashSet<>();
+            for (Object raw : (List<?>) (Object) promotedTeamIds) {
+                promotedSet.add(((Number) raw).longValue());
+            }
+        } else {
+            promotedSet = null;
+        }
+
         for (RoundRanking rr : rankings) {
             Integer rank = rr.getRank();
-            if (promotedTeamIds != null && !promotedTeamIds.isEmpty()) {
-                rr.setIsPromoted(promotedTeamIds.contains(rr.getTeam().getId()));
+            if (promotedSet != null) {
+                rr.setIsPromoted(promotedSet.contains(rr.getTeam().getId()));
             } else {
                 rr.setIsPromoted(topN != null && topN > 0 && rank != null && rank <= topN);
             }
