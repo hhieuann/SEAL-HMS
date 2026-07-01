@@ -197,6 +197,8 @@ const TrackDraw = () => {
       }
 
       setConfirmed(true);
+      localStorage.setItem(`trackDrawConfirmed_${targetEventId}`, 'true');
+      localStorage.setItem(`trackDraw_${targetEventId}`, JSON.stringify(tracks));
       
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
@@ -230,6 +232,8 @@ const TrackDraw = () => {
     setConfirmed(false);
     setTopicDrawn(false);
     setTeamsAssigned(false);
+    localStorage.removeItem(`trackDrawConfirmed_${targetEventId}`);
+    localStorage.removeItem(`trackDraw_${targetEventId}`);
     
     // Re-initialize for Draw
     const initTracks = subTopics.map((st, i) => ({
