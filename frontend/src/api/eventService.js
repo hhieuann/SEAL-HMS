@@ -13,12 +13,20 @@ export const eventService = {
 
   getEventDetails: async (id) => {
     const response = await apiClient.get(`/api/v1/events/${id}`);
-    return response.data;
+    const data = response.data;
+    if (data?.data?.rounds) {
+      data.data.rounds.sort((a, b) => (a.roundSeq || 0) - (b.roundSeq || 0));
+    }
+    return data;
   },
 
   getEventRounds: async (eventId) => {
     const response = await apiClient.get(`/api/v1/events/${eventId}/rounds`);
-    return response.data;
+    const data = response.data;
+    if (data?.data && Array.isArray(data.data)) {
+      data.data.sort((a, b) => (a.roundSeq || 0) - (b.roundSeq || 0));
+    }
+    return data;
   },
 
   createEventBatch: async (eventData) => {
