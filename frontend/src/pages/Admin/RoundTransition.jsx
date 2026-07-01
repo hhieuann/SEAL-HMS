@@ -241,10 +241,22 @@ const RoundTransition = () => {
 
       setConfirmed(true);
       setLockToast(true);
+
+      // Collect IDs of all teams that advanced
+      let promotedTeamIds = [];
+      if (trackStandings) {
+         trackStandings.forEach(track => {
+            track.teams.forEach(t => {
+               if (t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass')) {
+                  if (t.teamId) promotedTeamIds.push(t.teamId);
+               }
+            });
+         });
+      }
       
       // Compute round ranking in backend before advancing (sets promoted flags)
       try {
-        await standingsService.computeRoundRanking(currentRoundObj.id);
+        await standingsService.computeRoundRanking(currentRoundObj.id, promotedTeamIds);
       } catch (e) {
         console.error('Failed to compute round ranking:', e);
       }

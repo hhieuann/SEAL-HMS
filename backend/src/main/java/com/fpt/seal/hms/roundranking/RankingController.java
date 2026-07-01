@@ -24,8 +24,10 @@ public class RankingController {
     }
 
     @PostMapping("/rounds/{roundId}/ranking/compute")
-    public ResponseEntity<ApiResponse<List<RoundStandingDto>>> computeRoundRanking(@PathVariable Long roundId) {
-        return ResponseEntity.ok(ApiResponse.ok("Round ranking computed", rankingService.computeRoundRanking(roundId)));
+    public ResponseEntity<ApiResponse<List<RoundStandingDto>>> computeRoundRanking(
+            @PathVariable Long roundId,
+            @RequestBody(required = false) List<Long> promotedTeamIds) {
+        return ResponseEntity.ok(ApiResponse.ok("Round ranking computed", rankingService.computeRoundRanking(roundId, promotedTeamIds)));
     }
 
     // --- Event level ---
