@@ -42,6 +42,7 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PostMapping
     public ResponseEntity<ApiResponse<EventResponse>> createEvent(@Valid @RequestBody EventRequest request) {
         EventResponse created = eventService.createEvent(request);
@@ -49,6 +50,7 @@ public class EventController {
                 .body(ApiResponse.ok("Event created successfully", created));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<EventResponse>> updateEvent(
             @PathVariable Long id,
@@ -57,6 +59,7 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.ok("Event updated successfully", updated));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PatchMapping("/{id}/status")
     public ResponseEntity<ApiResponse<EventResponse>> updateEventStatus(
             @PathVariable Long id,
@@ -65,6 +68,7 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.ok("Event status updated successfully", updated));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteEvent(@PathVariable Long id) {
         eventService.deleteEvent(id);

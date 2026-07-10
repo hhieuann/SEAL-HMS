@@ -5,6 +5,7 @@ import com.fpt.seal.hms.roundranking.dto.EventStandingDto;
 import com.fpt.seal.hms.roundranking.dto.RoundStandingDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,6 +25,7 @@ public class RankingController {
     }
 
     @PostMapping("/rounds/{roundId}/ranking/compute")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<List<RoundStandingDto>>> computeRoundRanking(
             @PathVariable Long roundId,
             @RequestBody(required = false) List<Long> promotedTeamIds) {
@@ -38,6 +40,7 @@ public class RankingController {
     }
 
     @PostMapping("/events/{eventId}/ranking/compute")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<List<EventStandingDto>>> computeEventRanking(@PathVariable Long eventId) {
         return ResponseEntity.ok(ApiResponse.ok("Event ranking computed", rankingService.computeEventRanking(eventId)));
     }

@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public class TrackController {
         return ResponseEntity.ok(ApiResponse.ok(trackService.getTrackById(id)));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PostMapping("/events/{eventId}/tracks")
     public ResponseEntity<ApiResponse<TrackResponse>> createTrack(
             @PathVariable Long eventId,
@@ -37,6 +39,7 @@ public class TrackController {
                 .body(ApiResponse.ok("Track created successfully", created));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PutMapping("/tracks/{id}")
     public ResponseEntity<ApiResponse<TrackResponse>> updateTrack(
             @PathVariable Long id,
@@ -45,6 +48,7 @@ public class TrackController {
         return ResponseEntity.ok(ApiResponse.ok("Track updated successfully", updated));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @DeleteMapping("/tracks/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteTrack(@PathVariable Long id) {
         trackService.deleteTrack(id);
