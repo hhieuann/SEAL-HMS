@@ -16,6 +16,7 @@ const EventForm = () => {
     registrationStartDate: '',
     registrationEndDate: '',
     maxTeams: '',
+    minTeams: '',
     description: '',
     status: '',
     subTopics: [],
@@ -37,6 +38,7 @@ const EventForm = () => {
   const regEndBeforeStart   = !!(regStart && regEnd   && regEnd   <= regStart);
   const evtStartNotAfterReg = !!(regEnd   && evtStart && evtStart <= regEnd);
   const evtEndBeforeStart   = !!(evtStart && evtEnd   && evtEnd   <= evtStart);
+  const minGtMax = !!(formData.minTeams && formData.maxTeams && parseInt(formData.minTeams) > parseInt(formData.maxTeams));
   const hasDateErrors = regEndBeforeStart || evtStartNotAfterReg || evtEndBeforeStart;
 
   const datePart = (dt) => (dt ? dt.split('T')[0] : '');
@@ -115,7 +117,7 @@ const EventForm = () => {
           startDate: rawEvent.startDate || '', endDate: rawEvent.endDate || '',
           registrationStartDate: rawEvent.registrationStartDate || '',
           registrationEndDate:   rawEvent.registrationEndDate   || '',
-          maxTeams: rawEvent.maxTeams || '', description: rawEvent.description || '',
+          maxTeams: rawEvent.maxTeams || '', minTeams: rawEvent.minTeams || '', description: rawEvent.description || '',
           status: rawEvent.status?.toLowerCase() || '',
           subTopics,
           rounds: rawRoundsWithCriteria
@@ -138,6 +140,8 @@ const EventForm = () => {
     if (!formData.name)                                         { triggerError('Event Name is required.', 1); return; }
     if (!formData.registrationStartDate || !formData.registrationEndDate) { triggerError('Registration open and close dates are required.', 1); return; }
     if (!formData.maxTeams || parseInt(formData.maxTeams, 10) < 1)        { triggerError('Max Teams is required and must be at least 1.', 1); return; }
+    if (!formData.minTeams || parseInt(formData.minTeams, 10) < 2)        { triggerError('Min Teams is required and must be at least 2.', 1); return; }
+    if (minGtMax)                                               { triggerError('Min Teams cannot be greater than Max Teams.', 1); return; }
     if (!formData.startDate || !formData.endDate)               { triggerError('Event start and end dates are required.', 1); return; }
     if (hasDateErrors)                                          { triggerError('Please fix the date errors on Step 1 before saving.', 1); return; }
     if (formData.rounds.length === 0)                           { triggerError('At least one round is required. Please add a round in Step 3.', 3); return; }
@@ -152,6 +156,7 @@ const EventForm = () => {
         registrationStartDate: formData.registrationStartDate || null,
         registrationEndDate:   formData.registrationEndDate   || null,
         maxTeams: formData.maxTeams ? parseInt(formData.maxTeams, 10) : null,
+        minTeams: formData.minTeams ? parseInt(formData.minTeams, 10) : null,
         description: formData.description,
         rounds: formData.rounds.map((r, index) => {
           const isFinalRound = index === formData.rounds.length - 1;
@@ -316,7 +321,7 @@ const EventForm = () => {
                   <p style={{fontSize:'12px',color:'var(--text-secondary)',margin:0}}>Configure this <strong>before</strong> setting the main event dates.</p>
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'24px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px'}}>
                 <div>
                   <label style={lbl}>Registration Opens {req}</label>
                   <input type="date" disabled={isLocked} style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} min={isEditMode ? undefined : new Date().toISOString().split('T')[0]} value={formData.registrationStartDate} onChange={e=>setFormData({...formData,registrationStartDate:e.target.value})}/>
@@ -326,9 +331,17 @@ const EventForm = () => {
                   <input type="date" disabled={isLocked} style={inp(regEndBeforeStart?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} value={formData.registrationEndDate} min={regStart || (isEditMode ? undefined : new Date().toISOString().split('T')[0])} onChange={e=>setFormData({...formData,registrationEndDate:e.target.value})}/>
                   {regEndBeforeStart && <InlineWarn msg="Must be after registration open date"/>}
                 </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px',marginTop:'20px'}}>
+                <div>
+                  <label style={lbl}>Min Teams {req}</label>
+                  <input type="number" disabled={isLocked} min="2" style={inp(minGtMax?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 5" value={formData.minTeams} onChange={e=>setFormData({...formData,minTeams:e.target.value})}/>
+                  {minGtMax && <InlineWarn msg="Min Teams cannot exceed Max Teams"/>}
+                </div>
                 <div>
                   <label style={lbl}>Max Teams {req}</label>
-                  <input type="number" disabled={isLocked} min="1" style={inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{})} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
+                  <input type="number" disabled={isLocked} min="1" style={inp(minGtMax?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
+                  {minGtMax && <InlineWarn msg="Max Teams must be ≥ Min Teams"/>}
                 </div>
               </div>
             </div>
