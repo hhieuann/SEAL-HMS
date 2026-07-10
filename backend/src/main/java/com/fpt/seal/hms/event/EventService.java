@@ -68,6 +68,9 @@ public class EventService {
         if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
             throw new IllegalArgumentException("Max teams must be at least 2.");
         }
+        if (request.getMinTeams() != null && request.getMaxTeams() != null && request.getMinTeams() > request.getMaxTeams()) {
+            throw new BusinessException("Min teams cannot be greater than max teams.");
+        }
 
         Event event = new Event();
         event.setName(request.getName());
@@ -77,6 +80,7 @@ public class EventService {
         event.setRegistrationStartDate(request.getRegistrationStartDate());
         event.setRegistrationEndDate(request.getRegistrationEndDate());
         event.setMaxTeams(request.getMaxTeams());
+        event.setMinTeams(request.getMinTeams());
         event.setDescription(request.getDescription());
         event.setStatus(EventStatus.PLANNED); // default status
 
@@ -127,6 +131,9 @@ public class EventService {
         if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
             throw new IllegalArgumentException("Max teams must be at least 2.");
         }
+        if (request.getMinTeams() != null && request.getMaxTeams() != null && request.getMinTeams() > request.getMaxTeams()) {
+            throw new BusinessException("Min teams cannot be greater than max teams.");
+        }
 
         event.setName(request.getName());
         event.setType(request.getType());
@@ -135,6 +142,7 @@ public class EventService {
         event.setRegistrationStartDate(request.getRegistrationStartDate());
         event.setRegistrationEndDate(request.getRegistrationEndDate());
         event.setMaxTeams(request.getMaxTeams());
+        event.setMinTeams(request.getMinTeams());
         event.setDescription(request.getDescription());
 
         // Validate that the new maxTeams does not violate existing rounds' promotion pools
@@ -150,6 +158,14 @@ public class EventService {
 
         if (currentStatus == newStatus) {
             return mapToResponse(event);
+        }
+
+        // Task 1.1: Block transition to ONGOING if team count < minTeams
+        if (newStatus == EventStatus.ONGOING && event.getMinTeams() != null) {
+            long teamCount = teamRepository.countByEventId(id);
+            if (teamCount < event.getMinTeams()) {
+                throw new BusinessException("Cannot start event. Minimum teams required: " + event.getMinTeams() + ", currently registered: " + teamCount);
+            }
         }
 
         validateStatusTransition(currentStatus, newStatus);
@@ -217,6 +233,7 @@ public class EventService {
         response.setRegistrationStartDate(event.getRegistrationStartDate());
         response.setRegistrationEndDate(event.getRegistrationEndDate());
         response.setMaxTeams(event.getMaxTeams());
+        response.setMinTeams(event.getMinTeams());
         response.setStatus(event.getStatus());
         response.setDescription(event.getDescription());
         response.setCreatedAt(event.getCreatedAt());
@@ -251,8 +268,13 @@ public class EventService {
             boolean regClosed = event.getRegistrationEndDate() != null && today.isAfter(event.getRegistrationEndDate());
             boolean teamFull = event.getMaxTeams() != null && teamRepository.countByEventId(event.getId()) >= event.getMaxTeams();
             if (regClosed || teamFull) {
-                event.setStatus(EventStatus.ONGOING);
-                changed = true;
+                // Task 1.1: Only auto-progress to ONGOING if minTeams is met
+                long teamCount = teamRepository.countByEventId(event.getId());
+                boolean meetsMinTeams = event.getMinTeams() == null || teamCount >= event.getMinTeams();
+                if (meetsMinTeams) {
+                    event.setStatus(EventStatus.ONGOING);
+                    changed = true;
+                }
             }
         } else if (status == EventStatus.ONGOING && event.getEndDate() != null && today.isAfter(event.getEndDate())) {
             event.setStatus(EventStatus.COMPLETED);

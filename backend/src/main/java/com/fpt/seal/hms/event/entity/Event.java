@@ -48,4 +48,7 @@ public class Event extends BaseEntity {
 
     @Column(name = "max_teams", nullable = false)
     private Integer maxTeams;
+
+    @Column(name = "min_teams")
+    private Integer minTeams;
 }
