@@ -33,6 +33,8 @@ class PrizeServiceTest {
     private EventRepository eventRepository;
     @Mock
     private TeamRepository teamRepository;
+    @Mock
+    private com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     @InjectMocks
     private PrizeService prizeService;
 

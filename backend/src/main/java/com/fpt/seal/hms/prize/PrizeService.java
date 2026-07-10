@@ -28,6 +28,7 @@ public class PrizeService {
     private final PrizeRepository prizeRepository;
     private final EventRepository eventRepository;
     private final TeamRepository teamRepository;
+    private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
 
     @Transactional
     public PrizeResponse createPrize(Long eventId, PrizeRequest request) {
@@ -62,6 +63,7 @@ public class PrizeService {
             }
         }
         prizeRepository.saveAll(prizes);
+        auditLogService.log("PRIZES_AWARDED_BY_RANKING", "event", eventId, prizes.size() + " prizes processed");
         return prizes.stream().map(this::toResponse).toList();
     }
 
@@ -73,6 +75,7 @@ public class PrizeService {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found: " + teamId));
         prize.setTeam(team);
+        auditLogService.log("PRIZE_AWARDED", "prize", prizeId, "team " + team.getName());
         return toResponse(prizeRepository.save(prize));
     }
 
