@@ -32,6 +32,7 @@ public class RankingService {
     private final RoundRankingRepository roundRankingRepository;
     private final RoundRepository roundRepository;
     private final TeamRepository teamRepository;
+    private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
 
     /** Rank every team in the round by score (desc) and mark the top-N as promoted. */
     @Transactional
@@ -68,6 +69,8 @@ public class RankingService {
             }
         }
         roundRankingRepository.saveAll(rankings);
+        auditLogService.log("ROUND_RANKING_COMPUTED", "round", roundId,
+                promotedSet != null ? "explicit promotions: " + promotedSet : "top-N: " + topN);
         return rankings.stream().map(this::toRoundDto).toList();
     }
 
@@ -99,6 +102,7 @@ public class RankingService {
             t.setEventScore(totalByTeam.get(t.getId()));
         }
         teamRepository.saveAll(teams);
+        auditLogService.log("EVENT_RANKING_COMPUTED", "event", eventId, teams.size() + " teams ranked");
         return teams.stream().map(this::toEventDto).toList();
     }
 

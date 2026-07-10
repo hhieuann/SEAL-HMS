@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,6 +32,7 @@ public class RoundController {
     }
 
     @PostMapping("/events/{eventId}/rounds")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<RoundResponse>> createRound(
             @PathVariable Long eventId,
             @Valid @RequestBody RoundRequest request) {
@@ -40,6 +42,7 @@ public class RoundController {
     }
 
     @PutMapping("/rounds/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<RoundResponse>> updateRound(
             @PathVariable Long id,
             @Valid @RequestBody RoundRequest request) {
@@ -48,6 +51,7 @@ public class RoundController {
     }
 
     @PatchMapping("/rounds/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<RoundResponse>> updateRoundStatus(
             @PathVariable Long id,
             @Valid @RequestBody RoundStatusUpdateRequest request) {
@@ -56,6 +60,7 @@ public class RoundController {
     }
 
     @DeleteMapping("/rounds/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<Void>> deleteRound(@PathVariable Long id) {
         roundService.deleteRound(id);
         return ResponseEntity.ok(ApiResponse.ok("Round deleted successfully", null));

@@ -5,6 +5,7 @@ import com.fpt.seal.hms.score.dto.GradeSubmissionRequest;
 import com.fpt.seal.hms.score.dto.ScoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -30,6 +31,7 @@ public class ScoreController {
     }
 
     @PostMapping("/grade")
+    @PreAuthorize("hasAnyRole('LECTURER','GUEST_JUDGE','ADMIN')")
     public ResponseEntity<ApiResponse<List<ScoreResponse>>> grade(
             @PathVariable Long submissionId,
             @RequestBody GradeSubmissionRequest request) {
