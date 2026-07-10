@@ -34,6 +34,8 @@ class RankingServiceTest {
     private RoundRepository roundRepository;
     @Mock
     private TeamRepository teamRepository;
+    @Mock
+    private com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     @InjectMocks
     private RankingService rankingService;
 

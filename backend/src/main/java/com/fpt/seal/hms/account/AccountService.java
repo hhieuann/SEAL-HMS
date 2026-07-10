@@ -24,6 +24,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final StudentRepository studentRepository;
     private final LecturerRepository lecturerRepository;
+    private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
 
     @Transactional
     public Account register(String email, String rawPassword, Role role, String studentCode, String firstName, String lastName, String campus, String proofUrl) {
@@ -228,6 +229,7 @@ public class AccountService {
             throw new BusinessException("Only PENDING accounts can be approved (current: " + account.getStatus() + ")");
         }
         account.setStatus(AccountStatus.ACTIVE);
+        auditLogService.log("ACCOUNT_APPROVED", "account", account.getId(), account.getEmail());
         return account; // managed entity flushes on commit
     }
 
@@ -236,6 +238,8 @@ public class AccountService {
     public Account updateStatus(Long id, AccountStatus status) {
         Account account = getById(id);
         account.setStatus(status);
+        auditLogService.log("ACCOUNT_STATUS_CHANGED", "account", account.getId(),
+                account.getEmail() + " -> " + status);
         return account;
     }
 
@@ -244,6 +248,8 @@ public class AccountService {
     public Account updateRole(Long id, Role role) {
         Account account = getById(id);
         account.setRole(role);
+        auditLogService.log("ACCOUNT_ROLE_CHANGED", "account", account.getId(),
+                account.getEmail() + " -> " + role);
         return account;
     }
 
