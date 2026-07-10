@@ -214,7 +214,7 @@ const EventDashboard = () => {
           <div className="stat-details">
             <h3>Total Teams</h3>
             <p className="stat-value">{totalTeams} <span style={{fontSize: '14px', color: 'var(--text-secondary)'}}>/ {event.maxTeams || '∞'} max</span></p>
-            <p className="stat-trend neutral">{totalTeams === 0 ? 'No teams yet' : `${totalTeams} team(s) registered`}</p>
+            <p className="stat-trend neutral">{event.minTeams ? `Min ${event.minTeams} teams required` : `${totalTeams} team(s) registered`}</p>
           </div>
         </div>
         <div className="stat-card glass-panel">
