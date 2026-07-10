@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -37,6 +38,7 @@ public class TeamController {
 
     // Endpoint for Admin/Staff to trigger random track assignment
     @PostMapping("/teams/{id}/random-assign")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> assignRandomTrack(
             @PathVariable Long id,
             @RequestParam Long eventId) {
@@ -45,6 +47,7 @@ public class TeamController {
     }
 
     @PatchMapping("/teams/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> updateTeamStatus(
             @PathVariable Long id,
             @Valid @RequestBody com.fpt.seal.hms.team.dto.TeamStatusUpdateRequest request) {
@@ -52,6 +55,7 @@ public class TeamController {
         return ResponseEntity.ok(ApiResponse.ok("Team status updated successfully", updated));
     }
     @PatchMapping("/teams/{id}/assign-track")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> assignTrack(
             @PathVariable Long id,
             @RequestParam Long trackId) {
