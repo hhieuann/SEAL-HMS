@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public class CriterionController {
         return ResponseEntity.ok(ApiResponse.ok(criterionService.getCriterionById(id)));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PostMapping("/rounds/{roundId}/criteria")
     public ResponseEntity<ApiResponse<CriterionResponse>> createCriterion(
             @PathVariable Long roundId,
@@ -37,6 +39,7 @@ public class CriterionController {
                 .body(ApiResponse.ok("Criterion created successfully", created));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PutMapping("/criteria/{id}")
     public ResponseEntity<ApiResponse<CriterionResponse>> updateCriterion(
             @PathVariable Long id,
@@ -45,6 +48,7 @@ public class CriterionController {
         return ResponseEntity.ok(ApiResponse.ok("Criterion updated successfully", updated));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @DeleteMapping("/criteria/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteCriterion(@PathVariable Long id) {
         criterionService.deleteCriterion(id);

@@ -30,6 +30,8 @@ class AccountServiceTest {
     private StudentRepository studentRepository;
     @Mock
     private LecturerRepository lecturerRepository;
+    @Mock
+    private com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     @InjectMocks
     private AccountService accountService;
 

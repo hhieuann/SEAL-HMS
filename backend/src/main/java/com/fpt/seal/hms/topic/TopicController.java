@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -33,6 +34,7 @@ public class TopicController {
         return ResponseEntity.ok(ApiResponse.ok(topicService.getTopicById(id)));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PostMapping("/tracks/{trackId}/topics")
     public ResponseEntity<ApiResponse<TopicResponse>> createTopicUnderTrack(
             @PathVariable Long trackId,
@@ -42,6 +44,7 @@ public class TopicController {
                 .body(ApiResponse.ok("Topic created successfully", created));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PostMapping("/events/{eventId}/topics")
     public ResponseEntity<ApiResponse<TopicResponse>> createTopicUnderEvent(
             @PathVariable Long eventId,
@@ -51,6 +54,7 @@ public class TopicController {
                 .body(ApiResponse.ok("Topic created successfully", created));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PatchMapping("/topics/{id}/assign-track")
     public ResponseEntity<ApiResponse<Void>> assignTrack(
             @PathVariable Long id,
@@ -59,6 +63,7 @@ public class TopicController {
         return ResponseEntity.ok(ApiResponse.ok("Topic assigned to track successfully", null));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @PutMapping("/topics/{id}")
     public ResponseEntity<ApiResponse<TopicResponse>> updateTopic(
             @PathVariable Long id,
@@ -67,6 +72,7 @@ public class TopicController {
         return ResponseEntity.ok(ApiResponse.ok("Topic updated successfully", updated));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @DeleteMapping("/topics/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteTopic(@PathVariable Long id) {
         topicService.deleteTopic(id);
