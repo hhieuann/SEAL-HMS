@@ -40,3 +40,18 @@ logs/
 
 backend/uploads/
 debug_event.json
+
+# Local dev helper scripts & scratch notes — keep on your machine, never commit.
+# (DB-wipe scripts hardcode local credentials; notes belong in team chat, not the repo.)
+clean_db.*
+CleanDb.java
+seedTeams.js
+backend/fetch_tracks.js
+backend/data/
+*_note.md
+*_notes.md
+backend_tasks.md
+# Root-level Node files only exist to run clean_db.js locally.
+# Leading / = repo root only; frontend/package.json is NOT affected.
+/package.json
+/package-lock.json
