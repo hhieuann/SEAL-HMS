@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target } from 'lucide-react';
+import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target, AlertCircle } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import './Workspace.css';
 
@@ -313,6 +313,19 @@ const Workspace = () => {
 
   return (
     <div className="workspace-container animate-fade-in">
+      {teamData?.isDisqualified && (
+        <div style={{ padding: '16px 24px', marginBottom: '24px', background: 'rgba(239,68,68,0.1)', borderBottom: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--danger)' }}>
+          <AlertCircle size={24} />
+          <div>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Your Team is Disqualified</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '14px', opacity: 0.9 }}>
+              {teamData?.disqualificationReason
+                ? `Reason: ${teamData.disqualificationReason}`
+                : 'You are no longer eligible to participate. Please contact the event administrator.'}
+            </p>
+          </div>
+        </div>
+      )}
       <header className="workspace-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>

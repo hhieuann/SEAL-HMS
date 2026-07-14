@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download } from 'lucide-react';
+import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download, Gavel } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
@@ -23,6 +23,21 @@ const RoundTransition = () => {
   const [viewRoundIndex, setViewRoundIndex] = useState(-1);
   const [trackStandings, setTrackStandings] = useState([]);
   const [hasJudges, setHasJudges] = useState(false); // Default false: strict block until API confirms
+
+  // Penalty Modal State
+  const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+  const [penaltyTeamId, setPenaltyTeamId] = useState(null);
+  const [penaltyAction, setPenaltyAction] = useState('deduct'); // 'deduct', 'disqualify'
+  const [penaltyPoints, setPenaltyPoints] = useState('');
+  const [penaltyReason, setPenaltyReason] = useState('');
+  const [disqualificationReason, setDisqualificationReason] = useState('');
+  const [confirmStep, setConfirmStep] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -72,10 +87,16 @@ const RoundTransition = () => {
 
         // Load real standings from DB for this round
         let dbScoreMap = {}; // teamId -> score
+        let dbPenaltyMap = {}; // teamId -> penaltyPoints
+        let dbReasonMap = {}; // teamId -> penaltyReason
         try {
           const standingsRes = await standingsService.getStandings(round?.id || savedRoundIdx);
           const dbStandings = standingsRes?.data || [];
-          dbStandings.forEach(s => { if (s.teamId && s.score != null) dbScoreMap[s.teamId] = parseFloat(s.score); });
+          dbStandings.forEach(s => { 
+            if (s.teamId && s.score != null) dbScoreMap[s.teamId] = parseFloat(s.score); 
+            if (s.teamId && s.penaltyPoints != null) dbPenaltyMap[s.teamId] = parseFloat(s.penaltyPoints);
+            if (s.teamId && s.penaltyReason) dbReasonMap[s.teamId] = s.penaltyReason;
+          });
         } catch {
           // fall back to localStorage mock scores if API fails
           const localScores = JSON.parse(localStorage.getItem(`scores_${round?.id || savedRoundIdx}`) || '{}');
@@ -122,11 +143,16 @@ const RoundTransition = () => {
               const teamObj = teamsList.find(t => t.name === teamNameStr);
               const teamId = teamObj?.id || (typeof teamItem === 'object' ? teamItem.id : undefined);
               const score = (teamId && dbScoreMap[teamId] != null) ? dbScoreMap[teamId] : null;
-              return { team: teamNameStr, teamId, score };
+              const penalty = (teamId && dbPenaltyMap[teamId] != null) ? dbPenaltyMap[teamId] : 0;
+              const penaltyReason = (teamId && dbReasonMap[teamId]) ? dbReasonMap[teamId] : '';
+              const isDisqualified = teamObj?.isDisqualified || false;
+              return { team: teamNameStr, teamId, score, penalty, penaltyReason, isDisqualified };
             });
 
-            // Sort by score desc (null scores go to bottom)
+            // Sort by score desc (null scores go to bottom, disqualified to very bottom)
             teamEntries.sort((a, b) => {
+              if (a.isDisqualified && !b.isDisqualified) return 1;
+              if (!a.isDisqualified && b.isDisqualified) return -1;
               if (a.score === null && b.score === null) return 0;
               if (a.score === null) return 1;
               if (b.score === null) return -1;
@@ -147,8 +173,9 @@ const RoundTransition = () => {
 
               let status = idx < cutoff ? 'advance' : 'eliminate';
               if (isTiedAtCutoff) status = 'tiebreak';
+              if (entry.isDisqualified) status = 'eliminate';
 
-              return { rank, team: entry.team, teamId: entry.teamId, score: entry.score, status, tied: isTiedAtCutoff };
+              return { rank, team: entry.team, teamId: entry.teamId, score: entry.score, penalty: entry.penalty, penaltyReason: entry.penaltyReason, isDisqualified: entry.isDisqualified, status, tied: isTiedAtCutoff };
             });
 
             return {
@@ -176,17 +203,102 @@ const RoundTransition = () => {
   const nextRound = rounds[currentRoundIndex + 1] || null;
   const isLastRound = !nextRound;
 
-  // If finals (last round): flatten all advanced teams into one list (no tracks)
+  // If finals (last round): flatten all teams into one list (no tracks)
   const finalsTeamList = isLastRound
     ? trackStandings.flatMap(track =>
-        track.teams.filter(t => t.status === 'advance').map(t => ({ ...t, fromTrack: track.name }))
-      ).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).map((t, i) => ({ ...t, rank: i + 1 }))
+        track.teams.map(t => ({ ...t, fromTrack: track.name }))
+      ).sort((a, b) => {
+        if (a.isDisqualified && !b.isDisqualified) return 1;
+        if (!a.isDisqualified && b.isDisqualified) return -1;
+        return (b.score ?? 0) - (a.score ?? 0);
+      }).map((t, i) => ({ ...t, rank: i + 1 }))
     : [];
 
   const tiebreakerTeams = trackStandings.flatMap(track =>
     track.teams.filter(t => t.status === 'tiebreak').map(t => ({ ...t, trackId: track.id, trackName: track.name }))
   );
   const allTiesResolved = tiebreakerTeams.every(t => resolvedTies[t.team]);
+
+  const handleComputeStandings = async () => {
+    if (!currentRound) return;
+    try {
+      const { standingsService } = await import('../../api/scoreService.js');
+      // Pass the manually resolved teams as promotedTeamIds
+      const manuallyPromoted = Object.entries(resolvedTies)
+        .filter(([_, status]) => status === 'Advanced')
+        .map(([teamName]) => {
+          const team = trackStandings.flatMap(t => t.teams).find(t => t.team === teamName);
+          return team?.teamId;
+        })
+        .filter(Boolean);
+
+      await standingsService.computeRoundRanking(currentRound.id, manuallyPromoted);
+      alert('Round rankings computed successfully and saved to database!');
+    } catch (err) {
+      alert("Error computing rankings: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const openPenaltyModal = (teamId, isDisqualified = false) => {
+    let t = trackStandings.flatMap(ts => ts.teams).find(x => x.teamId === teamId);
+    if (!t) t = finalsTeamList.find(x => x.teamId === teamId);
+
+    setPenaltyTeamId(teamId);
+    setPenaltyAction(isDisqualified ? 'requalify' : 'deduct');
+    setPenaltyPoints(t?.penalty || '');
+    setPenaltyReason(t?.penaltyReason || '');
+    setDisqualificationReason('');
+    setConfirmStep(false);
+    setShowPenaltyModal(true);
+  };
+
+  const handleConfirmClick = () => {
+    if (penaltyAction === 'deduct' && !penaltyReason.trim()) {
+      showToast("Please provide a reason.", "error");
+      return;
+    }
+    if (penaltyAction === 'disqualify' && !disqualificationReason.trim()) {
+      showToast("Please provide a disqualification reason.", "error");
+      return;
+    }
+    if (penaltyAction === 'deduct' && (penaltyPoints === '' || parseFloat(penaltyPoints) < 0)) {
+      showToast("Please enter valid penalty points (0 to revert).", "error");
+      return;
+    }
+    setConfirmStep(true);
+  };
+
+  const executePenalty = async () => {
+    if (!currentRound || !penaltyTeamId) return;
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      
+      if (penaltyAction === 'disqualify') {
+        await teamService.disqualifyTeam(penaltyTeamId, true, disqualificationReason);
+        showToast("Team disqualified successfully!");
+      } else if (penaltyAction === 'requalify') {
+        await teamService.disqualifyTeam(penaltyTeamId, false, '');
+        showToast("Team re-qualified successfully!");
+      } else {
+        const parsedPoints = parseFloat(penaltyPoints) || 0;
+        await teamService.applyPenalty(penaltyTeamId, currentRound.id, { 
+          penaltyPoints: parsedPoints, 
+          penaltyReason 
+        });
+        showToast(parsedPoints === 0 ? "Penalty reverted successfully!" : "Penalty applied successfully!");
+      }
+      
+      setShowPenaltyModal(false);
+      setPenaltyTeamId(null);
+      setConfirmStep(false);
+      setDisqualificationReason('');
+      
+      // Reload silently to refresh standings snapshot
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      showToast("Error applying penalty: " + (err.response?.data?.message || err.message), "error");
+    }
+  };
 
   const handleExportCSV = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
@@ -275,7 +387,14 @@ const RoundTransition = () => {
       
       // Compute round ranking in backend before advancing (sets promoted flags)
       try {
-        await standingsService.computeRoundRanking(currentRoundObj.id, promotedTeamIds);
+        const manuallyPromoted = Object.entries(resolvedTies)
+          .filter(([_, status]) => status === 'Advanced')
+          .map(([teamName]) => {
+            const team = trackStandings.flatMap(t => t.teams).find(t => t.team === teamName);
+            return team?.teamId;
+          })
+          .filter(Boolean);
+        await standingsService.computeRoundRanking(currentRoundObj.id, manuallyPromoted);
       } catch (e) {
         console.error('Failed to compute round ranking:', e);
       }
@@ -531,18 +650,33 @@ const RoundTransition = () => {
                   {i < 3 ? ['🥇','🥈','🥉'][i] : s.rank}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', fontSize: '15px' }}>{s.team}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>From: {s.fromTrack}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '18px', fontWeight: '800', color: i === 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
-                    {s.score ?? '—'}
+                  <div style={{ fontWeight: '600', fontSize: '15px', textDecoration: s.isDisqualified ? 'line-through' : 'none', color: s.isDisqualified ? 'var(--danger)' : 'inherit' }}>{s.team}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span>From: {s.fromTrack}</span>
+                    {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800' }}>DISQUALIFIED</span>}
+                    {s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600' }}>Penalty: -{s.penalty} pts</span>}
                   </div>
-                  {i < 3 && (
-                    <div style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                      <Trophy size={11} /> Top {i + 1}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <button 
+                    onClick={() => openPenaltyModal(s.teamId, s.isDisqualified)}
+                    style={{ padding: '4px', background: 'transparent', border: 'none', color: s.isDisqualified ? 'var(--text-secondary)' : 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = s.isDisqualified ? 'var(--success)' : 'var(--danger)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                    title={s.isDisqualified ? "Re-qualify Team" : "Apply Penalty"}
+                  >
+                    <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
+                  </button>
+                  <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                    <div style={{ fontSize: '18px', fontWeight: '800', color: i === 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
+                      {s.score ?? '—'}
                     </div>
-                  )}
+                    {i < 3 && (
+                      <div style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                        <Trophy size={11} /> Top {i + 1}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -609,16 +743,29 @@ const RoundTransition = () => {
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent', opacity: finalStatus === 'eliminate' ? 0.6 : 1 }}>
                         <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: (!isFinished || s.rank <= 2) ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: '600', fontSize: '14px' }}>{s.team}</div>
+                          <div style={{ fontWeight: '600', fontSize: '14px', textDecoration: s.isDisqualified ? 'line-through' : 'none', color: s.isDisqualified ? 'var(--danger)' : 'inherit' }}>{s.team}</div>
                           {isFinished && s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
+                          {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800', marginLeft: '6px' }}>DISQUALIFIED</span>}
+                          {s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600', marginLeft: '6px' }}>Penalty: -{s.penalty} pts</span>}
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
-                            {s.score ?? '—'}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <button 
+                            onClick={() => openPenaltyModal(s.teamId, s.isDisqualified)}
+                            style={{ padding: '4px', background: 'transparent', border: 'none', color: s.isDisqualified ? 'var(--success)' : 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = s.isDisqualified ? 'var(--success)' : 'var(--danger)'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                            title={s.isDisqualified ? "Re-qualify Team" : "Apply Penalty"}
+                          >
+                            <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
+                          </button>
+                          <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                            <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
+                              {s.score ?? '—'}
+                            </div>
+                            {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
+                            {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
+                            {finalStatus === 'neutral' && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>—</span>}
                           </div>
-                          {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
-                          {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
-                          {finalStatus === 'neutral' && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>—</span>}
                         </div>
                       </div>
                     </React.Fragment>
@@ -721,6 +868,131 @@ const RoundTransition = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Penalty Modal */}
+      {showPenaltyModal && (
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="modal-content animate-fade-in" style={{ background: 'white', borderRadius: '16px', maxWidth: '450px', width: '90%', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-primary)' }}>
+              {penaltyAction === 'requalify' ? 'Re-qualify Team' : 'Apply Penalty or Disqualify'}
+            </h2>
+            
+            {confirmStep ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '12px', color: 'var(--danger)' }}>Are you sure?</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>
+                  {penaltyAction === 'deduct' 
+                    ? `You are about to deduct ${penaltyPoints} points from this team.`
+                    : penaltyAction === 'disqualify' 
+                      ? 'You are about to DISQUALIFY this team. They will not be able to proceed.'
+                      : 'You are about to RE-QUALIFY this team.'}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                  <button className="btn btn-secondary" onClick={() => setConfirmStep(false)} style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600' }}>Back</button>
+                  <button className="btn btn-primary" onClick={executePenalty} style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600', background: 'var(--danger)', border: 'none' }}>Yes, proceed</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {penaltyAction !== 'requalify' && (
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', background: 'var(--bg-subtle)', padding: '6px', borderRadius: '12px' }}>
+                    <button
+                      className={`btn ${penaltyAction === 'deduct' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', border: 'none', background: penaltyAction === 'deduct' ? 'var(--primary)' : 'transparent', color: penaltyAction === 'deduct' ? 'white' : 'var(--text-secondary)', fontWeight: '600' }}
+                      onClick={() => setPenaltyAction('deduct')}
+                    >
+                      Deduct Points
+                    </button>
+                    <button
+                      className={`btn ${penaltyAction === 'disqualify' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', border: 'none', background: penaltyAction === 'disqualify' ? 'var(--danger)' : 'transparent', color: penaltyAction === 'disqualify' ? 'white' : 'var(--text-secondary)', fontWeight: '600' }}
+                      onClick={() => setPenaltyAction('disqualify')}
+                    >
+                      Disqualify
+                    </button>
+                  </div>
+                )}
+
+                {penaltyAction === 'deduct' && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-secondary)' }}>Penalty Points</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '15px' }}
+                      value={penaltyPoints}
+                      onChange={(e) => setPenaltyPoints(e.target.value)}
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                )}
+
+                {penaltyAction === 'deduct' && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-secondary)' }}>Reason for Penalty</label>
+                    <textarea
+                      className="form-input"
+                      rows="3"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '15px', resize: 'none' }}
+                      value={penaltyReason}
+                      onChange={(e) => setPenaltyReason(e.target.value)}
+                      placeholder="Reason for penalty..."
+                    />
+                  </div>
+                )}
+
+                {penaltyAction === 'disqualify' && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--danger)' }}>Disqualification Reason</label>
+                    <textarea
+                      className="form-input"
+                      rows="3"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.5)', fontSize: '15px', resize: 'none' }}
+                      value={disqualificationReason}
+                      onChange={(e) => setDisqualificationReason(e.target.value)}
+                      placeholder="Explain why this team is being disqualified..."
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600' }}
+                    onClick={() => {
+                      setShowPenaltyModal(false);
+                      setPenaltyTeamId(null);
+                      setPenaltyPoints('');
+                      setPenaltyReason('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600', background: penaltyAction === 'disqualify' ? 'var(--danger)' : undefined, border: 'none' }}
+                    onClick={handleConfirmClick}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999,
+          background: toast.type === 'error' ? 'var(--danger)' : '#10b981',
+          color: 'white', padding: '12px 24px', borderRadius: '8px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)', fontWeight: '600',
+          animation: 'fade-in 0.3s ease-out'
+        }}>
+          {toast.message}
         </div>
       )}
 

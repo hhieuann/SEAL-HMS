@@ -146,7 +146,7 @@ public class RankingService {
 
     private RoundStandingDto toRoundDto(RoundRanking rr) {
         return new RoundStandingDto(rr.getId(), rr.getTeam().getId(), rr.getTeam().getName(),
-                rr.getScore(), rr.getRank(), rr.getIsPromoted());
+                rr.getScore(), rr.getRank(), rr.getIsPromoted(), rr.getPenaltyPoints(), rr.getPenaltyReason());
     }
 
     private EventStandingDto toEventDto(Team t) {

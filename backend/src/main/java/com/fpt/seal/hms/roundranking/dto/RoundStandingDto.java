@@ -9,6 +9,8 @@ public record RoundStandingDto(
         String teamName,
         BigDecimal score,
         Integer rank,
-        Boolean promoted
+        Boolean promoted,
+        BigDecimal penaltyPoints,
+        String penaltyReason
 ) {
 }

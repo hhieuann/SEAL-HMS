@@ -49,5 +49,17 @@ export const teamService = {
   assignMentors: async (teamId, mentorIds) => {
     const response = await apiClient.post(`/api/v1/teams/${teamId}/mentors`, mentorIds);
     return response.data;
+  },
+
+  disqualifyTeam: async (teamId, disqualified, reason = '') => {
+    const params = new URLSearchParams({ disqualified });
+    if (reason) params.append('reason', reason);
+    const response = await apiClient.put(`/api/v1/teams/${teamId}/disqualify?${params.toString()}`);
+    return response.data;
+  },
+
+  applyPenalty: async (teamId, roundId, penaltyData) => {
+    const response = await apiClient.put(`/api/v1/teams/${teamId}/rounds/${roundId}/penalty`, penaltyData);
+    return response.data;
   }
 };
