@@ -40,6 +40,27 @@ const ExpertDashboard = () => {
   });
 
   useEffect(() => {
+    const handleProfileUpdate = () => {
+      try {
+        const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+        if (u.name) {
+          setCurrentUser(prev => ({
+            ...prev,
+            name: u.name,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=14b8a6&color=fff`
+          }));
+        }
+      } catch(e) {}
+    };
+    window.addEventListener('storage', handleProfileUpdate);
+    window.addEventListener('participant_state_updated', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('storage', handleProfileUpdate);
+      window.removeEventListener('participant_state_updated', handleProfileUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
     const fetchEvents = async () => {
       try {
         const [eventsRes, assignmentsRes] = await Promise.all([
