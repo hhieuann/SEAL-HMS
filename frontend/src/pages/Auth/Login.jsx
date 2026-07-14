@@ -16,7 +16,7 @@ const Login = () => {
       'token', 'role', 'accountId', 'userId', 'currentUser',
       'p_eventId', 'p_selectedEventId', 'p_hasJoinedEvent',
       'p_hasTeam', 'p_isLeader', 'p_teamId', 'p_teamInviteCode',
-      'myTeamName', 'currentEventId',
+      'myTeamName', 'currentEventId', 'userName', 'userEmail', 'avatarUrl'
     ];
     keysToRemove.forEach(key => localStorage.removeItem(key));
   }, []);

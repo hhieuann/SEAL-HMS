@@ -46,8 +46,8 @@ export const teamService = {
     return response.data;
   },
 
-  assignMentors: async (teamId, mentorIds) => {
-    const response = await apiClient.post(`/api/v1/teams/${teamId}/mentors`, mentorIds);
+  assignMentor: async (teamId, mentorId) => {
+    const response = await apiClient.post(`/api/v1/teams/${teamId}/mentor`, { mentorId });
     return response.data;
   },
 

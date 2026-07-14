@@ -109,32 +109,23 @@ const AssignmentMatrix = () => {
     setAssignLoading(true);
     try {
       const { teamService } = await import('../../api/teamService.js');
-      const currentMentors = selectedTeam.mentors ? selectedTeam.mentors.map(m => m.lecturerId) : [];
-      if (currentMentors.includes(Number(assignForm.lecturerId))) {
-        throw new Error('This lecturer is already a mentor for this team.');
-      }
-      const updatedTeamRes = await teamService.assignMentors(selectedTeam.id, [...currentMentors, Number(assignForm.lecturerId)]);
+      const updatedTeamRes = await teamService.assignMentor(selectedTeam.id, Number(assignForm.lecturerId));
       
       setTeams(prev => prev.map(t => t.id === selectedTeam.id ? updatedTeamRes.data : t));
       setShowMentorModal(false);
       setSelectedTeam(null);
       setAssignForm({ trackId: '', lecturerId: '', role: 'JUDGE' });
     } catch (err) {
-      setAssignError(err.message || err.response?.data?.message || 'Failed to assign mentor');
+      setAssignError(err.response?.data?.message || err.message || 'Failed to assign mentor');
     } finally {
       setAssignLoading(false);
     }
   };
 
-  const handleRemoveMentor = async (teamId, lecturerId) => {
+  const handleRemoveMentor = async (teamId) => {
     try {
-      const team = teams.find(t => t.id === teamId);
-      if (!team) return;
-      const currentMentors = team.mentors ? team.mentors.map(m => m.lecturerId) : [];
-      const newMentors = currentMentors.filter(id => id !== lecturerId);
-      
       const { teamService } = await import('../../api/teamService.js');
-      const updatedTeamRes = await teamService.assignMentors(teamId, newMentors);
+      const updatedTeamRes = await teamService.assignMentor(teamId, null);
       setTeams(prev => prev.map(t => t.id === teamId ? updatedTeamRes.data : t));
     } catch (err) {
       console.error('Failed to remove mentor', err);
@@ -150,166 +141,151 @@ const AssignmentMatrix = () => {
         </div>
       </div>
 
-      {isLocked && (
+      {isLocked ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
           <UserCheck size={18} />
           <span style={{ fontSize: '13px', fontWeight: '500' }}>
             <strong>Action Locked:</strong> Event is still in the Registration phase. Assignments are disabled until registration ends.
           </span>
         </div>
-      )}
-
-      {tracks.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
-          <p>No tracks configured for this event yet.</p>
-        </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {tracks.map(track => {
-            const trackAssignments = assignments.filter(a => a.trackId === track.id);
-            const judges = trackAssignments.filter(a => a.role === 'JUDGE');
-            const mentors = trackAssignments.filter(a => a.role === 'MENTOR');
-            return (
-              <div key={track.id} className="glass-panel" style={{ padding: '20px 24px' }}>
-                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }}></span>
-                      {track.name || `Unnamed Track (ID: ${track.id})`}
-                    </div>
-                    {track.topic && (
-                      <div style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>Topic: {track.topic.name}</span>
-                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{track.topic.description}</span>
-                      </div>
-                    )}
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if (isLocked) {
-                        alert("Judge assignment is locked during the Registration phase.");
-                        return;
-                      }
-                      setAssignForm(p => ({ ...p, trackId: track.id, role: 'JUDGE' }));
-                      setAssignError('');
-                      setShowAssignModal(true);
-                    }}
-                    className="btn"
-                    style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
-                    disabled={isLocked}
-                  >
-                    <Plus size={14} /> Add Judge
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-                  {[{ label: 'Judges', list: judges, color: 'var(--warning)', role: 'JUDGE' }].map(col => (
-                    <div key={col.role}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: col.color, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <UserCheck size={14} /> {col.label} ({col.list.length})
-                      </div>
-                      {col.list.length === 0 ? (
-                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>None assigned</div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                          {col.list.map(a => (
-                            <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                              <div>
-                                <div style={{ fontSize: '13px', fontWeight: '600' }}>{a.lecturerFullName || a.lecturerEmail}</div>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{a.department || a.lecturerEmail}</div>
-                              </div>
-                              <button 
-                                onClick={() => {
-                                  if (isLocked) {
-                                    alert("Removal is locked during the Registration phase.");
-                                    return;
-                                  }
-                                  handleRemoveAssignment(a.id);
-                                }} 
-                                style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', opacity: isLocked ? 0.5 : 1 }} 
-                                title="Remove"
-                              >
-                                <X size={13} />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="page-header" style={{ marginTop: '40px' }}>
-        <div>
-          <h1>Team Mentors</h1>
-          <p className="subtitle">Assign mentors directly to participating teams.</p>
-        </div>
-      </div>
-      
-      {teams.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-          <p>No teams found for this event.</p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-          {teams.map(team => (
-            <div key={team.id} className="glass-panel" style={{ padding: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                <div>
-                  <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{team.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Track: {tracks.find(t => t.id === team.trackId)?.name || 'Not Assigned'}
-                  </div>
-                </div>
-                <button 
-                  onClick={() => {
-                    if (isLocked) {
-                      alert("Mentor assignment is locked during the Registration phase.");
-                      return;
-                    }
-                    setSelectedTeam(team);
-                    setAssignError('');
-                    setShowMentorModal(true);
-                  }}
-                  className="btn"
-                  style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
-                  disabled={isLocked}
-                >
-                  <Plus size={14} /> Add Mentor
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {(!team.mentors || team.mentors.length === 0) ? (
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>No mentors assigned</div>
-                ) : (
-                  team.mentors.map(m => (
-                    <div key={m.lecturerId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+        <>
+          {/* ===== JUDGE ASSIGNMENTS SECTION ===== */}
+          {tracks.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+              <p>No tracks configured for this event yet.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {tracks.map(track => {
+                const trackAssignments = assignments.filter(a => a.trackId === track.id);
+                const judges = trackAssignments.filter(a => a.role === 'JUDGE');
+                return (
+                  <div key={track.id} className="glass-panel" style={{ padding: '20px 24px' }}>
+                    <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent-3)' }}>🎓 {m.name}</div>
+                        <div style={{ fontWeight: '700', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }}></span>
+                          {track.name || `Unnamed Track (ID: ${track.id})`}
+                        </div>
+                        {track.topic && (
+                          <div style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>Topic: {track.topic.name}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{track.topic.description}</span>
+                          </div>
+                        )}
                       </div>
                       <button 
                         onClick={() => {
-                          if (isLocked) { alert("Removal locked."); return; }
-                          handleRemoveMentor(team.id, m.lecturerId);
+                          setAssignForm(p => ({ ...p, trackId: track.id, role: 'JUDGE' }));
+                          setAssignError('');
+                          setShowAssignModal(true);
                         }}
-                        style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: isLocked ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', opacity: isLocked ? 0.5 : 1 }}
+                        className="btn"
+                        style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
                       >
-                        <X size={13} />
+                        <Plus size={14} /> Add Judge
                       </button>
                     </div>
-                  ))
-                )}
-              </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                      {[{ label: 'Judges', list: judges, color: 'var(--warning)', role: 'JUDGE' }].map(col => (
+                        <div key={col.role}>
+                          <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: col.color, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <UserCheck size={14} /> {col.label} ({col.list.length})
+                          </div>
+                          {col.list.length === 0 ? (
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>None assigned</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {col.list.map(a => (
+                                <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                  <div>
+                                    <div style={{ fontSize: '13px', fontWeight: '600' }}>{a.lecturerFullName || a.lecturerEmail}</div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{a.department || a.lecturerEmail}</div>
+                                  </div>
+                                  <button 
+                                    onClick={() => handleRemoveAssignment(a.id)} 
+                                    style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
+                                    title="Remove"
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
-        </div>
+          )}
+
+          {/* ===== TEAM MENTORS SECTION ===== */}
+          <div className="page-header" style={{ marginTop: '40px' }}>
+            <div>
+              <h1>Team Mentors</h1>
+              <p className="subtitle">Assign mentors directly to participating teams.</p>
+            </div>
+          </div>
+          
+          {teams.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <p>No teams found for this event.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+              {teams.map(team => (
+                <div key={team.id} className="glass-panel" style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div>
+                      <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{team.name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Track: {tracks.find(t => t.id === team.trackId)?.name || 'Not Assigned'}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setSelectedTeam(team);
+                        setAssignError('');
+                        setAssignForm(p => ({ ...p, lecturerId: '' }));
+                        setShowMentorModal(true);
+                      }}
+                      className="btn"
+                      style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
+                      <Plus size={14} /> {team.mentor ? 'Change Mentor' : 'Add Mentor'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {!team.mentor ? (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>No mentor assigned</div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent-3)' }}>🎓 {team.mentor.name}</div>
+                          {team.mentor.email && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{team.mentor.email}</div>}
+                        </div>
+                        <button 
+                          onClick={() => handleRemoveMentor(team.id)}
+                          style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
+      {/* ===== JUDGE ASSIGNMENT MODAL ===== */}
       {showAssignModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setShowAssignModal(false)} />
@@ -341,13 +317,19 @@ const AssignmentMatrix = () => {
         </div>
       )}
 
+      {/* ===== MENTOR ASSIGNMENT MODAL ===== */}
       {showMentorModal && selectedTeam && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setShowMentorModal(false)} />
           <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '460px', background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
             <button onClick={() => setShowMentorModal(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex' }}><X size={16} /></button>
-            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '6px' }}>Assign Mentor</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>Assign a mentor to <strong>{selectedTeam.name}</strong>.</p>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '6px' }}>{selectedTeam.mentor ? 'Change Mentor' : 'Assign Mentor'}</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              {selectedTeam.mentor 
+                ? <>Change mentor for <strong>{selectedTeam.name}</strong>. Current: <strong>{selectedTeam.mentor.name}</strong></>
+                : <>Assign a mentor to <strong>{selectedTeam.name}</strong>.</>
+              }
+            </p>
             {assignError && (
               <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: 'var(--danger)', fontSize: '13px', marginBottom: '16px' }}>{assignError}</div>
             )}
@@ -362,7 +344,7 @@ const AssignmentMatrix = () => {
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
                 <button type="button" onClick={() => setShowMentorModal(false)} style={{ flex: 1, padding: '11px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={assignLoading}>
-                  {assignLoading ? <Loader2 size={16} className="spin" /> : <UserCheck size={16} />} Assign Mentor
+                  {assignLoading ? <Loader2 size={16} className="spin" /> : <UserCheck size={16} />} {selectedTeam.mentor ? 'Change Mentor' : 'Assign Mentor'}
                 </button>
               </div>
             </form>

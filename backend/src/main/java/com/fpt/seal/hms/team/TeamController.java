@@ -55,13 +55,14 @@ public class TeamController {
         return ResponseEntity.ok(ApiResponse.ok("Team status updated successfully", updated));
     }
 
-    @PostMapping("/teams/{id}/mentors")
+    @PostMapping("/teams/{id}/mentor")
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-    public ResponseEntity<ApiResponse<TeamResponse>> assignMentors(
+    public ResponseEntity<ApiResponse<TeamResponse>> assignMentor(
             @PathVariable Long id,
-            @RequestBody java.util.List<Long> mentorIds) {
-        TeamResponse updated = teamService.assignMentors(id, mentorIds);
-        return ResponseEntity.ok(ApiResponse.ok("Mentors assigned successfully", updated));
+            @RequestBody java.util.Map<String, Long> payload) {
+        Long mentorId = payload.get("mentorId");
+        TeamResponse updated = teamService.assignMentor(id, mentorId);
+        return ResponseEntity.ok(ApiResponse.ok("Mentor assigned successfully", updated));
     }
 
     @PatchMapping("/teams/{id}/assign-track")

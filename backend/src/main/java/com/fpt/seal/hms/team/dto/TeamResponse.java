@@ -23,7 +23,7 @@ public class TeamResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer memberCount;
-    private java.util.List<MentorDto> mentors;
+    private MentorDto mentor;
 
     @Getter
     @Setter

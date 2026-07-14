@@ -114,6 +114,8 @@ export const authApi = {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userEmail');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('avatarUrl');
     localStorage.removeItem('accountId');
     localStorage.removeItem('currentUser');
     
