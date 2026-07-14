@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { AlertTriangle, Ban, Minus, Plus, RefreshCw, Scale, AlertCircle, CheckCircle } from 'lucide-react';
 
 const Courtroom = () => {
@@ -9,14 +10,34 @@ const Courtroom = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [shaking, setShaking] = useState(false);
   const [toast, setToast] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
+  const { eventId } = useParams();
   const [log, setLog] = useState([
     { team: 'DataSculpt', type: 'penalty', points: -5, reason: 'Late submission (12 min past deadline)', by: 'Admin', time: 'May 18, 14:30' },
     { team: 'ByteStrike', type: 'disqualified', points: null, reason: 'Code plagiarism detected — AI similarity 92%', by: 'Admin', time: 'May 17, 09:10' },
   ]);
 
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const { eventService } = await import('../../api/eventService.js');
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        const res = await eventService.getEventDetails(parsedEventId);
+        if (res.data && (res.data.status === 'CREATED' || res.data.status === 'UPCOMING')) {
+          setIsLocked(true);
+        }
+      } catch (e) {}
+    };
+    if (eventId) checkStatus();
+  }, [eventId]);
+
   const teams = ['NullPointerException', 'BeaconAnalytics', 'CircuitCare', 'DataSculpt', 'Byte Me', '404 Brain Not Found'];
 
   const handleApply = () => {
+    if (isLocked) {
+      alert("Dispute Resolution is locked during the Registration phase. Please wait until registration ends and the event begins.");
+      return;
+    }
     setErrorMsg('');
 
     if (action !== 'disqualified' && points === 0) {
@@ -48,18 +69,22 @@ const Courtroom = () => {
   return (
     <div className="animate-fade-in">
       <div className="page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(239,68,68,0.3), rgba(239,68,68,0.1))', border: '1px solid rgba(239,68,68,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Scale size={24} color="var(--danger)" />
-          </div>
-          <div>
-            <h1>The Courtroom</h1>
-            <p className="subtitle">Issue penalties, bonuses, or disqualifications. Triggers automatic leaderboard recalculation.</p>
-          </div>
+        <div>
+          <h1>Dispute Resolution</h1>
+          <p className="subtitle">Manage penalties, bonuses, and disqualifications.</p>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '24px' }}>
+      {isLocked && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <AlertTriangle size={18} />
+          <span style={{ fontSize: '13px', fontWeight: '500' }}>
+            <strong>Action Locked:</strong> Event is still in the Registration phase. Applying penalties or bonuses is disabled.
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 2fr', gap: '24px' }}>
         {/* Left: Action Panel */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div className="glass-panel" style={{ padding: '28px' }}>

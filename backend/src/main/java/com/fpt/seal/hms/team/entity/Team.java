@@ -5,12 +5,15 @@ import com.fpt.seal.hms.common.entity.BaseEntity;
 import com.fpt.seal.hms.common.enums.TeamStatus;
 import com.fpt.seal.hms.topic.entity.Topic;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.lecturer.Lecturer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "team")
@@ -55,4 +58,12 @@ public class Team extends BaseEntity {
 
     @org.hibernate.annotations.Formula("(SELECT count(*) FROM team_member tm WHERE tm.team_id = team_id AND tm.status = 'ACCEPTED')")
     private Integer memberCount;
+
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "team_mentor",
+            joinColumns = @JoinColumn(name = "team_id"),
+            inverseJoinColumns = @JoinColumn(name = "lecturer_id")
+    )
+    private Set<Lecturer> mentors = new HashSet<>();
 }

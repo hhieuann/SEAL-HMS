@@ -6,6 +6,11 @@ export const trackService = {
     return response.data;
   },
 
+  getTrackAssignments: async (trackId) => {
+    const response = await apiClient.get(`/api/v1/tracks/${trackId}/assignments`);
+    return response.data;
+  },
+
   createTrack: async (eventId, trackData) => {
     const response = await apiClient.post(`/api/v1/events/${eventId}/tracks`, trackData);
     return response.data;

@@ -264,7 +264,7 @@ const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
   );
 };
 
-const CompletedEventCard = ({ evt }) => {
+const CompletedEventCard = ({ evt, isJoinedThisEvent }) => {
   const navigate = useNavigate();
   return (
     <div className="glass-panel" style={{ padding: '32px', position: 'relative', overflow: 'hidden' }}>
@@ -277,9 +277,16 @@ const CompletedEventCard = ({ evt }) => {
           <h2 style={{ fontSize: '22px', fontWeight: '700', color: 'var(--text-secondary)', marginBottom: '6px' }}>{evt.name}</h2>
           <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Event ended on {evt.endDate || 'TBD'}</div>
         </div>
-        <button type="button" onClick={() => navigate(`/participant/archive/${evt.id}`)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Trophy size={18} color="#ffd700" /> View Results
-        </button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {isJoinedThisEvent && (
+            <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black', padding: '10px 16px', fontSize: '14px' }}>
+              Enter Workspace <ArrowRight size={16} style={{ marginLeft: '6px' }} />
+            </button>
+          )}
+          <button type="button" onClick={() => navigate(`/participant/archive/${evt.id}`)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', fontSize: '14px' }}>
+            <Trophy size={16} color="#ffd700" /> View Results
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -358,7 +365,7 @@ const EventSelection = () => {
         {events.map((evt) => {
           const isLive = evt.status?.toLowerCase() === 'live' || evt.status?.toLowerCase() === 'ongoing';
           const isUpcoming = evt.status?.toLowerCase() === 'upcoming' || evt.status?.toLowerCase() === 'planned';
-          const isCompleted = evt.status?.toLowerCase() === 'completed';
+          const isCompleted = evt.status?.toLowerCase() === 'completed' || evt.status?.toLowerCase() === 'ended';
 
           const joinedEventIdStr = localStorage.getItem('p_eventId');
           const hasTrueTeam = localStorage.getItem('p_hasTeam') === 'true' || hasTeam;
@@ -372,7 +379,7 @@ const EventSelection = () => {
              return <UpcomingEventCard key={evt.id} evt={evt} handleRegister={handleRegister} isRegisteringThisEvent={registeringEventId === evt.id} hasJoinedAnyEvent={hasJoinedAnyEvent} isJoinedThisEvent={isJoinedThisEvent} hasTeam={hasTeam} registerError={registerError} />;
           }
           if (isCompleted) {
-             return <CompletedEventCard key={evt.id} evt={evt} />;
+             return <CompletedEventCard key={evt.id} evt={evt} isJoinedThisEvent={isJoinedThisEvent} />;
           }
           return null;
         })}

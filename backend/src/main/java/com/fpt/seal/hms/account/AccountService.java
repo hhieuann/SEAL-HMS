@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
+import com.fpt.seal.hms.common.service.FileStorageService;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
@@ -24,7 +26,25 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final StudentRepository studentRepository;
     private final LecturerRepository lecturerRepository;
+    private final com.fpt.seal.hms.staff.StaffRepository staffRepository;
     private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
+    private final FileStorageService fileStorageService;
+
+    @Transactional
+    public String uploadAvatar(String email, MultipartFile file) {
+        Account account = accountRepository.findByEmail(email)
+            .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        
+        String filename = fileStorageService.storeFile(file);
+        if (filename == null) {
+            throw new BusinessException("Failed to upload avatar");
+        }
+        
+        String avatarUrl = filename;
+        account.setAvatarUrl(avatarUrl);
+        accountRepository.save(account);
+        return avatarUrl;
+    }
 
     @Transactional
     public Account register(String email, String rawPassword, Role role, String studentCode, String firstName, String lastName, String campus, String proofUrl) {
@@ -104,6 +124,30 @@ public class AccountService {
         lecturer.setCampus(campus);
         lecturer.setPhone(phone);
         lecturerRepository.save(lecturer);
+
+        return new Object[]{savedAccount, rawPassword};
+    }
+
+    @Transactional
+    public Object[] adminCreateStaff(String email, String fullName, String department, String campus, String phone) {
+        if (accountRepository.existsByEmail(email)) {
+            throw new BusinessException("Email already registered: " + email);
+        }
+        String rawPassword = generateTempPassword();
+        Account account = new Account();
+        account.setEmail(email);
+        account.setPassword(passwordEncoder.encode(rawPassword));
+        account.setRole(Role.STAFF);
+        account.setStatus(AccountStatus.ACTIVE);
+        Account savedAccount = accountRepository.save(account);
+
+        com.fpt.seal.hms.staff.entity.Staff staff = new com.fpt.seal.hms.staff.entity.Staff();
+        staff.setAccount(savedAccount);
+        staff.setFullName(fullName);
+        staff.setDepartment(department);
+        staff.setCampus(campus);
+        staff.setPhone(phone);
+        staffRepository.save(staff);
 
         return new Object[]{savedAccount, rawPassword};
     }
@@ -204,6 +248,13 @@ public class AccountService {
                     department[0] = lecturer.getDepartment();
                     phone[0] = lecturer.getPhone();
                 });
+            } else if (acc.getRole() == Role.STAFF) {
+                staffRepository.findByAccount_Id(acc.getId()).ifPresent(staff -> {
+                    fullName[0] = staff.getFullName();
+                    campus[0] = staff.getCampus();
+                    department[0] = staff.getDepartment();
+                    phone[0] = staff.getPhone();
+                });
             }
 
             return new com.fpt.seal.hms.account.dto.AccountProfileResponse(
@@ -216,7 +267,8 @@ public class AccountService {
                     campus[0],
                     proof[0],
                     department[0],
-                    phone[0]
+                    phone[0],
+                    acc.getAvatarUrl()
             );
         }).toList();
     }
@@ -273,6 +325,10 @@ public class AccountService {
         } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
             return lecturerRepository.findByAccount_Id(acc.getId())
                     .map(com.fpt.seal.hms.lecturer.Lecturer::getFullName)
+                    .orElse(null);
+        } else if (acc.getRole() == Role.STAFF) {
+            return staffRepository.findByAccount_Id(acc.getId())
+                    .map(com.fpt.seal.hms.staff.entity.Staff::getFullName)
                     .orElse(null);
         }
         return null;

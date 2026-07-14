@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, GraduationCap } from 'lucide-react';
+import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 
 const AccountManagement = () => {
@@ -7,6 +7,7 @@ const AccountManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [roleToCreate, setRoleToCreate] = useState('LECTURER');
   const [newAccount, setNewAccount] = useState({ fullName: '', email: '', department: '', campus: '', phone: '' });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
@@ -78,14 +79,19 @@ const AccountManagement = () => {
     setError('');
     setIsCreating(true);
     try {
-      const result = await adminApi.createLecturerAccount(newAccount);
+      let result;
+      if (roleToCreate === 'STAFF') {
+        result = await adminApi.createStaffAccount(newAccount);
+      } else {
+        result = await adminApi.createLecturerAccount(newAccount);
+      }
       setTempPassword(result.tempPassword);
       // Also add to active list immediately
       setActiveList(prev => [{
         id: result.accountId,
         name: result.fullName,
         email: result.email,
-        role: 'LECTURER',
+        role: roleToCreate,
         status: 'active',
         joined: 'Just now'
       }, ...prev]);
@@ -104,6 +110,7 @@ const AccountManagement = () => {
     setTempPassword(null);
     setCopied(false);
     setError('');
+    setRoleToCreate('LECTURER');
     setNewAccount({ fullName: '', email: '', department: '', campus: '', phone: '' });
   };
 
@@ -140,7 +147,7 @@ const AccountManagement = () => {
           <h1>Global Account Management</h1>
           <p className="subtitle">Manage user identities, approve participant registrations, and create expert accounts.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}><GraduationCap size={18} /> Create Lecturer Account</button>
+        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}><UserPlus size={18} /> Create Account</button>
       </div>
 
       {/* Tabs */}
@@ -192,7 +199,11 @@ const AccountManagement = () => {
               <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=3b82f6&color=fff`} alt={u.name} style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+                    <img 
+                      src={u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=3b82f6&color=fff`} 
+                      alt={u.name} 
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+                    />
                     <div>
                       <div style={{ fontWeight: '600', fontSize: '14px' }}>{u.name}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{u.email}</div>
@@ -240,7 +251,11 @@ const AccountManagement = () => {
               <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=8b5cf6&color=fff`} alt={u.name} style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+                    <img 
+                      src={u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=8b5cf6&color=fff`} 
+                      alt={u.name} 
+                      style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+                    />
                     <div>
                       <div style={{ fontWeight: '600', fontSize: '14px' }}>{u.name}</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{u.email}</div>
@@ -324,15 +339,26 @@ const AccountManagement = () => {
                   </button>
                 </div>
                 <div style={{ padding: '12px 16px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', fontSize: '13px', color: 'var(--warning)', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <KeyRound size={15} style={{ flexShrink: 0 }} /> Lecturer must change their password after first login.
+                  <KeyRound size={15} style={{ flexShrink: 0 }} /> User must change their password after first login.
                 </div>
                 <button onClick={handleCloseModal} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>Done</button>
               </div>
             ) : (
               /* Step 1: Create form */
               <>
-                <h2 style={{ fontSize: '24px', marginBottom: '8px', color: 'var(--text-primary)' }}>Create Lecturer Account</h2>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Issue a new account for a Lecturer. A temporary password will be generated.</p>
+                <h2 style={{ fontSize: '24px', marginBottom: '8px', color: 'var(--text-primary)' }}>Create Account</h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Issue a new account. A temporary password will be generated.</p>
+
+                <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="radio" name="role" value="LECTURER" checked={roleToCreate === 'LECTURER'} onChange={(e) => setRoleToCreate(e.target.value)} />
+                    <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>Lecturer</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input type="radio" name="role" value="STAFF" checked={roleToCreate === 'STAFF'} onChange={(e) => setRoleToCreate(e.target.value)} />
+                    <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>Event Staff</span>
+                  </label>
+                </div>
 
                 {error && (
                   <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', animation: shaking ? 'shake 0.4s ease-in-out' : 'none' }}>
@@ -374,7 +400,7 @@ const AccountManagement = () => {
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                     <button type="button" style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={handleCloseModal}>Cancel</button>
                     <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={isCreating}>
-                      {isCreating ? <><Loader2 size={16} className="spin" /> Creating...</> : <><GraduationCap size={16} /> Create Account</>}
+                      {isCreating ? <><Loader2 size={16} className="spin" /> Creating...</> : <><UserPlus size={16} /> Create Account</>}
                     </button>
                   </div>
                 </form>

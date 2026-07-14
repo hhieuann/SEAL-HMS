@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
@@ -217,6 +217,16 @@ const JudgePanel = () => {
   const total = computeTotal();
   const maxTotal = 100;
 
+  const isDeadlinePassed = () => {
+    if (!currentRound || !currentRound.startTime || !currentRound.durationHours) return false;
+    const start = new Date(currentRound.startTime).getTime();
+    const durationMs = currentRound.durationHours * 60 * 60 * 1000;
+    return new Date().getTime() >= (start + durationMs);
+  };
+
+  const isScoringAllowed = currentRound?.status === 'SCORING' || 
+                           (currentRound?.status === 'ACTIVE' && isDeadlinePassed());
+
   if (loading) {
     return (
       <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -246,9 +256,15 @@ const JudgePanel = () => {
             {currentRoundIndex > 0 && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>🏆 FINALS</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
-          <Star size={15} /> Scoring Open
-        </div>
+        {isScoringAllowed ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
+            <Star size={15} /> Scoring Open
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', color: 'var(--danger)', fontSize: '13px', fontWeight: '600' }}>
+            <Lock size={15} /> Waiting for Deadline
+          </div>
+        )}
       </div>
 
       {criteria.length === 0 && (
@@ -404,6 +420,7 @@ const JudgePanel = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <input
                             type="number" min="0" max={max} step="0.5" value={val}
+                            disabled={!isScoringAllowed}
                             onChange={e => {
                               const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
                               setScores(p => ({ ...p, [c.id]: v }));
@@ -415,8 +432,9 @@ const JudgePanel = () => {
                       </div>
                       <input
                         type="range" min="0" max={max} step="0.5" value={val}
+                        disabled={!isScoringAllowed}
                         onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
-                        style={{ width: '100%', accentColor: 'var(--primary)' }}
+                        style={{ width: '100%', accentColor: 'var(--primary)', opacity: isScoringAllowed ? 1 : 0.5 }}
                       />
                       <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
                         <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
@@ -437,7 +455,8 @@ const JudgePanel = () => {
               <textarea
                 value={feedback}
                 onChange={e => setFeedback(e.target.value)}
-                placeholder="Write your constructive feedback here..."
+                disabled={!isScoringAllowed}
+                placeholder={isScoringAllowed ? "Write your constructive feedback here..." : "Scoring is currently locked."}
                 rows={3}
                 style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
               />
@@ -462,7 +481,7 @@ const JudgePanel = () => {
 
             <button
               onClick={handleSubmitScore}
-              disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission}
+              disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed}
               className="btn btn-primary"
               style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
             >

@@ -12,12 +12,15 @@ const RoundTransition = () => {
   const [lockError, setLockError] = useState(false);
   const [lockShaking, setLockShaking] = useState(false);
   const [lockToast, setLockToast] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   const [resolvedTies, setResolvedTies] = useState({});
   const [activeTrack, setActiveTrack] = useState(null);
 
   const [event, setEvent] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
+  const [viewRoundIndex, setViewRoundIndex] = useState(-1);
   const [trackStandings, setTrackStandings] = useState([]);
   const [hasJudges, setHasJudges] = useState(false); // Default false: strict block until API confirms
 
@@ -38,6 +41,9 @@ const RoundTransition = () => {
         }
         const evt = eventRes.data;
         setEvent(evt);
+        if (evt && (evt.status === 'CREATED' || evt.status === 'UPCOMING')) {
+          setIsLocked(true);
+        }
 
         let rounds = evt.rounds || [];
         // Sort rounds chronologically or by ID to prevent inverted UI
@@ -59,8 +65,10 @@ const RoundTransition = () => {
           savedRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
         }
         setCurrentRoundIndex(savedRoundIdx);
-        const round = evt.rounds?.[savedRoundIdx];
-        const roundId = round?.id || String(savedRoundIdx);
+        
+        const activeIdx = viewRoundIndex === -1 ? savedRoundIdx : viewRoundIndex;
+        const round = evt.rounds?.[activeIdx];
+        const roundId = round?.id || String(activeIdx);
 
         // Load real standings from DB for this round
         let dbScoreMap = {}; // teamId -> score
@@ -126,7 +134,7 @@ const RoundTransition = () => {
             });
 
             // Assign rank and detect ties at the cutoff.
-            const roundObj = evt.rounds?.[savedRoundIdx];
+            const roundObj = evt.rounds?.[activeIdx];
             const promotionTopN = roundObj?.promotionTopN ?? teamEntries.length;
             const cutoff = promotionTopN;
             const ranked = teamEntries.map((entry, idx) => {
@@ -161,7 +169,7 @@ const RoundTransition = () => {
       }
     };
     loadData();
-  }, []);
+  }, [eventId, viewRoundIndex]);
 
   const rounds = event?.rounds || [];
   const currentRound = rounds[currentRoundIndex] || null;
@@ -201,6 +209,10 @@ const RoundTransition = () => {
   };
 
   const handleLock = async () => {
+    if (isLocked) {
+      alert("Round transitions are locked during the Registration phase. Please wait until registration ends and the event begins.");
+      return;
+    }
     if (tiebreakerTeams.length > 0 && !allTiesResolved) {
       setLockError(true);
       setLockShaking(true);
@@ -224,8 +236,15 @@ const RoundTransition = () => {
           window.location.reload();
           return;
         }
+        
+        // If the current round is ACTIVE, we END it for scoring.
+        if (currentRoundObj.status === 'ACTIVE') {
+          await eventService.updateRoundStatus(currentRoundObj.id, 'SCORING');
+          window.location.reload();
+          return;
+        }
 
-        // Validate scores before advancing (ALL teams must have a score)
+        // Otherwise (SCORING or UNDER_REVIEW), validate scores before advancing to next round (COMPLETED)
         // Check if any team has null or 0 score
         const hasMissingScores = isLastRound
           ? finalsTeamList.some(t => t.score == null || t.score === 0)
@@ -292,25 +311,9 @@ const RoundTransition = () => {
           window.location.reload();
         }, 1500);
       } else {
-        // Finalize Event status in backend
-        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-        
-        const eventStatuses = ['PLANNED', 'UPCOMING', 'ONGOING', 'COMPLETED'];
-        const startEventIdx = event?.status ? eventStatuses.indexOf(event.status.toUpperCase()) : -1;
-        
-        if (startEventIdx !== -1) {
-          for (let i = startEventIdx + 1; i <= eventStatuses.indexOf('COMPLETED'); i++) {
-            await eventService.updateEventStatus(parsedEventId, eventStatuses[i]);
-          }
-        } else {
-          // fallback
-          await eventService.updateEventStatus(parsedEventId, 'COMPLETED');
-        }
-
-        setTimeout(() => setLockToast(false), 4000);
         setTimeout(() => {
-          setShowCelebration(true);
-        }, 500);
+          window.location.reload();
+        }, 1500);
       }
     } catch (err) {
        console.error("Error updating round status", err);
@@ -318,7 +321,38 @@ const RoundTransition = () => {
     }
   };
 
+  const handleEndEvent = () => {
+    setShowEndConfirmModal(true);
+  };
+
+  const executeEndEvent = async () => {
+    setShowEndConfirmModal(false);
+    try {
+      const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      const eventStatuses = ['PLANNED', 'UPCOMING', 'ONGOING', 'COMPLETED'];
+      const startEventIdx = event?.status ? eventStatuses.indexOf(event.status.toUpperCase()) : -1;
+      
+      if (startEventIdx !== -1) {
+        for (let i = startEventIdx + 1; i <= eventStatuses.indexOf('COMPLETED'); i++) {
+          await eventService.updateEventStatus(parsedEventId, eventStatuses[i]);
+        }
+      } else {
+        await eventService.updateEventStatus(parsedEventId, 'COMPLETED');
+      }
+
+      setLockToast(true);
+      setTimeout(() => setLockToast(false), 4000);
+      setTimeout(() => {
+        setShowCelebration(true);
+      }, 500);
+    } catch (err) {
+      console.error("Error finalizing event", err);
+      alert("Failed to finalize event");
+    }
+  };
+
   const activeTrackData = trackStandings.find(t => t.id === activeTrack);
+  const actualViewIdx = viewRoundIndex === -1 ? currentRoundIndex : viewRoundIndex;
 
   return (
     <>
@@ -335,6 +369,14 @@ const RoundTransition = () => {
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn btn-secondary" onClick={handleExportCSV}>Export Results CSV</button>
+          
+          {actualViewIdx === currentRoundIndex && isLastRound && currentRound?.status === 'COMPLETED' && event?.status?.toUpperCase() !== 'COMPLETED' && event?.status?.toUpperCase() !== 'ENDED' && (
+            <button onClick={handleEndEvent} className="btn btn-primary" style={{ background: 'var(--success)', padding: '10px 24px', gap: '8px' }}>
+              <Trophy size={16} /> End Event & Archive
+            </button>
+          )}
+
+          {actualViewIdx === currentRoundIndex && (!isLastRound || currentRound?.status !== 'COMPLETED') && (
             <button
               onClick={handleLock}
               disabled={confirmed}
@@ -348,28 +390,44 @@ const RoundTransition = () => {
               }}
             >
               {confirmed
-                ? <><CheckCircle size={16} /> {isLastRound ? 'Event Finalized' : `Advanced to ${nextRound?.name}`}</>
+                ? <><CheckCircle size={16} /> {isLastRound ? 'Scores Published' : `Advanced to ${nextRound?.name}`}</>
                 : (currentRound?.status === 'CREATED' || currentRound?.status?.toLowerCase() === 'planned')
                   ? <><ArrowRight size={16} /> Start {currentRound?.name || 'Round'}</>
-                  : isLastRound
-                    ? <><Trophy size={16} /> Finalize & End Event</>
-                    : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
+                  : currentRound?.status === 'ACTIVE'
+                    ? <><Lock size={16} /> End {currentRound?.name} for Scoring</>
+                    : isLastRound
+                      ? <><CheckCircle size={16} /> Confirm Results & Publish Scores</>
+                      : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
               }
             </button>
+          )}
         </div>
       </div>
+
+      {isLocked && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <AlertTriangle size={18} />
+          <span style={{ fontSize: '13px', fontWeight: '500' }}>
+            <strong>Action Locked:</strong> Event is still in the Registration phase. You cannot start or transition rounds until the event begins.
+          </span>
+        </div>
+      )}
 
       {/* Round Progress Bar */}
       {rounds.length > 0 && (
         <div style={{ display: 'flex', gap: '0', marginBottom: '28px' }}>
-          {rounds.map((r, i) => (
+          {rounds.map((r, i) => {
+            return (
             <React.Fragment key={r.id || i}>
-              <div style={{
+              <div 
+                onClick={() => setViewRoundIndex(i)}
+                style={{
                 flex: 1, padding: '12px 16px',
-                background: i === currentRoundIndex ? 'rgba(59,130,246,0.15)' : i < currentRoundIndex ? 'rgba(16,185,129,0.1)' : 'var(--bg-subtle)',
-                border: `1px solid ${i === currentRoundIndex ? 'rgba(59,130,246,0.4)' : i < currentRoundIndex ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
+                background: i === actualViewIdx ? 'rgba(59,130,246,0.15)' : i < currentRoundIndex ? 'rgba(16,185,129,0.1)' : 'var(--bg-subtle)',
+                border: `1px solid ${i === actualViewIdx ? 'rgba(59,130,246,0.4)' : i < currentRoundIndex ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
                 borderRadius: i === 0 ? '10px 0 0 10px' : i === rounds.length - 1 ? '0 10px 10px 0' : '0',
-                display: 'flex', alignItems: 'center', gap: '10px'
+                display: 'flex', alignItems: 'center', gap: '10px',
+                cursor: 'pointer', transition: 'all 0.2s ease'
               }}>
                 <div style={{
                   width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
@@ -379,13 +437,13 @@ const RoundTransition = () => {
                   {i < currentRoundIndex ? <CheckCircle size={14} color="white" /> : i + 1}
                 </div>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: i === currentRoundIndex ? '600' : '400', color: i === currentRoundIndex ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{r.name}</div>
+                  <div style={{ fontSize: '13px', fontWeight: i === actualViewIdx ? '600' : '400', color: i === actualViewIdx ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{r.name}</div>
                   {r.start && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{r.start} → {r.end || 'TBD'}</div>}
                 </div>
               </div>
               {i < rounds.length - 1 && <div style={{ width: '1px', background: 'var(--border-color)' }} />}
             </React.Fragment>
-          ))}
+          )})}
         </div>
       )}
 
@@ -594,6 +652,39 @@ const RoundTransition = () => {
               {isLastRound
                 ? 'Winners have been selected. The event is now closed.'
                 : `Top 2 teams from each track have advanced to ${nextRound?.name}.`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* End Event Confirmation Modal */}
+      {showEndConfirmModal && (
+        <div className="animate-fade-in" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(12px)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="glass-panel" style={{ padding: '40px', maxWidth: '480px', width: '90%', textAlign: 'center', border: '1px solid var(--danger)', background: 'var(--bg-panel)', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
+            <div style={{ width: '80px', height: '80px', background: 'rgba(239,68,68,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', border: '2px solid rgba(239,68,68,0.3)' }}>
+              <AlertTriangle size={40} color="var(--danger)" />
+            </div>
+            <h2 style={{ fontSize: '26px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-primary)' }}>
+              End Event?
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '15px', marginBottom: '32px' }}>
+              Are you sure you want to officially end this event? This action will permanently move the event to the Archive for all participants. Make sure everyone has had time to review their published scores!
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowEndConfirmModal(false)}
+                className="btn btn-secondary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600' }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeEndEvent}
+                className="btn btn-primary" 
+                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--danger)' }}
+              >
+                <Lock size={18} /> Yes, End Event
+              </button>
             </div>
           </div>
         </div>

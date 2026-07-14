@@ -21,4 +21,13 @@ public class TeamResponse {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private Integer memberCount;
+    private java.util.List<MentorDto> mentors;
+
+    @Getter
+    @Setter
+    public static class MentorDto {
+        private Long lecturerId;
+        private String name;
+        private String email;
+    }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle } from 'lucide-react';
+import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle, AlertTriangle } from 'lucide-react';
 import { submissionService, criterionService, standingsService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
@@ -28,6 +28,7 @@ const MySubmission = () => {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -55,6 +56,11 @@ const MySubmission = () => {
         const round = evt?.rounds?.[activeRoundIdx] || null;
         
         if (round) {
+          if (round.startTime && round.durationHours && !round.end) {
+            const start = new Date(round.startTime);
+            start.setMinutes(start.getMinutes() + (round.durationHours * 60));
+            round.end = start.toISOString();
+          }
           try {
             const critRes = await criterionService.getCriteria(round.id);
             if (critRes?.data) round.criteria = critRes.data;
@@ -65,10 +71,12 @@ const MySubmission = () => {
         let currentTeam = null;
         if (tId) {
           try {
-            const teamRes = await teamService.getTeam(tId);
+            const teamRes = await teamService.getTeamDetails(tId);
             currentTeam = teamRes?.data || null;
             setTeamData(currentTeam);
-          } catch (e) {}
+          } catch (e) {
+            console.error('Failed to load team details:', e);
+          }
         }
 
         // Load existing submission
@@ -171,6 +179,17 @@ const MySubmission = () => {
       setTimeout(() => setShaking(false), 500);
       return;
     }
+    
+    if (existingSubmission) {
+      setShowConfirmModal(true);
+      return;
+    }
+    
+    executeSubmit();
+  };
+
+  const executeSubmit = async () => {
+    setShowConfirmModal(false);
     setError('');
     setIsSubmitting(true);
     try {
@@ -481,6 +500,37 @@ const MySubmission = () => {
           </div>
         </div>
       </div>
+
+      {/* Overwrite Confirmation Modal */}
+      {showConfirmModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '90%', maxWidth: '420px', padding: '32px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ background: 'rgba(245,158,11,0.1)', padding: '12px', borderRadius: '50%' }}>
+                <AlertTriangle size={28} color="var(--warning)" />
+              </div>
+              <h2 style={{ fontSize: '20px', margin: 0 }}>Overwrite Submission?</h2>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
+              Your team has already submitted a project. Are you sure you want to change and overwrite the current submission? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                className="btn btn-secondary" 
+                style={{ padding: '10px 20px' }}>
+                Cancel
+              </button>
+              <button 
+                onClick={executeSubmit}
+                className="btn btn-primary" 
+                style={{ background: 'var(--warning)', borderColor: 'var(--warning)', padding: '10px 20px' }}>
+                Yes, Overwrite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes shake {

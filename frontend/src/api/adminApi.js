@@ -10,6 +10,7 @@ export const adminApi = {
       studentId: acc.studentCode || 'N/A',
       campus: acc.campus || 'N/A',
       role: acc.role,
+      avatarUrl: acc.avatarUrl,
       proof: 'Student ID', 
       proofUrl: acc.proof || null,
       registered: 'Just now'
@@ -23,6 +24,7 @@ export const adminApi = {
       name: acc.fullName || 'N/A (Update later)',
       email: acc.email,
       role: acc.role,
+      avatarUrl: acc.avatarUrl,
       status: acc.status.toLowerCase(),
       joined: 'Just now'
     }));
@@ -43,6 +45,13 @@ export const adminApi = {
   createLecturerAccount: async ({ email, fullName, department, campus, phone }) => {
     const response = await apiClient.post('/api/v1/lecturers/admin-create', {
       email, fullName, department, campus, phone
+    });
+    return response.data.data; // { accountId, email, fullName, tempPassword }
+  },
+
+  createStaffAccount: async ({ email, fullName, department, phone, campus }) => {
+    const response = await apiClient.post('/api/v1/staff/admin-create', {
+      email, fullName, department, phone, campus
     });
     return response.data.data; // { accountId, email, fullName, tempPassword }
   },

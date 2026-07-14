@@ -9,6 +9,7 @@ const TrackDraw = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
   const [isConfigured, setIsConfigured] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
   const [subTopics, setSubTopics] = useState([]);
   const [tracks, setTracks] = useState([]);
   const [step, setStep] = useState(1); // 1 = sub-topic draw, 2 = team assignment, 3 = confirm
@@ -41,6 +42,12 @@ const TrackDraw = () => {
         if (!activeEvent) {
           setIsConfigured(false);
           return;
+        }
+
+        if (activeEvent.status === 'CREATED' || activeEvent.status === 'UPCOMING') {
+          setIsLocked(true);
+        } else {
+          setIsLocked(false);
         }
 
         // Fetch topics directly from the Event (no tracks required yet!)
@@ -118,6 +125,10 @@ const TrackDraw = () => {
   };
 
   const handleDrawTopics = () => {
+    if (isLocked) {
+      alert("Track Draw is locked during the Registration phase.");
+      return;
+    }
     setDrawing(true);
     setError('');
     setTimeout(() => {
@@ -136,6 +147,10 @@ const TrackDraw = () => {
 
   // Step 2: Random assign teams to tracks
   const handleAssignTeams = () => {
+    if (isLocked) {
+      alert("Track Draw is locked during the Registration phase.");
+      return;
+    }
     setDrawing(true);
     setError('');
     
@@ -214,6 +229,10 @@ const TrackDraw = () => {
   };
 
   const handleResetDraw = async () => {
+    if (isLocked) {
+      alert("Track Draw is locked during the Registration phase.");
+      return;
+    }
     if (!window.confirm('Reset the draw? This will delete all Tracks for this event from the Database and allow a new draw.')) return;
     const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
     
@@ -266,6 +285,15 @@ const TrackDraw = () => {
         )}
       </div>
 
+      {isLocked && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <Lock size={18} />
+          <span style={{ fontSize: '13px', fontWeight: '500' }}>
+            <strong>Action Locked:</strong> Event is still in the Registration phase. Drawing tracks is disabled until registration ends.
+          </span>
+        </div>
+      )}
+
       {!isConfigured ? (
         <div style={{ padding: '40px', textAlign: 'center', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '16px' }}>
           <AlertCircle size={48} color="var(--warning)" style={{ marginBottom: '16px', opacity: 0.8 }} />
@@ -273,7 +301,7 @@ const TrackDraw = () => {
           <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', maxWidth: '500px', margin: '0 auto 24px' }}>
             You must configure the Sub-topics Bank before conducting the draw.
           </p>
-          <button className="btn btn-primary" onClick={() => navigate('/admin/events/edit/seal-sp26')} style={{ background: 'var(--warning)', color: '#000' }}>
+          <button className="btn btn-primary" onClick={() => navigate(`/admin/events/edit/${parsedEventId}`)} style={{ background: 'var(--warning)', color: '#000' }}>
             <Target size={18} /> Go to Event Settings
           </button>
         </div>

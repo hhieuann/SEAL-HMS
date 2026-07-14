@@ -10,9 +10,9 @@ import com.fpt.seal.hms.common.enums.MemberStatus;
 import com.fpt.seal.hms.common.enums.TeamStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
-import com.fpt.seal.hms.team.dto.TeamRequest;
 import com.fpt.seal.hms.event.EventRepository;
 import com.fpt.seal.hms.event.entity.Event;
+import com.fpt.seal.hms.lecturer.LecturerRepository;
 import com.fpt.seal.hms.team.dto.TeamRequest;
 import com.fpt.seal.hms.team.dto.TeamResponse;
 import com.fpt.seal.hms.team.entity.Team;
@@ -41,6 +41,7 @@ public class TeamService {
     private final AccountRepository accountRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final EventRepository eventRepository;
+    private final LecturerRepository lecturerRepository;
     private final Random random = new Random();
 
     @Transactional(readOnly = true)
@@ -174,6 +175,23 @@ public class TeamService {
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + id));
     }
 
+    @Transactional
+    public TeamResponse assignMentors(Long teamId, java.util.List<Long> mentorIds) {
+        Team team = findTeamEntityById(teamId);
+        
+        java.util.Set<com.fpt.seal.hms.lecturer.Lecturer> newMentors = new java.util.HashSet<>();
+        if (mentorIds != null && !mentorIds.isEmpty()) {
+            for (Long mId : mentorIds) {
+                com.fpt.seal.hms.lecturer.Lecturer lecturer = lecturerRepository
+                    .findById(mId).orElseThrow(() -> new ResourceNotFoundException("Lecturer not found: " + mId));
+                newMentors.add(lecturer);
+            }
+        }
+        
+        team.setMentors(newMentors);
+        return mapToResponse(teamRepository.save(team));
+    }
+
     private TeamResponse mapToResponse(Team team) {
         TeamResponse response = new TeamResponse();
         response.setId(team.getId());
@@ -187,6 +205,19 @@ public class TeamService {
         response.setCreatedAt(team.getCreatedAt());
         response.setUpdatedAt(team.getUpdatedAt());
         response.setMemberCount(team.getMemberCount() != null ? team.getMemberCount() : 0);
+        
+        if (team.getMentors() != null && !team.getMentors().isEmpty()) {
+            response.setMentors(team.getMentors().stream().map(m -> {
+                TeamResponse.MentorDto dto = new TeamResponse.MentorDto();
+                dto.setLecturerId(m.getId());
+                dto.setName(m.getFullName() != null ? m.getFullName() : (m.getAccount() != null ? m.getAccount().getEmail() : "Unknown"));
+                dto.setEmail(m.getAccount() != null ? m.getAccount().getEmail() : "");
+                return dto;
+            }).toList());
+        } else {
+            response.setMentors(new java.util.ArrayList<>());
+        }
+        
         return response;
     }
 }

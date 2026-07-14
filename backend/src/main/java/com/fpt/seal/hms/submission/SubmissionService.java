@@ -31,6 +31,7 @@ public class SubmissionService {
     private final RoundRepository roundRepository;
     private final TeamRepository teamRepository;
     private final AccountRepository accountRepository;
+    private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
 
     @Transactional(readOnly = true)
     public SubmissionResponse getSubmission(Long roundId, Long teamId) {

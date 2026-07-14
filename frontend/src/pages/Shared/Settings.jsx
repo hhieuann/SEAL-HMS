@@ -22,6 +22,8 @@ const Settings = () => {
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
 
   // Security State
   const [security, setSecurity] = useState({
@@ -43,8 +45,11 @@ const Settings = () => {
       if (role === 'STUDENT') {
         const res = await profileApi.getStudentProfile();
         data = res.data?.data || res.data;
-      } else if (role === 'LECTURER') {
+      } else if (['LECTURER', 'JUDGE', 'MENTOR', 'GUEST_JUDGE'].includes(role)) {
         const res = await profileApi.getLecturerProfile();
+        data = res.data?.data || res.data;
+      } else if (role === 'STAFF') {
+        const res = await profileApi.getStaffProfile();
         data = res.data?.data || res.data;
       }
       
@@ -57,7 +62,8 @@ const Settings = () => {
           fullName: data.fullName || '',
           department: data.department || '',
           phone: data.phone || '',
-          email: data.email || localStorage.getItem('userEmail') || ''
+          email: data.email || localStorage.getItem('userEmail') || '',
+          avatarUrl: data.avatarUrl || ''
         };
         setProfile(profileData);
         setInitialProfile(profileData);
@@ -91,7 +97,8 @@ const Settings = () => {
         fullName: fallbackName,
         department: '',
         phone: '',
-        email: fallbackEmail
+        email: fallbackEmail,
+        avatarUrl: ''
       };
       setProfile(profileData);
       setInitialProfile(profileData);
@@ -107,6 +114,15 @@ const Settings = () => {
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfile(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Just set it for preview, wait for Save Changes to upload
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
   };
 
   const handleSecurityChange = (e) => {
@@ -132,31 +148,32 @@ const Settings = () => {
 
     try {
       setProfileSaving(true);
+      
+      let finalAvatarUrl = profile.avatarUrl;
+      if (avatarFile) {
+        const res = await profileApi.uploadAvatar(avatarFile);
+        finalAvatarUrl = res.data.data;
+        setProfile(prev => ({ ...prev, avatarUrl: finalAvatarUrl }));
+      }
+
       if (role === 'STUDENT') {
-        await profileApi.updateStudentProfile({
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          campus: profile.campus,
-          studentCode: profile.studentCode,
-          email: profile.email
-        });
-      } else if (role === 'LECTURER') {
-        await profileApi.updateLecturerProfile({
-          fullName: profile.fullName,
-          department: profile.department,
-          campus: profile.campus,
-          phone: profile.phone,
-          email: profile.email
-        });
+        await profileApi.updateStudentProfile(profile);
+      } else if (['LECTURER', 'JUDGE', 'MENTOR', 'GUEST_JUDGE'].includes(role)) {
+        await profileApi.updateLecturerProfile(profile);
+      } else if (role === 'STAFF') {
+        await profileApi.updateStaffProfile(profile);
       }
       
       setProfileMessage({ type: 'success', text: 'Profile updated successfully!' });
       setInitialProfile(profile);
+      setAvatarFile(null);
+      setAvatarPreview(null);
       
       const newName = role === 'STUDENT' ? `${profile.firstName} ${profile.lastName}`.trim() : profile.fullName;
       try {
         const storedUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
         storedUser.name = newName;
+        if (finalAvatarUrl) storedUser.avatarUrl = finalAvatarUrl;
         localStorage.setItem('currentUser', JSON.stringify(storedUser));
         window.dispatchEvent(new Event('participant_state_updated'));
       } catch(e) {}
@@ -241,6 +258,34 @@ const Settings = () => {
         )}
 
         <form onSubmit={handleProfileSubmit}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '24px' }}>
+            <div style={{ position: 'relative' }}>
+              <img 
+                src={avatarPreview || (profile.avatarUrl ? `http://localhost:8080${profile.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.fullName || profile.email || 'User')}&background=random`)} 
+                alt="Profile Avatar" 
+                style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border-color)' }}
+              />
+              <label 
+                htmlFor="avatar-upload" 
+                style={{ position: 'absolute', bottom: -5, right: -5, background: 'var(--primary)', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: '2px solid white' }}
+                title="Change Avatar"
+              >
+                <User size={14} />
+              </label>
+              <input 
+                id="avatar-upload" 
+                type="file" 
+                accept="image/*" 
+                style={{ display: 'none' }} 
+                onChange={handleAvatarChange} 
+              />
+            </div>
+            <div>
+              <h4 style={{ margin: '0 0 4px 0', fontSize: '16px' }}>Profile Picture</h4>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)' }}>JPG, GIF or PNG. Max size of 800K</p>
+            </div>
+          </div>
+
           {role === 'STUDENT' ? (
             <>
               <div style={{ marginBottom: '16px' }}>

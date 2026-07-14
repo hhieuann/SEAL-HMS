@@ -12,6 +12,7 @@ public class ScoreResponse {
     private Long submissionId;
     private Long judgeAccountId;
     private String judgeEmail;
+    private String judgeName;
     private Long criterionId;
     private String criterionName;
     private BigDecimal maxScore;

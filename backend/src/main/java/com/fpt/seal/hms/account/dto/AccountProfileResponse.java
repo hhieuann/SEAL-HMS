@@ -10,5 +10,6 @@ public record AccountProfileResponse(
         String campus,
         String proof,
         String department,
-        String phone
+        String phone,
+        String avatarUrl
 ) {}

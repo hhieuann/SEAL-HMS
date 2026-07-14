@@ -44,5 +44,10 @@ export const teamService = {
   acceptInvite: async (teamId, accountId) => {
     const response = await apiClient.patch(`/api/v1/teams/${teamId}/members/${accountId}/accept`);
     return response.data;
+  },
+
+  assignMentors: async (teamId, mentorIds) => {
+    const response = await apiClient.post(`/api/v1/teams/${teamId}/mentors`, mentorIds);
+    return response.data;
   }
 };

@@ -15,6 +15,7 @@ import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import TrackDraw from './pages/Admin/TrackDraw';
+import EventStaffManagement from './pages/Admin/EventStaffManagement';
 
 import LandingPage from './pages/LandingPage';
 import AuthLayout from './layouts/AuthLayout';
@@ -94,23 +95,25 @@ function App() {
           <Route path="accounts" element={<AccountManagement />} />
           <Route path="activity-log" element={<AnalyticsLog />} />
           
-          {/* Event-specific Admin Routes */}
-          <Route path="event/:eventId">
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<EventDashboard />} />
-            <Route path="teams" element={<PerformingTeams />} />
-            <Route path="assignments" element={<AssignmentMatrix />} />
-            <Route path="courtroom" element={<Courtroom />} />
-            <Route path="transition" element={<RoundTransition />} />
-            <Route path="analytics" element={<AnalyticsLog />} />
-            <Route path="broadcast" element={<AdminBroadcast />} />
-            <Route path="track-draw" element={<TrackDraw />} />
-            <Route path="edit" element={<EventForm />} />
-          </Route>
         </Route>
 
-        {/* Judge Routes */}
-        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER']}><ExpertDashboard /></ProtectedRoute>} />
+        {/* Event-specific Admin/Staff Routes */}
+        <Route path="/admin/event/:eventId" element={<ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}><AdminLayout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="dashboard" replace />} />
+          <Route path="dashboard" element={<EventDashboard />} />
+          <Route path="staff" element={<EventStaffManagement />} />
+          <Route path="edit" element={<EventForm />} />
+          <Route path="teams" element={<PerformingTeams />} />
+          <Route path="assignments" element={<AssignmentMatrix />} />
+          <Route path="track-draw" element={<TrackDraw />} />
+          <Route path="transition" element={<RoundTransition />} />
+          <Route path="courtroom" element={<Courtroom />} />
+          <Route path="analytics" element={<AnalyticsLog />} />
+          <Route path="broadcast" element={<AdminBroadcast />} />
+        </Route>
+
+        {/* Judge & Mentor & Staff Routes */}
+        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER', 'STAFF']}><ExpertDashboard /></ProtectedRoute>} />
         
         <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE', 'LECTURER']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />

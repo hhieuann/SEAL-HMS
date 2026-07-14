@@ -33,4 +33,7 @@ public class Account extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AccountStatus status;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
 }

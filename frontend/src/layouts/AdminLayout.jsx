@@ -22,6 +22,18 @@ const AdminLayout = () => {
   const unreadCount = alerts.filter(a => a.unread).length;
   
   const [eventName, setEventName] = useState(null);
+  
+  const [userRole, setUserRole] = useState(null);
+  const [userName, setUserName] = useState('Administrator');
+  
+  React.useEffect(() => {
+    try {
+      const role = localStorage.getItem('userRole');
+      const name = localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'Administrator';
+      if (role) setUserRole(role);
+      setUserName(name);
+    } catch(e) {}
+  }, []);
 
   React.useEffect(() => {
     if (eventId) {
@@ -138,10 +150,16 @@ const AdminLayout = () => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', borderRadius: '12px', background: 'rgba(255,255,255,0.15)', marginLeft: '8px', color: 'white' }}>
-            <img src="https://ui-avatars.com/api/?name=Admin+SEAL&background=fff&color=F26F21" alt="Admin" style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
+            <img src={(() => {
+              try {
+                const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+                if (u.avatarUrl) return `http://localhost:8080${u.avatarUrl}`;
+              } catch(e) {}
+              return "https://ui-avatars.com/api/?name=Admin+SEAL&background=fff&color=F26F21";
+            })()} alt="Admin" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
             <div style={{ textAlign: 'left', minWidth: '90px' }}>
-              <div style={{ fontSize: '13px', fontWeight: '600' }}>Coordinator</div>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Administrator</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{userName}</div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>{userRole === 'STAFF' ? 'Event Staff' : 'Administrator'}</div>
             </div>
             <button className="btn-icon" onClick={() => authApi.logout()} title="Logout" style={{ marginLeft: '8px', color: 'white', background: 'transparent', border: 'none', cursor: 'pointer' }}>
               <LogOut size={16} />
@@ -155,7 +173,7 @@ const AdminLayout = () => {
 
 
         <nav className="sidebar-nav">
-          {!eventId && (
+          {!eventId && userRole !== 'STAFF' && (
             <>
               <div className="nav-section">
                 <p className="nav-section-title">GLOBAL</p>
@@ -183,7 +201,7 @@ const AdminLayout = () => {
             <>
               <div className="nav-section" style={{ marginBottom: '12px' }}>
                 <button 
-                  onClick={() => navigate('/admin/dashboard')} 
+                  onClick={() => navigate(userRole === 'STAFF' ? '/expert/dashboard' : '/admin/dashboard')} 
                   style={{ 
                     width: '100%', 
                     display: 'flex', 
@@ -202,7 +220,7 @@ const AdminLayout = () => {
                   onMouseOver={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.background = 'var(--bg-active)'; }}
                   onMouseOut={(e) => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 >
-                  <ArrowLeft size={16} /> Back to Global
+                  <ArrowLeft size={16} /> {userRole === 'STAFF' ? 'Back to Portal' : 'Back to Global'}
                 </button>
               </div>
 
@@ -213,6 +231,11 @@ const AdminLayout = () => {
                 <NavLink to={`/admin/event/${eventId}/dashboard`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} end>
                   <BarChart2 size={20} /><span>Event Dashboard</span>
                 </NavLink>
+                {userRole === 'ADMIN' && (
+                  <NavLink to={`/admin/event/${eventId}/staff`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <UserCheck size={20} /><span>Staff Management</span>
+                  </NavLink>
+                )}
                 <NavLink to={`/admin/event/${eventId}/teams`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Users size={20} /><span>Performing Teams</span>
                 </NavLink>
@@ -230,7 +253,7 @@ const AdminLayout = () => {
                   <Edit2 size={20} /><span>Edit Event</span>
                 </NavLink>
                 <NavLink to={`/admin/event/${eventId}/courtroom`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Scale size={20} /><span>The Courtroom</span>
+                  <Scale size={20} /><span>Dispute Resolution</span>
                 </NavLink>
                 <NavLink to={`/admin/event/${eventId}/transition`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ArrowRightLeft size={20} /><span>Round Transition</span>
