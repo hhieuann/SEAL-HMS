@@ -12,8 +12,6 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.util.HashSet;
-import java.util.Set;
 
 @Entity
 @Table(name = "team")
@@ -65,11 +63,11 @@ public class Team extends BaseEntity {
     @org.hibernate.annotations.Formula("(SELECT count(*) FROM team_member tm WHERE tm.team_id = team_id AND tm.status = 'ACCEPTED')")
     private Integer memberCount;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinTable(
-            name = "team_mentor",
-            joinColumns = @JoinColumn(name = "team_id"),
+            name = "mentor",
+            joinColumns = @JoinColumn(name = "team_id", unique = true),
             inverseJoinColumns = @JoinColumn(name = "lecturer_id")
     )
-    private Set<Lecturer> mentors = new HashSet<>();
+    private Lecturer mentor;
 }

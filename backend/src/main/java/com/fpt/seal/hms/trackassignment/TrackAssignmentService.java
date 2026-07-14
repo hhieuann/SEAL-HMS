@@ -22,6 +22,7 @@ public class TrackAssignmentService {
     private final TrackAssignmentRepository assignmentRepository;
     private final TrackRepository trackRepository;
     private final LecturerRepository lecturerRepository;
+    private final com.fpt.seal.hms.team.TeamRepository teamRepository;
 
     @Transactional
     public TrackAssignmentResponse assign(Long trackId, TrackAssignmentRequest req) {
@@ -37,6 +38,14 @@ public class TrackAssignmentService {
 
         if (req.role() == com.fpt.seal.hms.common.enums.AssignmentRole.MENTOR) {
             throw new BusinessException("Mentors are assigned to Teams, not Tracks.");
+        }
+        
+        // VALIDATION: If assigning a JUDGE, check if the Lecturer is already a MENTOR for any Team in this track
+        if (req.role() == com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE) {
+            boolean isMentor = teamRepository.existsByTrack_IdAndMentor_Id(trackId, req.lecturerId());
+            if (isMentor) {
+                throw new BusinessException("This lecturer is already a Mentor for a team in this track. They cannot also be a Judge.");
+            }
         }
 
         TrackAssignment assignment = new TrackAssignment();

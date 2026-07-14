@@ -330,6 +330,8 @@ public class AccountService {
             return staffRepository.findByAccount_Id(acc.getId())
                     .map(com.fpt.seal.hms.staff.entity.Staff::getFullName)
                     .orElse(null);
+        } else if (acc.getRole() == Role.ADMIN) {
+            return "Admin";
         }
         return null;
     }

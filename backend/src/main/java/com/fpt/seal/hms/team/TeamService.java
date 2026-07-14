@@ -22,6 +22,7 @@ import com.fpt.seal.hms.topic.TopicRepository;
 import com.fpt.seal.hms.topic.entity.Topic;
 import com.fpt.seal.hms.track.TrackRepository;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +44,7 @@ public class TeamService {
     private final EventRepository eventRepository;
     private final LecturerRepository lecturerRepository;
     private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
+    private final TrackAssignmentRepository trackAssignmentRepository;
     private final Random random = new Random();
 
     @Transactional(readOnly = true)
@@ -209,19 +211,31 @@ public class TeamService {
     }
 
     @Transactional
-    public TeamResponse assignMentors(Long teamId, java.util.List<Long> mentorIds) {
+    public TeamResponse assignMentor(Long teamId, Long mentorId) {
         Team team = findTeamEntityById(teamId);
         
-        java.util.Set<com.fpt.seal.hms.lecturer.Lecturer> newMentors = new java.util.HashSet<>();
-        if (mentorIds != null && !mentorIds.isEmpty()) {
-            for (Long mId : mentorIds) {
-                com.fpt.seal.hms.lecturer.Lecturer lecturer = lecturerRepository
-                    .findById(mId).orElseThrow(() -> new ResourceNotFoundException("Lecturer not found: " + mId));
-                newMentors.add(lecturer);
-            }
+        // Allow removing mentor by passing null
+        if (mentorId == null) {
+            team.setMentor(null);
+            return mapToResponse(teamRepository.save(team));
         }
         
-        team.setMentors(newMentors);
+        if (team.getTrack() == null) {
+            throw new BusinessException("Team must be assigned to a track before a mentor can be assigned.");
+        }
+        
+        com.fpt.seal.hms.lecturer.Lecturer lecturer = lecturerRepository
+            .findById(mentorId).orElseThrow(() -> new ResourceNotFoundException("Lecturer not found: " + mentorId));
+            
+        // VALIDATION: Check if this lecturer is already a JUDGE for this track
+        boolean isJudge = trackAssignmentRepository.existsByTrack_IdAndLecturer_IdAndRole(
+            team.getTrack().getId(), mentorId, com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE);
+            
+        if (isJudge) {
+            throw new BusinessException("This lecturer is already a Judge for this track. They cannot also be a Mentor for a team in the same track.");
+        }
+        
+        team.setMentor(lecturer);
         return mapToResponse(teamRepository.save(team));
     }
 
@@ -241,16 +255,14 @@ public class TeamService {
         response.setUpdatedAt(team.getUpdatedAt());
         response.setMemberCount(team.getMemberCount() != null ? team.getMemberCount() : 0);
         
-        if (team.getMentors() != null && !team.getMentors().isEmpty()) {
-            response.setMentors(team.getMentors().stream().map(m -> {
-                TeamResponse.MentorDto dto = new TeamResponse.MentorDto();
-                dto.setLecturerId(m.getId());
-                dto.setName(m.getFullName() != null ? m.getFullName() : (m.getAccount() != null ? m.getAccount().getEmail() : "Unknown"));
-                dto.setEmail(m.getAccount() != null ? m.getAccount().getEmail() : "");
-                return dto;
-            }).toList());
+        if (team.getMentor() != null) {
+            TeamResponse.MentorDto dto = new TeamResponse.MentorDto();
+            dto.setLecturerId(team.getMentor().getId());
+            dto.setName(team.getMentor().getFullName() != null ? team.getMentor().getFullName() : (team.getMentor().getAccount() != null ? team.getMentor().getAccount().getEmail() : "Unknown"));
+            dto.setEmail(team.getMentor().getAccount() != null ? team.getMentor().getAccount().getEmail() : "");
+            response.setMentor(dto);
         } else {
-            response.setMentors(new java.util.ArrayList<>());
+            response.setMentor(null);
         }
         
         return response;
