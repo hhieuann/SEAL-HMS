@@ -32,8 +32,15 @@ public class RoundRanking {
     @Column(precision = 8, scale = 2)
     private BigDecimal score;
 
+    @Column(name = "rank")
     private Integer rank;
 
-    @Column(nullable = false)
+    @Column(name = "penalty_points", precision = 8, scale = 2)
+    private BigDecimal penaltyPoints = BigDecimal.ZERO;
+
+    @Column(name = "penalty_reason")
+    private String penaltyReason;
+
+    @Column(name = "is_promoted", nullable = false)
     private Boolean isPromoted = false;
 }

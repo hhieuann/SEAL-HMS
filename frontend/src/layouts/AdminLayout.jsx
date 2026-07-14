@@ -252,9 +252,7 @@ const AdminLayout = () => {
                 <NavLink to={`/admin/event/${eventId}/edit`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Edit2 size={20} /><span>Edit Event</span>
                 </NavLink>
-                <NavLink to={`/admin/event/${eventId}/courtroom`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Scale size={20} /><span>Dispute Resolution</span>
-                </NavLink>
+
                 <NavLink to={`/admin/event/${eventId}/transition`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ArrowRightLeft size={20} /><span>Round Transition</span>
                   <span style={{ marginLeft: 'auto', background: 'var(--warning)', color: '#000', fontSize: '10px', padding: '1px 6px', borderRadius: '8px', fontWeight: 'bold' }}>2</span>
