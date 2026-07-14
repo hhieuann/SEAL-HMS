@@ -26,6 +26,7 @@ public class EventService {
     private final RoundService roundService;
     private final TrackService trackService;
     private final TeamRepository teamRepository;
+    private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
@@ -98,6 +99,8 @@ public class EventService {
             }
         }
 
+        auditLogService.log("EVENT_CREATED", "event", savedEvent.getId(), savedEvent.getName());
+
         EventResponse response = mapToResponse(savedEvent);
         response.setRounds(roundService.getRoundsByEventId(savedEvent.getId()));
         response.setTracks(trackService.getTracksByEventId(savedEvent.getId()));
@@ -148,7 +151,9 @@ public class EventService {
         // Validate that the new maxTeams does not violate existing rounds' promotion pools
         roundService.validateSequentialPromotionTopN(event);
 
-        return mapToResponse(eventRepository.save(event));
+        Event savedEvent = eventRepository.save(event);
+        auditLogService.log("EVENT_UPDATED", "event", savedEvent.getId(), savedEvent.getName());
+        return mapToResponse(savedEvent);
     }
 
     @Transactional
@@ -169,9 +174,12 @@ public class EventService {
         }
 
         validateStatusTransition(currentStatus, newStatus);
-        
+
         event.setStatus(newStatus);
-        return mapToResponse(eventRepository.save(event));
+        Event savedEvent = eventRepository.save(event);
+        auditLogService.log("EVENT_STATUS_CHANGED", "event", savedEvent.getId(),
+                savedEvent.getName() + ": " + currentStatus + " -> " + newStatus);
+        return mapToResponse(savedEvent);
     }
 
     @Transactional
@@ -183,7 +191,9 @@ public class EventService {
             throw new BusinessException("Cannot delete event when status is " + event.getStatus());
         }
 
+        String name = event.getName();
         eventRepository.delete(event);
+        auditLogService.log("EVENT_DELETED", "event", id, name);
     }
 
     private void validateStatusTransition(EventStatus current, EventStatus next) {
