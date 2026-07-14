@@ -16,6 +16,8 @@ public class TeamResponse {
     private Long trackId;
     private Long topicId;
     private TeamStatus status;
+    private Boolean isDisqualified;
+    private String disqualificationReason;
     private BigDecimal eventScore;
     private Integer eventRank;
     private LocalDateTime createdAt;

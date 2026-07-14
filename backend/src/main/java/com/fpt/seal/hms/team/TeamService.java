@@ -42,6 +42,7 @@ public class TeamService {
     private final TeamMemberRepository teamMemberRepository;
     private final EventRepository eventRepository;
     private final LecturerRepository lecturerRepository;
+    private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
     private final Random random = new Random();
 
     @Transactional(readOnly = true)
@@ -170,6 +171,38 @@ public class TeamService {
         return mapToResponse(teamRepository.save(team));
     }
 
+    @Transactional
+    public TeamResponse disqualifyTeam(Long teamId, boolean disqualified, String reason) {
+        Team team = findTeamEntityById(teamId);
+        team.setIsDisqualified(disqualified);
+        if (disqualified) {
+            team.setDisqualificationReason(reason);
+        } else {
+            team.setDisqualificationReason(null);
+        }
+        return mapToResponse(teamRepository.save(team));
+    }
+
+    @Transactional
+    public TeamResponse applyPenalty(Long teamId, Long roundId, java.math.BigDecimal penaltyPoints, String penaltyReason) {
+        com.fpt.seal.hms.roundranking.entity.RoundRanking rr = roundRankingRepository.findByRoundIdAndTeamId(roundId, teamId)
+                .orElseThrow(() -> new ResourceNotFoundException("RoundRanking not found for team " + teamId + " in round " + roundId));
+        
+        java.math.BigDecimal oldPenalty = rr.getPenaltyPoints() != null ? rr.getPenaltyPoints() : java.math.BigDecimal.ZERO;
+        java.math.BigDecimal newPenalty = penaltyPoints != null ? penaltyPoints : java.math.BigDecimal.ZERO;
+        
+        rr.setPenaltyPoints(penaltyPoints);
+        rr.setPenaltyReason(penaltyReason);
+        
+        if (rr.getScore() != null) {
+            rr.setScore(rr.getScore().add(oldPenalty).subtract(newPenalty));
+        }
+        
+        roundRankingRepository.save(rr);
+        
+        return getTeamById(teamId);
+    }
+
     private Team findTeamEntityById(Long id) {
         return teamRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found with id: " + id));
@@ -200,6 +233,8 @@ public class TeamService {
         response.setTrackId(team.getTrack() != null ? team.getTrack().getId() : null);
         response.setTopicId(team.getTopic() != null ? team.getTopic().getId() : null);
         response.setStatus(team.getStatus());
+        response.setIsDisqualified(team.getIsDisqualified());
+        response.setDisqualificationReason(team.getDisqualificationReason());
         response.setEventScore(team.getEventScore());
         response.setEventRank(team.getEventRank());
         response.setCreatedAt(team.getCreatedAt());

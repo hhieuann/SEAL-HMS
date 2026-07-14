@@ -244,6 +244,16 @@ const MySubmission = () => {
     );
   }
 
+  if (teamData?.isDisqualified) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.7 }} />
+        <h2 style={{ marginBottom: '8px' }}>Team Disqualified</h2>
+        <p>You are no longer eligible to participate in the hackathon. Please contact the event organizers if you believe this was a mistake.</p>
+      </div>
+    );
+  }
+
   if (existingSubmission?.eliminated) {
     return (
       <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>

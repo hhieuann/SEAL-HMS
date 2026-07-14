@@ -203,6 +203,16 @@ const Scores = () => {
             const dbScoreMap = {};
             dbStandings.forEach(s => { if (s.teamId && s.score != null) dbScoreMap[s.teamId] = parseFloat(s.score); });
 
+            const myStanding = dbStandings.find(s => String(s.teamId) === String(teamId));
+            const fullMyTeam = myTeamsList.find(t => String(t.id) === String(teamId));
+            
+            setTeamData(prev => ({
+              ...prev,
+              isDisqualified: fullMyTeam?.isDisqualified || false,
+              penaltyPoints: myStanding?.penaltyPoints || 0,
+              penaltyReason: myStanding?.penaltyReason || ''
+            }));
+
             let finalLeaderboard = [];
             const isFinalsRound = savedRoundIdx === (evt.rounds.length - 1);
             
@@ -222,7 +232,8 @@ const Scores = () => {
                 finalLeaderboard = teamsWithScores.map(t => ({
                   team: t.name, teamId: t.id, 
                   score: dbScoreMap[t.id] ?? null,
-                  fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Finals'
+                  fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Finals',
+                  isDisqualified: t.isDisqualified || false
                 }));
               } else {
                 // No scores yet — fallback: use localStorage trackDraw if available (admin browser)
@@ -234,7 +245,7 @@ const Scores = () => {
                       const teamNameStr = typeof teamItem === 'object' ? teamItem.name : teamItem;
                       const teamObj = myTeamsList.find(t => t.name === teamNameStr);
                       const tId = teamObj?.id;
-                      return { team: teamNameStr, teamId: tId, score: tId ? (dbScoreMap[tId] ?? null) : null, fromTrack: track.name };
+                      return { team: teamNameStr, teamId: tId, score: tId ? (dbScoreMap[tId] ?? null) : null, fromTrack: track.name, isDisqualified: teamObj?.isDisqualified || false };
                     })
                   );
                 }
@@ -255,14 +266,16 @@ const Scores = () => {
                   finalLeaderboard = sameTrackTeams.map(t => ({
                     team: t.name, teamId: t.id,
                     score: dbScoreMap[t.id] ?? null,
-                    fromTrack: dbTracks.find(tr => tr.id === myTrackId)?.name || 'My Track'
+                    fromTrack: dbTracks.find(tr => tr.id === myTrackId)?.name || 'My Track',
+                    isDisqualified: t.isDisqualified || false
                   }));
                 } else {
                   // Can't determine track, show all
                   finalLeaderboard = myTeamsList.map(t => ({
                     team: t.name, teamId: t.id,
                     score: dbScoreMap[t.id] ?? null,
-                    fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Global'
+                    fromTrack: dbTracks.find(tr => tr.id === t.trackId)?.name || 'Global',
+                    isDisqualified: t.isDisqualified || false
                   }));
                 }
 
@@ -278,7 +291,8 @@ const Scores = () => {
                 finalLeaderboard = myTeamsList.map(t => ({
                   team: t.name, teamId: t.id,
                   score: dbScoreMap[t.id] ?? null,
-                  fromTrack: 'Global'
+                  fromTrack: 'Global',
+                  isDisqualified: t.isDisqualified || false
                 }));
                 finalLeaderboard.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
                 finalLeaderboard = finalLeaderboard.map((t, idx) => ({ ...t, rank: idx + 1 }));
@@ -326,8 +340,17 @@ const Scores = () => {
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Scores & Results</h1>
           <p className="subtitle">{trackName ? `Track: ${trackName} | ` : ''}Phase: {currentRound?.name}</p>
         </div>
-
       </div>
+
+      {teamData.isDisqualified && (
+        <div style={{ padding: '16px 24px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '12px', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <AlertCircle size={24} color="var(--danger)" />
+          <div>
+            <h3 style={{ color: 'var(--danger)', margin: 0, fontSize: '18px' }}>Your Team is Disqualified</h3>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>Please contact the event administrator for more details.</p>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '40px' }}>
         {/* Team Score Card */}
@@ -335,9 +358,15 @@ const Scores = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={20} color="var(--primary)" /> Your Team Score</h2>
             <div style={{ background: '#F8FAFC', padding: '8px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <span style={{ fontSize: '28px', fontWeight: '800', color: isScorePending ? 'var(--warning)' : (myScore > 0 ? 'var(--success)' : 'var(--text-secondary)') }}>
-                {isScorePending ? 'Pending' : (myScore > 0 ? myScore : '—')}
-              </span>
+              {(() => {
+                 const finalScore = myScore - (teamData.penaltyPoints || 0);
+                 const hasScore = myScore > 0 || (teamData.penaltyPoints || 0) > 0;
+                 return (
+                   <span style={{ fontSize: '28px', fontWeight: '800', color: isScorePending ? 'var(--warning)' : (hasScore ? 'var(--success)' : 'var(--text-secondary)') }}>
+                     {isScorePending ? 'Pending' : (hasScore ? parseFloat(finalScore.toFixed(2)) : '—')}
+                   </span>
+                 );
+              })()}
               {!isScorePending && <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c) => s + Math.round((c.weight||0)*100), 0) || 100}</span>}
             </div>
           </div>
@@ -347,7 +376,9 @@ const Scores = () => {
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '20px', textAlign: 'center', background: 'var(--bg-subtle)', borderRadius: '8px' }}>
                 Your score is pending. The results will be published here automatically once the Admin officially ends the round and scoring is closed.
               </div>
-            ) : currentRound?.criteria?.map((c, i) => {
+            ) : (
+              <>
+                {currentRound?.criteria?.map((c, i) => {
               const key = c.id || c.name;
               const val = criteriaAvg[key] || 0;
               const max = Math.round((c.weight || 0) * 100); // weight is 0–1, display as %
@@ -366,6 +397,17 @@ const Scores = () => {
                 </div>
               );
             })}
+              {teamData.penaltyPoints > 0 && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px dashed rgba(239,68,68,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--danger)' }}>Penalty Deductions</span>
+                    {teamData.penaltyReason && <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>Reason: {teamData.penaltyReason}</div>}
+                  </div>
+                  <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--danger)' }}>-{teamData.penaltyPoints}</span>
+                </div>
+              )}
+              </>
+            )}
             {!isScorePending && (!currentRound?.criteria || currentRound.criteria.length === 0) && (
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No criteria found.</div>
             )}
@@ -475,9 +517,10 @@ const Scores = () => {
 
                   return (
                     <tr key={idx} style={{ 
-                      background: isMe ? 'rgba(59,130,246,0.05)' : (isPromoted || isTop3) ? 'rgba(16, 185, 129, 0.03)' : 'transparent', 
+                      background: team.isDisqualified ? 'rgba(239, 68, 68, 0.03)' : (isMe ? 'rgba(59,130,246,0.05)' : (isPromoted || isTop3) ? 'rgba(16, 185, 129, 0.03)' : 'transparent'), 
                       borderBottom: '1px solid var(--border-color)',
-                      borderLeft: isMe ? '3px solid var(--primary)' : '3px solid transparent'
+                      borderLeft: team.isDisqualified ? '3px solid var(--danger)' : (isMe ? '3px solid var(--primary)' : '3px solid transparent'),
+                      opacity: team.isDisqualified ? 0.6 : 1
                     }}>
                       <td style={{ padding: '16px', fontWeight: '600', paddingLeft: typeof rankDisplay === 'number' ? '24px' : '16px' }}>
                         {rankDisplay}
@@ -488,7 +531,11 @@ const Scores = () => {
                       <td style={{ padding: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>{team.university}</td>
                       <td style={{ padding: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>{team.score ?? '—'}</td>
                       <td style={{ padding: '16px' }}>
-                        {isFinals ? (
+                        {team.isDisqualified ? (
+                          <span style={{ padding: '4px 12px', background: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', width: 'fit-content' }}>
+                            <AlertCircle size={14} /> Disqualified
+                          </span>
+                        ) : isFinals ? (
                           team.rank === 1 ? <span style={{ padding: '4px 12px', background: 'rgba(245, 158, 11, 0.2)', color: '#d97706', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>Champion 🏆</span> :
                           team.rank === 2 ? <span style={{ padding: '4px 12px', background: 'rgba(148, 163, 184, 0.2)', color: '#64748b', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>Runner-up 🥈</span> :
                           team.rank === 3 ? <span style={{ padding: '4px 12px', background: 'rgba(185, 28, 28, 0.2)', color: '#b91c1c', borderRadius: '12px', fontSize: '12px', fontWeight: '600' }}>2nd Runner-up 🥉</span> :

@@ -27,6 +27,12 @@ public class Team extends BaseEntity {
     @Column(name = "team_id")
     private Long id;
 
+    @Column(name = "is_disqualified", nullable = false)
+    private Boolean isDisqualified = false;
+
+    @Column(name = "disqualification_reason", columnDefinition = "TEXT")
+    private String disqualificationReason;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id")
     private com.fpt.seal.hms.event.entity.Event event;

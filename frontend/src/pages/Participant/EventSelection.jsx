@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info, Activity } from 'lucide-react';
+import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info, Activity, AlertCircle } from 'lucide-react';
 
 // Custom hook for live countdown
 const useCountdown = (targetDateStr) => {
@@ -173,7 +173,7 @@ const UpcomingEventCard = ({ evt, handleRegister, isRegisteringThisEvent, hasJoi
   );
 };
 
-const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
+const LiveEventCard = ({ evt, isJoinedThisEvent, isDisqualified }) => {
   const navigate = useNavigate();
   
   const now = new Date();
@@ -225,6 +225,16 @@ const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
           
           <h2 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '16px' }}>{evt.name || "Untitled Hackathon"}</h2>
           
+          {isJoinedThisEvent && isDisqualified && (
+            <div style={{ padding: '16px 20px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '12px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <AlertCircle size={24} color="var(--danger)" />
+              <div>
+                <div style={{ fontWeight: '800', color: 'var(--danger)', fontSize: '16px' }}>Your Team has been Disqualified</div>
+                <div style={{ color: 'var(--danger)', fontSize: '13px', opacity: 0.9 }}>You are no longer eligible to participate in this event.</div>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: 'rgba(255,255,255,0.05)', padding: '16px 20px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '24px', maxWidth: '600px' }}>
             <Activity size={24} color="var(--success)" />
             <div>
@@ -250,7 +260,7 @@ const LiveEventCard = ({ evt, isJoinedThisEvent }) => {
 
         <div style={{ marginLeft: '24px', display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '180px', alignItems: 'flex-end' }}>
           {isJoinedThisEvent ? (
-            <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: 'var(--success)', color: 'black', padding: '14px 24px', fontSize: '15px' }}>
+            <button onClick={() => navigate('/participant/workspace')} className="btn btn-primary" style={{ background: isDisqualified ? 'var(--bg-hover)' : 'var(--success)', color: isDisqualified ? 'var(--text-secondary)' : 'black', padding: '14px 24px', fontSize: '15px' }}>
               Enter Workspace <ArrowRight size={18} style={{ marginLeft: '8px' }} />
             </button>
           ) : (
@@ -298,6 +308,7 @@ const EventSelection = () => {
   const [registeredEventId, setRegisteredEventId] = useState(null);
   const [registeringEventId, setRegisteringEventId] = useState(null);
   const [hasTeam, setHasTeam] = useState(localStorage.getItem('p_hasTeam') === 'true');
+  const [isDisqualified, setIsDisqualified] = useState(false);
   const [registerError, setRegisterError] = useState(null);
 
   useEffect(() => {
@@ -315,6 +326,15 @@ const EventSelection = () => {
         setEvents(mappedEvents);
       });
     });
+
+    const teamId = localStorage.getItem('p_teamId');
+    if (teamId) {
+       import('../../api/teamService.js').then(({ teamService }) => {
+          teamService.getTeamDetails(teamId).then(res => {
+             setIsDisqualified(res.data?.isDisqualified || false);
+          }).catch(() => {});
+       });
+    }
     
     const handleStateUpdate = () => {
       setHasTeam(localStorage.getItem('p_hasTeam') === 'true');
@@ -373,7 +393,7 @@ const EventSelection = () => {
           const hasJoinedAnyEvent = registeredEventId !== null || (hasTrueTeam && !!joinedEventIdStr);
 
           if (isLive) {
-             return <LiveEventCard key={evt.id} evt={evt} isJoinedThisEvent={isJoinedThisEvent} />;
+             return <LiveEventCard key={evt.id} evt={evt} isJoinedThisEvent={isJoinedThisEvent} isDisqualified={isJoinedThisEvent && isDisqualified} />;
           }
           if (isUpcoming) {
              return <UpcomingEventCard key={evt.id} evt={evt} handleRegister={handleRegister} isRegisteringThisEvent={registeringEventId === evt.id} hasJoinedAnyEvent={hasJoinedAnyEvent} isJoinedThisEvent={isJoinedThisEvent} hasTeam={hasTeam} registerError={registerError} />;
