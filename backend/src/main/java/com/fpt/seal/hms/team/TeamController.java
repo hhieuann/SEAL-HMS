@@ -72,4 +72,24 @@ public class TeamController {
         TeamResponse updated = teamService.assignTrack(id, trackId);
         return ResponseEntity.ok(ApiResponse.ok("Track assigned successfully", updated));
     }
+
+    @PutMapping("/teams/{id}/disqualify")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<TeamResponse>> disqualifyTeam(
+            @PathVariable Long id,
+            @RequestParam boolean disqualified,
+            @RequestParam(required = false, defaultValue = "") String reason) {
+        TeamResponse updated = teamService.disqualifyTeam(id, disqualified, reason);
+        return ResponseEntity.ok(ApiResponse.ok("Team disqualification status updated", updated));
+    }
+
+    @PutMapping("/teams/{id}/rounds/{roundId}/penalty")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<TeamResponse>> applyPenalty(
+            @PathVariable Long id,
+            @PathVariable Long roundId,
+            @RequestBody com.fpt.seal.hms.team.dto.TeamPenaltyRequest request) {
+        TeamResponse updated = teamService.applyPenalty(id, roundId, request.getPenaltyPoints(), request.getPenaltyReason());
+        return ResponseEntity.ok(ApiResponse.ok("Team penalty applied", updated));
+    }
 }

@@ -130,6 +130,11 @@ public class ScoreService {
             // Multiply by 100 because the criterion weights in the DB sum to 1.0
             BigDecimal avg = weightedTotal.multiply(BigDecimal.valueOf(100))
                     .divide(BigDecimal.valueOf(judgeCount), 2, RoundingMode.HALF_UP);
+            
+            if (rr.getPenaltyPoints() != null) {
+                avg = avg.subtract(rr.getPenaltyPoints());
+            }
+            
             rr.setScore(avg);
             roundRankingRepository.save(rr);
         }
