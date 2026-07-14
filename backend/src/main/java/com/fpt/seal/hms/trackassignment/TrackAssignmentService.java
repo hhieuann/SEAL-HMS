@@ -35,11 +35,8 @@ public class TrackAssignmentService {
             throw new BusinessException("This lecturer is already assigned as " + req.role() + " for this track");
         }
 
-        long countByRole = assignmentRepository.findByTrack_Id(trackId).stream()
-                .filter(a -> a.getRole() == req.role())
-                .count();
-        if (countByRole >= 1) {
-            throw new BusinessException("This track already has a " + req.role() + ". A track can only have 1 Judge and 1 Mentor.");
+        if (req.role() == com.fpt.seal.hms.common.enums.AssignmentRole.MENTOR) {
+            throw new BusinessException("Mentors are assigned to Teams, not Tracks.");
         }
 
         TrackAssignment assignment = new TrackAssignment();

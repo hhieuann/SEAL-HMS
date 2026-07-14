@@ -193,7 +193,13 @@ const ParticipantLayout = () => {
         
         <div style={{ paddingRight: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+            <img src={(() => {
+              try {
+                const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
+                if (u.avatarUrl) return `http://localhost:8080${u.avatarUrl}`;
+              } catch(e) {}
+              return `https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`;
+            })()} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none', objectFit: 'cover' }} />
             <div className="user-info" style={{ textAlign: 'left' }}>
               <span className="user-name" style={{ fontSize: '13px', fontWeight: '600' }}>
                 {displayName}

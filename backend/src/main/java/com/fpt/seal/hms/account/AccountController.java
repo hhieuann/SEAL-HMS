@@ -26,6 +26,13 @@ public class AccountController {
         return ApiResponse.ok(authentication.getName());
     }
 
+    /** Upload avatar for current user. */
+    @PostMapping("/me/avatar")
+    public ApiResponse<String> uploadAvatar(Authentication authentication, @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        String avatarUrl = accountService.uploadAvatar(authentication.getName(), file);
+        return ApiResponse.ok("Avatar uploaded", avatarUrl);
+    }
+
     /** List accounts, optionally filtered by status (e.g. ?status=PENDING). Coordinator only. */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")

@@ -10,12 +10,15 @@ export const authApi = {
       PARTICIPANT_KEYS.forEach(key => localStorage.removeItem(key));
       
       const response = await apiClient.post('/api/v1/auth/login', { email, password });
-      const { token, role, accountId, email: returnedEmail, name: returnedName } = response.data.data;
+      const { token, role, accountId, email: returnedEmail, name: returnedName, avatarUrl } = response.data.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('userRole', role);
       localStorage.setItem('userEmail', returnedEmail || email);
       if (returnedName) localStorage.setItem('userName', returnedName);
+      if (avatarUrl) {
+        localStorage.setItem('avatarUrl', avatarUrl);
+      }
       
       if (accountId) {
         localStorage.setItem('accountId', accountId);

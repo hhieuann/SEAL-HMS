@@ -3,6 +3,7 @@ package com.fpt.seal.hms.score;
 import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
+import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.criterion.CriterionRepository;
 import com.fpt.seal.hms.criterion.entity.Criterion;
 import com.fpt.seal.hms.roundranking.RoundRankingRepository;
@@ -13,14 +14,18 @@ import com.fpt.seal.hms.score.entity.Score;
 import com.fpt.seal.hms.submission.SubmissionRepository;
 import com.fpt.seal.hms.submission.entity.Submission;
 import com.fpt.seal.hms.team.TeamRepository;
+import com.fpt.seal.hms.lecturer.LecturerRepository;
+import com.fpt.seal.hms.lecturer.Lecturer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import com.fpt.seal.hms.round.entity.Round;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +37,7 @@ public class ScoreService {
     private final CriterionRepository criterionRepository;
     private final RoundRankingRepository roundRankingRepository;
     private final TeamRepository teamRepository;
+    private final LecturerRepository lecturerRepository;
 
     @Transactional(readOnly = true)
     public List<ScoreResponse> getScoresForSubmission(Long submissionId) {
@@ -49,6 +55,20 @@ public class ScoreService {
     public List<ScoreResponse> gradeSubmission(Long submissionId, GradeSubmissionRequest request) {
         Submission submission = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
+
+        Round round = submission.getRoundRanking().getRound();
+        
+        // If the round is still active, enforce the deadline
+        if (round.getStatus() == com.fpt.seal.hms.common.enums.RoundStatus.ACTIVE) {
+            if (round.getStartTime() == null || round.getDurationHours() == null) {
+                throw new BusinessException("Cannot grade: Round start time or duration is not configured.");
+            }
+            long minutes = (long)(round.getDurationHours() * 60);
+            LocalDateTime endTime = round.getStartTime().plusMinutes(minutes);
+            if (LocalDateTime.now().isBefore(endTime)) {
+                throw new BusinessException("Cannot grade yet: The submission deadline has not passed.");
+            }
+        }
 
         Account judge = accountRepository.findById(request.getJudgeAccountId())
                 .orElseThrow(() -> new ResourceNotFoundException("Judge account not found"));
@@ -119,8 +139,16 @@ public class ScoreService {
         ScoreResponse r = new ScoreResponse();
         r.setId(score.getId());
         r.setSubmissionId(score.getSubmission().getId());
-        r.setJudgeAccountId(score.getJudgeAccount().getId());
+        
+        Long judgeAccountId = score.getJudgeAccount().getId();
+        r.setJudgeAccountId(judgeAccountId);
         r.setJudgeEmail(score.getJudgeAccount().getEmail());
+        
+        lecturerRepository.findByAccount_Id(judgeAccountId).ifPresentOrElse(
+            lecturer -> r.setJudgeName(lecturer.getFullName()),
+            () -> r.setJudgeName(score.getJudgeAccount().getEmail())
+        );
+        
         r.setCriterionId(score.getCriterion().getId());
         r.setCriterionName(score.getCriterion().getName());
         r.setMaxScore(score.getCriterion().getMaxScore());

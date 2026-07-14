@@ -26,6 +26,9 @@ public class EventService {
     private final RoundService roundService;
     private final TrackService trackService;
     private final TeamRepository teamRepository;
+    private final EventStaffRepository eventStaffRepository;
+    private final com.fpt.seal.hms.account.AccountRepository accountRepository;
+    private final com.fpt.seal.hms.staff.StaffRepository staffRepository;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
@@ -285,5 +288,62 @@ public class EventService {
             return eventRepository.save(event);
         }
         return event;
+    }
+
+    @Transactional
+    public void assignStaff(Long eventId, Long accountId) {
+        if (eventStaffRepository.existsByEvent_IdAndAccount_Id(eventId, accountId)) {
+            throw new com.fpt.seal.hms.common.exception.BusinessException("Staff is already assigned to this event.");
+        }
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new com.fpt.seal.hms.common.exception.ResourceNotFoundException("Event not found"));
+        com.fpt.seal.hms.account.Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new com.fpt.seal.hms.common.exception.ResourceNotFoundException("Account not found"));
+        
+        if (account.getRole() != com.fpt.seal.hms.common.enums.Role.STAFF) {
+            throw new com.fpt.seal.hms.common.exception.BusinessException("Account is not a STAFF member.");
+        }
+
+        com.fpt.seal.hms.event.entity.EventStaff es = new com.fpt.seal.hms.event.entity.EventStaff();
+        es.setEvent(event);
+        es.setAccount(account);
+        eventStaffRepository.save(es);
+    }
+
+    @Transactional
+    public void removeStaff(Long eventId, Long accountId) {
+        com.fpt.seal.hms.event.entity.EventStaff es = eventStaffRepository.findByEvent_IdAndAccount_Id(eventId, accountId)
+                .orElseThrow(() -> new com.fpt.seal.hms.common.exception.ResourceNotFoundException("Assignment not found"));
+        eventStaffRepository.delete(es);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.fpt.seal.hms.event.dto.EventStaffResponse> getAssignedStaff(Long eventId) {
+        return eventStaffRepository.findByEvent_Id(eventId).stream().map(es -> {
+            com.fpt.seal.hms.account.Account acc = es.getAccount();
+            com.fpt.seal.hms.staff.entity.Staff staff = staffRepository.findByAccount_Id(acc.getId()).orElse(null);
+            return new com.fpt.seal.hms.event.dto.EventStaffResponse(
+                    acc.getId(),
+                    acc.getEmail(),
+                    staff != null ? staff.getFullName() : acc.getEmail(),
+                    staff != null ? staff.getDepartment() : null
+            );
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public void verifyStaffAccess(Long eventId, String email) {
+        com.fpt.seal.hms.account.Account acc = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new com.fpt.seal.hms.common.exception.ResourceNotFoundException("Account not found"));
+        if (acc.getRole() == com.fpt.seal.hms.common.enums.Role.ADMIN) {
+            return; // Admins have global access
+        }
+        if (acc.getRole() == com.fpt.seal.hms.common.enums.Role.STAFF) {
+            if (!eventStaffRepository.existsByEvent_IdAndAccount_Id(eventId, acc.getId())) {
+                throw new com.fpt.seal.hms.common.exception.BusinessException("You are not authorized to manage this event.");
+            }
+            return;
+        }
+        throw new com.fpt.seal.hms.common.exception.BusinessException("Unauthorized role for event management.");
     }
 }

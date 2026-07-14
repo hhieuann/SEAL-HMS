@@ -46,7 +46,7 @@ const Login = () => {
 
     try {
       // Call real backend API
-      const { role } = await authApi.login(cleanEmail, cleanPassword);
+      const { role, name: backendName, avatarUrl: backendAvatarUrl } = await authApi.login(cleanEmail, cleanPassword);
       
       // Giả lập lưu currentUser để tương thích giao diện cũ
       let user = accounts['participant'];
@@ -54,12 +54,27 @@ const Login = () => {
       else if (role === 'GUEST_JUDGE' || role === 'JUDGE') user = accounts['alan'];
       else if (role === 'LECTURER' || role === 'MENTOR') user = accounts['david'];
       
+      // Override with actual backend name if available
+      if (backendName) {
+        user = { ...user, name: backendName };
+      } else if (localStorage.getItem('userName')) {
+        user = { ...user, name: localStorage.getItem('userName') };
+      }
+
+      // Override with actual avatar if available
+      if (backendAvatarUrl) {
+        user = { ...user, avatarUrl: backendAvatarUrl };
+      } else if (localStorage.getItem('avatarUrl')) {
+        user = { ...user, avatarUrl: localStorage.getItem('avatarUrl') };
+      }
+      
       localStorage.setItem('currentUser', JSON.stringify(user));
 
       // Navigate based on actual role returned from Spring Boot
-      if (role === 'ADMIN' || role === 'STAFF') navigate('/admin/dashboard');
-      else if (role === 'GUEST_JUDGE' || role === 'LECTURER' || role === 'JUDGE' || role === 'MENTOR') navigate('/expert/dashboard');
-      else navigate('/participant');
+      if (role === 'ADMIN') navigate('/admin/dashboard');
+      else if (role === 'STAFF' || role === 'JUDGE' || role === 'MENTOR' || role === 'GUEST_JUDGE' || role === 'LECTURER') navigate('/expert/dashboard');
+      else if (role === 'STUDENT') navigate('/participant/events');
+      else navigate('/');
       
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email or password.');

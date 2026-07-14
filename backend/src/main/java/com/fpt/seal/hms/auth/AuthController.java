@@ -54,7 +54,7 @@ public class AuthController {
         }
         String token = jwtService.generateToken(account.getEmail(), account.getRole().name());
         String name = accountService.getFullName(account);
-        return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId(), name));
+        return ApiResponse.ok(new AuthResponse(token, account.getRole().name(), account.getId(), name, account.getAvatarUrl()));
     }
 
     /** Change the current user's password (requires authentication). */

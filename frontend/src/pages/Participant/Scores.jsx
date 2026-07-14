@@ -12,6 +12,8 @@ const Scores = () => {
   const [myScore, setMyScore] = useState(0);
   const [criteriaAvg, setCriteriaAvg] = useState({});
   const [feedbacks, setFeedbacks] = useState([]);
+  const [judgeEvaluations, setJudgeEvaluations] = useState([]);
+  const [isScorePending, setIsScorePending] = useState(false);
   
   const [trackName, setTrackName] = useState('');
   const [leaderboard, setLeaderboard] = useState([]);
@@ -126,6 +128,9 @@ const Scores = () => {
 
           const fbList = [];
           const fbSet = new Set();
+          
+          const judgeMap = {};
+          
           scoresData.forEach(s => {
             if (s.comment && s.comment.trim().length > 0) {
               const key = `${s.judgeEmail}-${s.comment}`;
@@ -134,7 +139,44 @@ const Scores = () => {
                 fbList.push({ judgeId: s.judgeEmail || 'Judge', text: s.comment });
               }
             }
+            
+            const jEmail = s.judgeEmail || 'Unknown Judge';
+            if (!judgeMap[jEmail]) {
+               judgeMap[jEmail] = {
+                  judgeName: s.judgeName || jEmail,
+                  judgeEmail: jEmail,
+                  scores: {},
+                  comments: []
+               };
+            }
+            judgeMap[jEmail].scores[s.criterionId] = s.score;
+            if (s.comment && s.comment.trim()) {
+               if (!judgeMap[jEmail].comments.includes(s.comment)) {
+                  judgeMap[jEmail].comments.push(s.comment);
+               }
+            }
           });
+          
+          setJudgeEvaluations(Object.values(judgeMap));
+
+          let isPending = round?.status?.toUpperCase() !== 'COMPLETED';
+          let expectedJudgesCount = 0;
+          let myTrackId = teamData?.trackId || (myTeamsList.find(t => t.id === parseInt(teamId) || t.id === teamId)?.trackId);
+
+          if (myTrackId) {
+             try {
+                const { trackService } = await import('../../api/trackService');
+                const trackAssig = await trackService.getTrackAssignments(myTrackId);
+                const assignments = trackAssig?.data || trackAssig || [];
+                expectedJudgesCount = assignments.filter(a => a.role === 'JUDGE').length;
+             } catch(e) {}
+          }
+          
+          const actualJudgesCount = Object.keys(judgeMap).length;
+          if (expectedJudgesCount > 0 && actualJudgesCount < expectedJudgesCount) {
+             isPending = true;
+          }
+          setIsScorePending(isPending);
 
           setMyScore(parseFloat(weightedTotal.toFixed(1)));
           setCriteriaAvg(avgMap);
@@ -145,15 +187,16 @@ const Scores = () => {
           setFeedbacks([]);
         }
 
-        if (savedRoundIdx > 0) {
+        const isLastRound = savedRoundIdx === (evt?.rounds?.length - 1);
+        if (isLastRound) {
           setIsFinals(true);
-          setTrackName('Finals');
+          setTrackName(savedRoundIdx > 0 ? 'Finals' : 'Current Track');
         } else {
+          setIsFinals(false);
           setTrackName('Current Track');
         }
         
-        if (round?.status?.toUpperCase() === 'COMPLETED' || evt?.status?.toUpperCase() === 'COMPLETED') {
-          try {
+        try {
             const { standingsService } = await import('../../api/scoreService');
             const standingsRes = await standingsService.getStandings(round.id);
             const dbStandings = standingsRes?.data || standingsRes || [];
@@ -247,9 +290,6 @@ const Scores = () => {
             console.error("Failed to load leaderboard:", err);
             setLeaderboard([]);
           }
-        } else {
-          setLeaderboard([]);
-        }
 
       } catch (e) {
         console.error("Failed to load scores data:", e);
@@ -286,11 +326,7 @@ const Scores = () => {
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Scores & Results</h1>
           <p className="subtitle">{trackName ? `Track: ${trackName} | ` : ''}Phase: {currentRound?.name}</p>
         </div>
-        <div style={{ textAlign: 'right' }}>
-           <div className="status-badge open" style={{ display: 'inline-block', fontSize: '14px', padding: '6px 16px', borderRadius: '20px' }}>
-             Results Published
-           </div>
-        </div>
+
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '40px' }}>
@@ -299,13 +335,19 @@ const Scores = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
             <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={20} color="var(--primary)" /> Your Team Score</h2>
             <div style={{ background: '#F8FAFC', padding: '8px 16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <span style={{ fontSize: '28px', fontWeight: '800', color: myScore > 0 ? 'var(--success)' : 'var(--text-secondary)' }}>{myScore > 0 ? myScore : '—'}</span>
-              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c) => s + Math.round((c.weight||0)*100), 0) || 100}</span>
+              <span style={{ fontSize: '28px', fontWeight: '800', color: isScorePending ? 'var(--warning)' : (myScore > 0 ? 'var(--success)' : 'var(--text-secondary)') }}>
+                {isScorePending ? 'Pending' : (myScore > 0 ? myScore : '—')}
+              </span>
+              {!isScorePending && <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>/{currentRound?.criteria?.reduce((s,c) => s + Math.round((c.weight||0)*100), 0) || 100}</span>}
             </div>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {currentRound?.criteria?.map((c, i) => {
+            {isScorePending ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '20px', textAlign: 'center', background: 'var(--bg-subtle)', borderRadius: '8px' }}>
+                Your score is pending. The results will be published here automatically once the Admin officially ends the round and scoring is closed.
+              </div>
+            ) : currentRound?.criteria?.map((c, i) => {
               const key = c.id || c.name;
               const val = criteriaAvg[key] || 0;
               const max = Math.round((c.weight || 0) * 100); // weight is 0–1, display as %
@@ -324,34 +366,71 @@ const Scores = () => {
                 </div>
               );
             })}
-            {(!currentRound?.criteria || currentRound.criteria.length === 0) && (
+            {!isScorePending && (!currentRound?.criteria || currentRound.criteria.length === 0) && (
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No criteria found.</div>
             )}
           </div>
         </div>
 
-        {/* Judge Feedback Card */}
-        <div className="glass-panel" style={{ padding: '32px', display: 'flex', flexDirection: 'column' }}>
-          <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}><MessageSquare size={20} color="var(--accent-2)" /> Judges' Feedback</h2>
-          
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto', maxHeight: '300px' }}>
-            {feedbacks.length > 0 ? feedbacks.map((fb, i) => {
-              const colors = ['var(--primary)', 'var(--accent-1)', 'var(--warning)'];
-              const color = colors[i % colors.length];
-              return (
-                <div key={i} style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', borderLeft: `3px solid ${color}` }}>
-                  <p style={{ fontSize: '14px', lineHeight: '1.6', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
-                    "{fb.text}"
-                  </p>
-                  <div style={{ marginTop: '12px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>— {fb.judgeId.replace('@gmail.com','').toUpperCase()}</div>
-                </div>
-              );
-            }) : (
-              <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                No feedback provided yet.
+        {/* Individual Judge Evaluations */}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <h2 style={{ fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}><MessageSquare size={20} color="var(--accent-2)" /> Detailed Judge Evaluations</h2>
+          {isScorePending ? (
+            <div className="glass-panel" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Evaluations will be visible once the Admin officially ends the round and scoring is closed.
+            </div>
+          ) : judgeEvaluations.length > 0 ? judgeEvaluations.map((judge, jIdx) => (
+            <div key={jIdx} className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', background: 'var(--bg-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                <div style={{ fontWeight: '700', fontSize: '16px', color: 'var(--accent-3)' }}>🎓 {judge.judgeName}</div>
               </div>
-            )}
-          </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                {/* Scores */}
+                <div>
+                  <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-secondary)' }}>Scores</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {currentRound?.criteria?.map((c, i) => {
+                      const key = c.id || c.name;
+                      const val = judge.scores[key] || 0;
+                      const max = c.maxScore || 1;
+                      const maxScoreValue = parseFloat(max);
+                      const pct = maxScoreValue > 0 ? (val / maxScoreValue) * 100 : 0;
+                      const colors = ['var(--primary)', 'var(--accent-1)', 'var(--success)', 'var(--warning)'];
+                      const color = colors[i % colors.length];
+                      return (
+                        <div key={i}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
+                            <span>{c.name}</span>
+                            <strong>{val} / {maxScoreValue}</strong>
+                          </div>
+                          <div style={{ height: '6px', background: 'var(--bg-active)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: color }}></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Feedback */}
+                <div>
+                  <h3 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--text-secondary)' }}>Feedback</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {judge.comments.length > 0 ? judge.comments.map((comment, i) => (
+                      <div key={i} style={{ padding: '12px', background: 'white', borderRadius: '8px', borderLeft: '3px solid var(--primary)', fontSize: '13px', fontStyle: 'italic', color: 'var(--text-secondary)' }}>
+                        "{comment}"
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No feedback provided.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )) : (
+            <div className="glass-panel" style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              No evaluations available yet.
+            </div>
+          )}
         </div>
       </div>
 
@@ -359,15 +438,17 @@ const Scores = () => {
       <div className="glass-panel" style={{ padding: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <h2 style={{ fontSize: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}><Trophy size={24} color="var(--warning)" /> {isFinals ? 'Finals Leaderboard' : `${trackName} Leaderboard`}</h2>
-          {!isFinals && (
+          {!isFinals && currentRound?.promotionTopN > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
               <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid #10b981' }}></div>
-              Top 2 advance to {event?.rounds?.[currentRoundIndex + 1]?.name || 'Next Round'}
+              Top {currentRound.promotionTopN} advance to {event?.rounds?.[currentRoundIndex + 1]?.name || 'Next Round'}
             </div>
           )}
         </div>
 
-        {leaderboard.length === 0 ? (
+        {isScorePending ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>The leaderboard will be revealed once the Admin officially ends the round and scoring is closed.</div>
+        ) : leaderboard.length === 0 ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Leaderboard not available yet.</div>
         ) : (
           <div className="table-container" style={{ overflowX: 'auto' }}>
@@ -385,7 +466,7 @@ const Scores = () => {
                 {leaderboard.map((team, idx) => {
                   const isMe = team.teamId == teamData?.id;
                   const isTop3 = isFinals && team.rank <= 3;
-                  const isPromoted = !isFinals && team.rank <= 2;
+                  const isPromoted = !isFinals && team.rank <= (currentRound?.promotionTopN || 2);
                   
                   let rankDisplay = team.rank;
                   if (team.rank === 1) rankDisplay = <div className="rank-badge gold" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, #fbbf24, #d97706)', color: '#000', fontWeight: 'bold' }}>1</div>;

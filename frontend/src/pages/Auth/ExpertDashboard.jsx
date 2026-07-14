@@ -30,12 +30,15 @@ const ExpertDashboard = () => {
     const roles = [];
     if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
     if (role === 'MENTOR') roles.push('Mentor');
+    if (role === 'STAFF') roles.push('Staff');
+    
+    const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
     
     return { 
       name: userName || email.split('@')[0], 
       roles,
       userId,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || email.split('@')[0])}&background=14b8a6&color=fff` 
+      avatar: u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || email.split('@')[0])}&background=14b8a6&color=fff` 
     };
   });
 
@@ -43,11 +46,11 @@ const ExpertDashboard = () => {
     const handleProfileUpdate = () => {
       try {
         const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-        if (u.name) {
+        if (u.name || u.avatarUrl) {
           setCurrentUser(prev => ({
             ...prev,
-            name: u.name,
-            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=14b8a6&color=fff`
+            name: u.name || prev.name,
+            avatar: u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || prev.name)}&background=14b8a6&color=fff`
           }));
         }
       } catch(e) {}
@@ -89,14 +92,17 @@ const ExpertDashboard = () => {
           
           if (myAssignmentsForEvent.length === 0) {
              // Fallback just in case
-             myAssignmentsForEvent.push({ role: currentUser.roles.includes('Judge') ? 'JUDGE' : 'MENTOR', trackId: null });
+             let fallbackRole = 'MENTOR';
+             if (currentUser.roles.includes('Judge')) fallbackRole = 'JUDGE';
+             if (currentUser.roles.includes('Staff')) fallbackRole = 'STAFF';
+             myAssignmentsForEvent.push({ role: fallbackRole, trackId: null });
           }
 
           for (const assignment of myAssignmentsForEvent) {
             const trackObj = eventTracks.find(t => t.id === assignment.trackId);
             const trackName = trackObj ? trackObj.name : 'All Tracks';
             const trackId = trackObj ? trackObj.id : null;
-            const assignmentRole = assignment.role === 'JUDGE' ? 'Judge' : 'Mentor';
+            const assignmentRole = assignment.role === 'JUDGE' ? 'Judge' : (assignment.role === 'STAFF' ? 'Staff' : 'Mentor');
             
             // Only show cards for roles the user actually has
             if (!currentUser.roles.includes(assignmentRole)) continue;
@@ -165,6 +171,19 @@ const ExpertDashboard = () => {
               status: evt.status === 'CREATED' ? 'upcoming' : 'active'
             });
           }
+          if (assignmentRole === 'Staff') {
+            dynamicAssignments.push({
+              id: `staff-${evt.id}`,
+              eventId: evt.id,
+              event: evt.name,
+              role: 'Event Staff',
+              track: 'Global Management',
+              trackId: null,
+              path: `/admin/event/${evt.id}/dashboard`,
+              stats: { managed: true },
+              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+            });
+          }
           }
         }
         
@@ -180,6 +199,7 @@ const ExpertDashboard = () => {
 
   const hasJudge = currentUser.roles.includes('Judge');
   const hasMentor = currentUser.roles.includes('Mentor');
+  const hasStaff = currentUser.roles.includes('Staff');
 
   return (
     <div className="expert-dashboard-container animate-fade-in" style={{ minHeight: '100vh', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -190,7 +210,9 @@ const ExpertDashboard = () => {
           <div className="logo-icon" style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Code size={24} color="white" /></div>
           <div>
             <div style={{ fontSize: '20px', fontWeight: '700', lineHeight: '1' }}>SEAL<span className="highlight">.</span></div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Expert Portal</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {localStorage.getItem('userRole') === 'STAFF' ? 'Staff Portal' : 'Expert Portal'}
+            </div>
           </div>
         </div>
         
@@ -206,7 +228,16 @@ const ExpertDashboard = () => {
           
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: '14px', fontWeight: '600' }}>{currentUser.name}</div>
-            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Expert User</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+              {{
+                'STAFF': 'Event Staff',
+                'JUDGE': 'Judge',
+                'MENTOR': 'Mentor',
+                'GUEST_JUDGE': 'Guest Judge',
+                'LECTURER': 'Lecturer',
+                'ADMIN': 'System Admin'
+              }[localStorage.getItem('userRole')] || 'Expert User'}
+            </div>
           </div>
           
           <img 
@@ -357,6 +388,66 @@ const ExpertDashboard = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Resolved</span>
                           <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.resolved}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {item.status === 'upcoming' && (
+                      <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        Starts in {item.startsIn}
+                      </div>
+                    )}
+                  </div>
+
+                  <button 
+                    onClick={() => handleEnterWorkspace(item)}
+                    className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
+                    style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                    disabled={item.status === 'upcoming'}
+                  >
+                    Enter Workspace <ArrowRight size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        )}
+
+        {/* STAFF SECTION */}
+        {hasStaff && (
+        <div style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#8b5cf6' }}>
+            <User size={24} /> Staff Assignments
+          </h2>
+          {assignments.filter(item => item.role === 'Event Staff').length === 0 ? (
+            <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              No Staff assignments at the moment.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              {assignments.filter(item => item.role === 'Event Staff').map(item => (
+                <div key={item.id} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#8b5cf6' }} />
+                  
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{ background: 'rgba(139,92,246,0.1)', padding: '8px 12px', borderRadius: '8px', display: 'inline-flex', alignItems: 'center', gap: '8px', color: '#8b5cf6', fontSize: '13px', fontWeight: '600' }}>
+                      <User size={16} /> Event Staff
+                    </div>
+                    {item.status === 'upcoming' && (
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '4px' }}>Upcoming</span>
+                    )}
+                  </div>
+
+                  <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '4px' }}>{item.event}</h2>
+                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Scope: <strong style={{ color: 'var(--text-primary)' }}>Entire Event</strong></div>
+
+                  <div style={{ flex: 1 }}>
+                    {item.status === 'active' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><CheckCircle2 size={16} /> Management Access</span>
+                          <span style={{ fontWeight: '600', color: 'var(--success)' }}>Active</span>
                         </div>
                       </div>
                     )}

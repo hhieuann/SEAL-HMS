@@ -1,0 +1,1 @@
+UPDATE account SET password = '$2a$10$D/Wtg7rRd150wjlJmpRh2uOd1HA6phIq5lOf3IYZ8Z18NM0VYkTIK' WHERE email IN ('alpha1_member1@example.com', 'alpha1_member2@example.com', 'alpha2_member1@example.com', 'alpha2_member2@example.com');

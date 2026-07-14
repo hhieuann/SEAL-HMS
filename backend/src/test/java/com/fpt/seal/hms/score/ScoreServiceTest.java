@@ -65,7 +65,11 @@ class ScoreServiceTest {
     private Submission submission(long id) {
         Submission s = new Submission();
         s.setId(id);
-        s.setRoundRanking(new RoundRanking());
+        RoundRanking rr = new RoundRanking();
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.COMPLETED); // Bypass active deadline check
+        rr.setRound(round);
+        s.setRoundRanking(rr);
         return s;
     }
 

@@ -16,6 +16,13 @@ export const eventService = {
     const data = response.data;
     if (data?.data?.rounds) {
       data.data.rounds.sort((a, b) => (a.roundSeq || 0) - (b.roundSeq || 0));
+      data.data.rounds.forEach(r => {
+        if (r.startTime && r.durationHours && !r.end) {
+          const start = new Date(r.startTime);
+          start.setMinutes(start.getMinutes() + (r.durationHours * 60));
+          r.end = start.toISOString();
+        }
+      });
     }
     return data;
   },
@@ -25,6 +32,13 @@ export const eventService = {
     const data = response.data;
     if (data?.data && Array.isArray(data.data)) {
       data.data.sort((a, b) => (a.roundSeq || 0) - (b.roundSeq || 0));
+      data.data.forEach(r => {
+        if (r.startTime && r.durationHours && !r.end) {
+          const start = new Date(r.startTime);
+          start.setMinutes(start.getMinutes() + (r.durationHours * 60));
+          r.end = start.toISOString();
+        }
+      });
     }
     return data;
   },
@@ -61,6 +75,21 @@ export const eventService = {
 
   deleteRound: async (id) => {
     const response = await apiClient.delete(`/api/v1/rounds/${id}`);
+    return response.data;
+  },
+
+  getAssignedStaff: async (eventId) => {
+    const response = await apiClient.get(`/api/v1/events/${eventId}/staff`);
+    return response.data;
+  },
+
+  assignStaff: async (eventId, accountId) => {
+    const response = await apiClient.post(`/api/v1/events/${eventId}/staff`, { accountId });
+    return response.data;
+  },
+
+  removeStaff: async (eventId, accountId) => {
+    const response = await apiClient.delete(`/api/v1/events/${eventId}/staff/${accountId}`);
     return response.data;
   }
 };
