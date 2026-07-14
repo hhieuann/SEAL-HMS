@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { authApi } from '../../api/auth';
@@ -9,6 +9,17 @@ const Login = () => {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Clear stale session data from previous login (any role)
+  useEffect(() => {
+    const keysToRemove = [
+      'token', 'role', 'accountId', 'userId', 'currentUser',
+      'p_eventId', 'p_selectedEventId', 'p_hasJoinedEvent',
+      'p_hasTeam', 'p_isLeader', 'p_teamId', 'p_teamInviteCode',
+      'myTeamName', 'currentEventId',
+    ];
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+  }, []);
 
   const accounts = {
     admin: { name: 'System Admin', type: 'admin' },

@@ -1,9 +1,34 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Anchor, ArrowRight, Users, Scale, LayoutTemplate } from 'lucide-react';
 import './LandingPage.css';
+import apiClient from '../api/apiClient';
 
 const LandingPage = () => {
+  const [events, setEvents] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+
+  useEffect(() => {
+    apiClient.get('/api/v1/events')
+      .then(res => {
+        const data = res.data?.data || res.data || [];
+        setEvents(Array.isArray(data) ? data : []);
+      })
+      .catch(err => console.error("Failed to fetch events", err));
+
+    apiClient.get('/api/v1/accounts')
+      .then(res => {
+        const data = res.data?.data || res.data || [];
+        setAccounts(Array.isArray(data) ? data : []);
+      })
+      .catch(err => console.error("Failed to fetch accounts", err));
+  }, []);
+
+  const totalEvents = events.length;
+  const totalParticipants = accounts.filter(a => a.role === 'STUDENT').length;
+  const totalTeams = events.reduce((sum, e) => sum + (e.teams || 0), 0);
+  const avgSubmissions = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
+
   return (
     <div className="landing-container animate-fade-in">
       {/* Navigation */}
@@ -47,15 +72,15 @@ const LandingPage = () => {
               <div className="hero-stats">
                 <div className="stat-box">
                   <span className="stat-label">Active events</span>
-                  <span className="stat-num">12</span>
+                  <span className="stat-num">{totalEvents}</span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Participants</span>
-                  <span className="stat-num">4,823</span>
+                  <span className="stat-num">{totalParticipants}</span>
                 </div>
                 <div className="stat-box">
-                  <span className="stat-label">Average submissions / event</span>
-                  <span className="stat-num">186</span>
+                  <span className="stat-label">Average teams / event</span>
+                  <span className="stat-num">{avgSubmissions}</span>
                 </div>
               </div>
             </div>
@@ -68,62 +93,46 @@ const LandingPage = () => {
             </div>
             
             <div className="event-list">
-              <div className="event-item active-event" style={{ border: '1px solid rgba(59, 130, 246, 0.4)', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', padding: '16px', marginBottom: '12px' }}>
-                <div className="event-info" style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span className="status-badge live" style={{ background: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', padding: '4px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', animation: 'pulse 2s infinite' }}>Live Now</span>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Qualifying Round</span>
-                  </div>
-                  <h4 style={{ fontSize: '18px', margin: 0 }}>SEAL Hackathon Spring 2026</h4>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)' }}>Apr 11 - Apr 12 • Offline • FPT University HCM</p>
+              {events.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                  No active events at the moment. Stay tuned!
                 </div>
-                <div className="event-action" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-                  <span className="time-left" style={{ color: 'var(--success)', fontWeight: '600' }}>Qualifying Phase</span>
-                  <Link to="/participant/events" className="btn btn-primary sm-btn">Enter Event</Link>
-                </div>
-              </div>
+              ) : (
+                events.slice(0, 4).map(event => {
+                  const isLive = event.status?.toLowerCase() === 'live' || event.status?.toLowerCase() === 'ongoing';
+                  const isUpcoming = event.status?.toLowerCase() === 'upcoming' || event.status?.toLowerCase() === 'planned';
+                  const isCompleted = event.status?.toLowerCase() === 'completed';
 
-              <div className="event-item">
-                <div className="event-img bg-cyan"></div>
-                <div className="event-info">
-                  <h4>Summer DevFest 2026</h4>
-                  <p>Jul 1 - Jul 7 • FPT University HCM</p>
-                  <span className="status-badge open">Open</span>
-                </div>
-                <div className="event-action">
-                  <span className="time-left">Ends in 45d</span>
-                  <Link to="/register" className="btn btn-primary sm-btn">Register</Link>
-                </div>
-              </div>
-              
-              <div className="event-item">
-                <div className="event-img bg-purple"></div>
-                <div className="event-info">
-                  <h4>ByteWave University Cup</h4>
-                  <p>June 2 • Onsite • FPT University Da Nang</p>
-                  <span className="status-badge app-only">Applications</span>
-                </div>
-                <div className="event-action">
-                  <span className="time-left">Starts in 19d</span>
-                  <button className="btn btn-secondary sm-btn">Details</button>
-                </div>
-              </div>
-
-              <div className="event-item">
-                <div className="event-img bg-blue"></div>
-                <div className="event-info">
-                  <h4>Open Source Sprint</h4>
-                  <p>July 8 • FPT University HN</p>
-                  <span className="status-badge open">Open</span>
-                </div>
-                <div className="event-action">
-                  <span className="time-left">Starts in 55d</span>
-                  <Link to="/register" className="btn btn-primary sm-btn">Register</Link>
-                </div>
-              </div>
+                  return (
+                    <div key={event.id} className={`event-item ${isLive ? 'active-event' : ''}`} style={isLive ? { border: '1px solid rgba(59, 130, 246, 0.4)', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', padding: '16px', marginBottom: '12px' } : {}}>
+                      {!isLive && <div className="event-img bg-cyan" style={{ background: isUpcoming ? 'var(--warning)' : 'var(--bg-active)' }}></div>}
+                      <div className="event-info" style={isLive ? { display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 } : {}}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: isLive ? 0 : '4px' }}>
+                          {isLive && <span className="status-badge live" style={{ background: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', padding: '4px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', animation: 'pulse 2s infinite' }}>Live Now</span>}
+                          {!isLive && isUpcoming && <span className="status-badge open">Upcoming</span>}
+                          {!isLive && isCompleted && <span className="status-badge app-only">Completed</span>}
+                          {isLive && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ongoing Event</span>}
+                        </div>
+                        <h4 style={isLive ? { fontSize: '18px', margin: 0 } : {}}>{event.name}</h4>
+                        <p style={isLive ? { margin: 0, fontSize: '13px', color: 'var(--text-secondary)' } : {}}>{event.type || 'Hackathon'}</p>
+                      </div>
+                      <div className="event-action" style={isLive ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' } : {}}>
+                        <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>{isLive ? 'In Progress' : (isUpcoming ? 'Starts soon' : 'Ended')}</span>
+                        {isLive ? (
+                          <Link to="/participant/events" className="btn btn-primary sm-btn">Enter Event</Link>
+                        ) : (
+                          <Link to={isUpcoming ? "/register" : "/login"} className={isUpcoming ? "btn btn-primary sm-btn" : "btn btn-secondary sm-btn"}>{isUpcoming ? 'Register' : 'Details'}</Link>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
             
-            <button className="btn btn-text full-width mt-4">View All Events <ArrowRight size={16}/></button>
+            {events.length > 4 && (
+              <button className="btn btn-text full-width mt-4">View All Events <ArrowRight size={16}/></button>
+            )}
           </div>
         </section>
 

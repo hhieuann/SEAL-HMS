@@ -88,8 +88,6 @@ const EventDashboard = () => {
         };
 
         setEvent(enrichedEvent);
-        // Store raw tracks if needed
-        setTracks(tracks);
 
       } catch (err) {
         console.error("Failed to load event dashboard data", err);

@@ -379,7 +379,9 @@
 .comment-input {
   width: 100%;
   background: transparent;
-  border: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
   border-bottom: 1px dashed var(--border-color);
   color: var(--text-primary);
   padding: 8px 0;
