@@ -296,7 +296,7 @@ public class EventService {
         return event;
     }
 
-<<<<<<< HEAD
+
     @Transactional
     public void assignStaff(Long eventId, Long accountId) {
         if (eventStaffRepository.existsByEvent_IdAndAccount_Id(eventId, accountId)) {

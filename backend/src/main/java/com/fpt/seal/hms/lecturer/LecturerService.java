@@ -47,6 +47,7 @@ public class LecturerService {
         Lecturer l = myProfileEntity(account.getId());
         apply(l, req);
         accountService.updateEmail(account, req.email());
+        l = lecturerRepository.save(l);
         return LecturerResponse.from(l);
     }
 

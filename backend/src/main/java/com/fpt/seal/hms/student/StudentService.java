@@ -49,7 +49,8 @@ public class StudentService {
         apply(s, req);
         applyStudentCode(s, req);
         accountService.updateEmail(account, req.email());
-        return StudentResponse.from(s); // managed entity flushes on commit
+        s = studentRepository.save(s);
+        return StudentResponse.from(s); 
     }
 
     @Transactional(readOnly = true)
