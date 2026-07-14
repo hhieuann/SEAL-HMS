@@ -2,23 +2,47 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Users, FolderKanban, ShieldCheck, ArrowRight, Activity, Code, Calendar, Server, Settings, Mail, UserPlus, Database, PieChart, CheckCircle2 } from 'lucide-react';
 import './EventDashboard.css';
+import apiClient from '../../api/apiClient';
 
 const GlobalDashboard = () => {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
 
   useEffect(() => {
     import('../../api/eventService.js').then(({ eventService }) => {
       eventService.getEvents().then(res => {
         setEvents(res.data || []);
-      }).catch(err => console.error("Failed to load global events:", err));
+      }).catch(err => console.error('Failed to load global events:', err));
     });
+
+    // Fetch real account count
+    apiClient.get('/api/v1/accounts').then(res => {
+      const data = res.data?.data || res.data || [];
+      setAccounts(Array.isArray(data) ? data : []);
+    }).catch(err => console.error('Failed to load accounts:', err));
+
+    // Fetch recent audit logs
+    apiClient.get('/api/v1/audit-logs', { params: { limit: 5 } }).then(res => {
+      const data = res.data?.data || res.data || [];
+      setAuditLogs(Array.isArray(data) ? data : []);
+    }).catch(err => console.error('Failed to load audit logs:', err));
   }, []);
 
   const totalEvents = events.length;
-  const totalUsers = events.reduce((sum, evt) => sum + ((evt.teams || 0) * 4) + (evt.judges || 0), 0);
+  const totalUsers = accounts.length;
   const totalSubmissions = 0;
   const activeExperts = events.reduce((sum, evt) => sum + (evt.judges || 0), 0);
+
+  // Real role breakdown from accounts
+  const participantCount = accounts.filter(a => a.role === 'STUDENT').length;
+  const lecturerCount = accounts.filter(a => a.role === 'LECTURER').length;
+  const adminCount = accounts.filter(a => a.role === 'ADMIN' || a.role === 'STAFF').length;
+  const totalForBreakdown = participantCount + lecturerCount + adminCount || 1;
+  const participantPct = Math.round((participantCount / totalForBreakdown) * 100);
+  const lecturerPct = Math.round((lecturerCount / totalForBreakdown) * 100);
+  const adminPct = 100 - participantPct - lecturerPct;
 
   return (
     <div className="animate-fade-in">
@@ -140,27 +164,28 @@ const GlobalDashboard = () => {
               <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Activity size={20} color="var(--accent-3)" /> Global Activity Log
               </h2>
-              <button className="btn btn-text">View Full Audit <ArrowRight size={16}/></button>
+              <button className="btn btn-text" onClick={() => navigate('/admin/activity-log')}>View Full Audit <ArrowRight size={16}/></button>
             </div>
             <div style={{ padding: '0 24px 24px 24px', display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-              {events.length === 0 ? (
+              {auditLogs.length === 0 ? (
                 <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
                   No recent activity.
                 </div>
               ) : (
-                [
-                  { time: 'Just now', action: 'Coordinator created a new event:', target: events[events.length - 1]?.name || 'New Event', icon: <Calendar size={14}/>, color: 'var(--primary)' },
-                  { time: '1 hour ago', action: 'System executed automated backup', target: 'Database Snapshot', icon: <Database size={14}/>, color: 'var(--success)' },
-                ].map((log, i) => (
+                auditLogs.map((log, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', background: 'var(--bg-main)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `var(--bg-hover)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: log.color, flexShrink: 0 }}>
-                      {log.icon}
+                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', flexShrink: 0 }}>
+                      <Activity size={14} />
                     </div>
                     <div>
                       <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        {log.action} <strong style={{ color: 'var(--text-primary)' }}>{log.target}</strong>
+                        <strong style={{ color: 'var(--text-primary)' }}>{log.action}</strong>
+                        {log.entityType ? <span> · {log.entityType}{log.entityId ? ` #${log.entityId}` : ''}</span> : null}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>{log.time}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {log.actorEmail || 'System'}
+                        {log.createdAt ? ' · ' + new Date(log.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -186,22 +211,22 @@ const GlobalDashboard = () => {
               ) : (
                 <>
                   <div style={{ display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', marginBottom: '20px' }}>
-                    <div style={{ width: '75%', background: 'var(--primary)' }} title="Participants: 75%" />
-                    <div style={{ width: '15%', background: 'var(--accent-1)' }} title="Mentors: 15%" />
-                    <div style={{ width: '10%', background: 'var(--warning)' }} title="Judges: 10%" />
+                    <div style={{ width: `${participantPct}%`, background: 'var(--primary)' }} title={`Students: ${participantPct}%`} />
+                    <div style={{ width: `${lecturerPct}%`, background: 'var(--accent-1)' }} title={`Lecturers: ${lecturerPct}%`} />
+                    <div style={{ width: `${adminPct}%`, background: 'var(--warning)' }} title={`Admin/Staff: ${adminPct}%`} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)' }} /> Participants</span>
-                      <strong>{events.reduce((sum, evt) => sum + (evt.teams || 0) * 4, 0)}</strong>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)' }} /> Students</span>
+                      <strong>{participantCount}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent-1)' }} /> Mentors</span>
-                      <strong>{Math.floor(activeExperts * 0.6)}</strong>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--accent-1)' }} /> Lecturers</span>
+                      <strong>{lecturerCount}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--warning)' }} /> Judges</span>
-                      <strong>{Math.ceil(activeExperts * 0.4)}</strong>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--warning)' }} /> Admin / Staff</span>
+                      <strong>{adminCount}</strong>
                     </div>
                   </div>
                 </>

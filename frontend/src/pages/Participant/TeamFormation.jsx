@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
 import './Workspace.css';
+import apiClient from '../../api/apiClient';
 
 const TeamFormation = () => {
   const navigate = useNavigate();
@@ -13,6 +14,21 @@ const TeamFormation = () => {
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [trackName, setTrackName] = useState('');
+
+  useEffect(() => {
+    const eventId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
+    if (!eventId) return;
+    apiClient.get(`/api/v1/events/${eventId}/tracks`)
+      .then(res => {
+        const tracks = res.data?.data || res.data || [];
+        if (Array.isArray(tracks) && tracks.length > 0) {
+          // Use the first track or the one matching the participant's registered track
+          setTrackName(tracks[0].name || '');
+        }
+      })
+      .catch(() => {}); // Fail silently — subtitle just won't show track name
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(localStorage.getItem('p_teamInviteCode') || '');
@@ -96,7 +112,12 @@ const TeamFormation = () => {
       <div className="page-header" style={{ marginBottom: '40px', textAlign: 'center' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Team Formation</h1>
-          <p className="subtitle">You have selected the <strong>AI & Machine Learning</strong> track. Now, let's get your team ready.</p>
+          <p className="subtitle">
+            {trackName
+              ? <>You have selected the <strong>{trackName}</strong> track. Now, let's get your team ready.</>
+              : "Let's get your team ready for the event."
+            }
+          </p>
         </div>
       </div>
 

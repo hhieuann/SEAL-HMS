@@ -1,44 +1,51 @@
-import React, { useState } from 'react';
-import { Megaphone, Plus, Send, Users, Tag, Pin, PinOff, Trash2, Eye, Globe, ChevronDown, AlertCircle, CheckCircle } from 'lucide-react';
-
-const initialPosts = [
-  {
-    id: 1, title: 'Final Round Judging Schedule', body: 'Dear participants, the final round judging will take place on May 22, 2026 from 8:00 AM to 6:00 PM. Each team will be allocated a 15-minute presentation slot. Please check your assigned time in your Team Workspace.',
-    audience: 'All', tag: 'Important', pinned: true, sent: 'May 15, 2026', views: 234
-  },
-  {
-    id: 2, title: 'Submission Deadline Reminder', body: 'This is a reminder that all project submissions are due by May 20, 2026 at 23:59 (GMT+7). Late submissions will incur a 5-point penalty per 15 minutes. Make sure your GitHub repo and demo video links are working.',
-    audience: 'Participants', tag: 'Deadline', pinned: false, sent: 'May 18, 2026', views: 187
-  },
-  {
-    id: 3, title: 'Judging Rubric Update for AI Track', body: 'Attention Judges: The scoring rubric for the AI & Machine Learning track has been updated. The "Impact" criterion weight has been adjusted from 35% to 40%. Please review the updated guidelines before scoring.',
-    audience: 'Judges', tag: 'Update', pinned: false, sent: 'May 17, 2026', views: 12
-  },
-];
+import React, { useState, useEffect } from 'react';
+import { Megaphone, Plus, Send, Pin, PinOff, Trash2, Globe, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import apiClient from '../../api/apiClient';
 
 const tagColors = {
   Important: { bg: 'rgba(239,68,68,0.12)', color: 'var(--danger)', border: 'rgba(239,68,68,0.3)' },
-  Deadline: { bg: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: 'rgba(245,158,11,0.3)' },
-  Update: { bg: 'rgba(59,130,246,0.12)', color: 'var(--primary)', border: 'rgba(59,130,246,0.3)' },
-  General: { bg: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'var(--border-color)' },
+  Deadline:  { bg: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: 'rgba(245,158,11,0.3)' },
+  Update:    { bg: 'rgba(59,130,246,0.12)', color: 'var(--primary)', border: 'rgba(59,130,246,0.3)' },
+  General:   { bg: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'var(--border-color)' },
 };
 
-const audienceColors = {
-  All: 'var(--accent-1)',
-  Participants: 'var(--primary)',
-  Judges: 'var(--warning)',
-  Mentors: 'var(--accent-3)',
+const formatTime = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return dateStr; }
 };
 
 const AdminBroadcast = () => {
-  const [posts, setPosts] = useState(initialPosts);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
-  const [form, setForm] = useState({ title: '', body: '', audience: 'All', tag: 'General', pinned: false });
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({ title: '', body: '', tag: 'General' });
   const [sendError, setSendError] = useState('');
   const [sendShaking, setSendShaking] = useState(false);
   const [sendToast, setSendToast] = useState('');
 
-  const handleSend = () => {
+  const fetchPosts = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get('/api/v1/announcements');
+      const raw = res.data?.data || res.data || [];
+      setPosts(Array.isArray(raw) ? raw : []);
+    } catch (err) {
+      console.error('Failed to fetch announcements', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const handleSend = async () => {
     setSendError('');
     if (!form.title.trim()) {
       setSendError('Announcement title cannot be empty.');
@@ -52,30 +59,50 @@ const AdminBroadcast = () => {
       setTimeout(() => setSendShaking(false), 500);
       return;
     }
-    setPosts(prev => [{
-      id: Date.now(), title: form.title, body: form.body,
-      audience: form.audience, tag: form.tag, pinned: form.pinned,
-      sent: 'Just now', views: 0
-    }, ...prev]);
-    setForm({ title: '', body: '', audience: 'All', tag: 'General', pinned: false });
-    setComposing(false);
-    setSendToast(`Announcement sent to ${form.audience}!`);
-    setTimeout(() => setSendToast(''), 3000);
+
+    setSubmitting(true);
+    try {
+      await apiClient.post('/api/v1/announcements', {
+        title: form.title,
+        content: form.body,
+        eventId: null, // global announcement; can be extended to pass event id
+      });
+      setForm({ title: '', body: '', tag: 'General' });
+      setComposing(false);
+      setSendToast('Announcement sent successfully!');
+      setTimeout(() => setSendToast(''), 3000);
+      await fetchPosts(); // reload list
+    } catch (err) {
+      console.error('Failed to send announcement', err);
+      setSendError(err.response?.data?.message || 'Failed to send. Please try again.');
+      setSendShaking(true);
+      setTimeout(() => setSendShaking(false), 500);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const togglePin = (id) => setPosts(prev => prev.map(p => p.id === id ? { ...p, pinned: !p.pinned } : p));
-  const deletePost = (id) => setPosts(prev => prev.filter(p => p.id !== id));
-
-  const sorted = [...posts].sort((a, b) => b.pinned - a.pinned);
+  const deletePost = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this announcement?')) return;
+    try {
+      await apiClient.delete(`/api/v1/announcements/${id}`);
+      setPosts(prev => prev.filter(p => p.id !== id));
+      setSendToast('Announcement deleted.');
+      setTimeout(() => setSendToast(''), 2500);
+    } catch (err) {
+      console.error('Failed to delete announcement', err);
+      alert('Failed to delete announcement. Please try again.');
+    }
+  };
 
   return (
     <div className="animate-fade-in">
       <div className="page-header">
         <div>
           <h1>Announcements Broadcast</h1>
-          <p className="subtitle">Compose and send announcements to participants, judges, or mentors.</p>
+          <p className="subtitle">Compose and send announcements to all participants.</p>
         </div>
-        <button className="btn btn-primary" onClick={() => setComposing(true)}>
+        <button className="btn btn-primary" onClick={() => { setComposing(true); setSendError(''); }}>
           <Plus size={18} /> New Announcement
         </button>
       </div>
@@ -83,39 +110,47 @@ const AdminBroadcast = () => {
       <div style={{ display: 'grid', gridTemplateColumns: composing ? '1fr 420px' : '1fr', gap: '24px', alignItems: 'flex-start' }}>
         {/* Posts List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {sorted.map(post => {
+          {loading && (
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <Loader2 size={32} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite' }} />
+              <p>Loading announcements...</p>
+            </div>
+          )}
+
+          {!loading && posts.length === 0 && (
+            <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <Megaphone size={40} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.3 }} />
+              <p>No announcements yet. Create the first one!</p>
+            </div>
+          )}
+
+          {!loading && posts.map(post => {
             const tag = tagColors[post.tag] || tagColors.General;
             return (
-              <div key={post.id} className="glass-panel" style={{ padding: '24px', border: post.pinned ? '1px solid rgba(139,92,246,0.3)' : undefined }}>
+              <div key={post.id} className="glass-panel" style={{ padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    {post.pinned && (
-                      <span style={{ fontSize: '11px', padding: '2px 8px', background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', color: 'var(--accent-1)', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Pin size={11} /> PINNED
-                      </span>
-                    )}
-                    <span style={{ fontSize: '12px', padding: '3px 10px', background: tag.bg, border: `1px solid ${tag.border}`, borderRadius: '10px', color: tag.color, fontWeight: '600' }}>{post.tag}</span>
-                    <span style={{ fontSize: '12px', padding: '3px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: audienceColors[post.audience] || 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Users size={11} /> {post.audience}
+                    <span style={{ fontSize: '12px', padding: '3px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--accent-1)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Globe size={11} /> Global
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <button onClick={() => togglePin(post.id)} title={post.pinned ? 'Unpin' : 'Pin'} style={{ padding: '6px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: post.pinned ? 'var(--accent-1)' : 'var(--text-secondary)', cursor: 'pointer', display: 'flex' }}>
-                      {post.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-                    </button>
-                    <button onClick={() => deletePost(post.id)} title="Delete" style={{ padding: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer', display: 'flex' }}>
+                    <button
+                      onClick={() => deletePost(post.id)}
+                      title="Delete"
+                      style={{ padding: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer', display: 'flex' }}
+                    >
                       <Trash2 size={15} />
                     </button>
                   </div>
                 </div>
 
                 <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '10px' }}>{post.title}</h3>
-                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>{post.body}</p>
+                <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>{post.content}</p>
 
                 <div style={{ marginTop: '16px', display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--bg-active)' }}>
-                  <span>Sent {post.sent}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Eye size={12} /> {post.views} views</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Globe size={12} /> Sent to {post.audience}</span>
+                  <span>Posted {formatTime(post.createdAt)}</span>
+                  {post.createdByEmail && <span>by {post.createdByEmail}</span>}
                 </div>
               </div>
             );
@@ -129,7 +164,6 @@ const AdminBroadcast = () => {
               <Megaphone size={18} color="var(--primary)" /> New Announcement
             </h3>
 
-            {/* Error UI */}
             {sendError && (
               <div
                 className={sendShaking ? 'shake' : ''}
@@ -147,50 +181,36 @@ const AdminBroadcast = () => {
 
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Title *</label>
-              <input value={form.title} onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setSendError(''); }}
-                placeholder="Enter announcement title..." style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: `1px solid ${sendError && !form.title.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '10px', padding: '10px 14px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: 'inherit' }}
+              <input
+                value={form.title}
+                onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setSendError(''); }}
+                placeholder="Enter announcement title..."
+                style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: `1px solid ${sendError && !form.title.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '10px', padding: '10px 14px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
                 onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                onBlur={e => e.target.style.borderColor = sendError && !form.title.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'} />
+                onBlur={e => e.target.style.borderColor = sendError && !form.title.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}
+              />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
+            <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Message *</label>
-              <textarea value={form.body} onChange={e => { setForm(f => ({ ...f, body: e.target.value })); setSendError(''); }}
-                placeholder="Write your announcement..." rows={5}
-                style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: `1px solid ${sendError && !form.body.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '10px', padding: '12px 14px', color: 'white', fontSize: '14px', outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+              <textarea
+                value={form.body}
+                onChange={e => { setForm(f => ({ ...f, body: e.target.value })); setSendError(''); }}
+                placeholder="Write your announcement..."
+                rows={5}
+                style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: `1px solid ${sendError && !form.body.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '10px', padding: '12px 14px', color: 'white', fontSize: '14px', outline: 'none', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
                 onFocus={e => e.target.style.borderColor = 'var(--primary)'}
-                onBlur={e => e.target.style.borderColor = sendError && !form.body.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'} />
+                onBlur={e => e.target.style.borderColor = sendError && !form.body.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}
+              />
             </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Send To</label>
-                <select value={form.audience} onChange={e => setForm(f => ({ ...f, audience: e.target.value }))}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '10px 12px', borderRadius: '10px', fontSize: '14px', outline: 'none' }}>
-                  {['All', 'Participants', 'Judges', 'Mentors'].map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Tag</label>
-                <select value={form.tag} onChange={e => setForm(f => ({ ...f, tag: e.target.value }))}
-                  style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', color: 'white', padding: '10px 12px', borderRadius: '10px', fontSize: '14px', outline: 'none' }}>
-                  {Object.keys(tagColors).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px', cursor: 'pointer' }}>
-              <div onClick={() => setForm(f => ({ ...f, pinned: !f.pinned }))}
-                style={{ width: '44px', height: '24px', borderRadius: '12px', background: form.pinned ? 'var(--accent-1)' : 'var(--bg-active)', cursor: 'pointer', transition: 'var(--transition)', position: 'relative', border: '1px solid var(--border-color)', flexShrink: 0 }}>
-                <div style={{ position: 'absolute', width: '18px', height: '18px', borderRadius: '50%', background: 'white', top: '2px', left: form.pinned ? '22px' : '2px', transition: 'var(--transition)' }} />
-              </div>
-              <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>Pin this announcement to top</span>
-            </label>
 
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setComposing(false)} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
-              <button onClick={handleSend} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
-                <Send size={16} /> Send Now
+              <button onClick={() => { setComposing(false); setSendError(''); }} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} disabled={submitting}>
+                Cancel
+              </button>
+              <button onClick={handleSend} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={submitting}>
+                {submitting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
+                {submitting ? 'Sending...' : 'Send Now'}
               </button>
             </div>
           </div>
@@ -203,7 +223,7 @@ const AdminBroadcast = () => {
             <CheckCircle size={18} color="var(--success)" />
           </div>
           <div>
-            <div style={{ fontWeight: '600', fontSize: '14px' }}>Announcement Sent!</div>
+            <div style={{ fontWeight: '600', fontSize: '14px' }}>Done!</div>
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{sendToast}</div>
           </div>
         </div>
@@ -216,6 +236,10 @@ const AdminBroadcast = () => {
           40% { transform: translateX(8px); }
           60% { transform: translateX(-6px); }
           80% { transform: translateX(6px); }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>
