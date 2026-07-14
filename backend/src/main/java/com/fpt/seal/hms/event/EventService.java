@@ -35,6 +35,7 @@ public class EventService {
     public List<EventResponse> getAllEvents() {
         return eventRepository.findAll().stream()
                 .map(event -> {
+                    event = autoProgressEventStatus(event);
                     EventResponse response = mapToResponse(event);
                     response.setRounds(roundService.getRoundsByEventId(event.getId()));
                     return response;
@@ -46,6 +47,7 @@ public class EventService {
     public List<EventResponse> getAssignedEvents(String email) {
         return eventRepository.findEventsAssignedToJudgeByEmail(email).stream()
                 .map(event -> {
+                    event = autoProgressEventStatus(event);
                     EventResponse response = mapToResponse(event);
                     response.setRounds(roundService.getRoundsByEventId(event.getId()));
                     return response;
@@ -65,10 +67,7 @@ public class EventService {
 
     @Transactional
     public EventResponse createEvent(EventRequest request) {
-        if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&
-            request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
-            throw new IllegalArgumentException("Registration end date must not be before start date.");
-        }
+        validateEventDates(request);
         if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
             throw new IllegalArgumentException("Max teams must be at least 2.");
         }
@@ -130,10 +129,7 @@ public class EventService {
             }
         }
 
-        if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&
-            request.getRegistrationEndDate().isBefore(request.getRegistrationStartDate())) {
-            throw new IllegalArgumentException("Registration end date must not be before start date.");
-        }
+        validateEventDates(request);
         if (request.getMaxTeams() != null && request.getMaxTeams() < 2) {
             throw new IllegalArgumentException("Max teams must be at least 2.");
         }
@@ -300,6 +296,7 @@ public class EventService {
         return event;
     }
 
+<<<<<<< HEAD
     @Transactional
     public void assignStaff(Long eventId, Long accountId) {
         if (eventStaffRepository.existsByEvent_IdAndAccount_Id(eventId, accountId)) {
@@ -355,5 +352,22 @@ public class EventService {
             return;
         }
         throw new com.fpt.seal.hms.common.exception.BusinessException("Unauthorized role for event management.");
+    }
+
+    private void validateEventDates(EventRequest request) {
+        if (request.getRegistrationEndDate() != null && request.getRegistrationStartDate() != null &&
+            !request.getRegistrationEndDate().isAfter(request.getRegistrationStartDate())) {
+            throw new IllegalArgumentException("Registration end date must be strictly after registration start date.");
+        }
+        
+        if (request.getStartDate() != null && request.getRegistrationEndDate() != null &&
+            request.getStartDate().isBefore(request.getRegistrationEndDate().plusDays(1))) {
+            throw new IllegalArgumentException("Event start date must be at least 1 day after registration end date.");
+        }
+
+        if (request.getEndDate() != null && request.getStartDate() != null &&
+            !request.getEndDate().isAfter(request.getStartDate())) {
+            throw new IllegalArgumentException("Event end date must be strictly after event start date.");
+        }
     }
 }

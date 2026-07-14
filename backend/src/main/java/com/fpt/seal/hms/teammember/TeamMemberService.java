@@ -45,6 +45,14 @@ public class TeamMemberService {
             throw new BusinessException("Cannot invite members. Team is already registered or processed.");
         }
 
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (team.getEvent().getRegistrationStartDate() != null && today.isBefore(team.getEvent().getRegistrationStartDate())) {
+            throw new BusinessException("Registration for this event has not started yet.");
+        }
+        if (team.getEvent().getRegistrationEndDate() != null && today.isAfter(team.getEvent().getRegistrationEndDate())) {
+            throw new BusinessException("Registration for this event has closed.");
+        }
+
         long activeMembers = teamMemberRepository.countByTeamIdAndStatusNot(teamId, MemberStatus.DECLINED);
         // Assuming WITHDRAWN/DECLINED members don't count towards the 5-member limit.
         if (activeMembers >= 5) {

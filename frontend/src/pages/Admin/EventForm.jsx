@@ -39,6 +39,15 @@ const EventForm = () => {
   const evtStartNotAfterReg = !!(regEnd   && evtStart && evtStart <= regEnd);
   const evtEndBeforeStart   = !!(evtStart && evtEnd   && evtEnd   <= evtStart);
   const minGtMax = !!(formData.minTeams && formData.maxTeams && parseInt(formData.minTeams) > parseInt(formData.maxTeams));
+  
+  const isInvalidInteger = (val) => val && !/^\d+$/.test(val.toString());
+  const minTeamsInvalidFormat = isInvalidInteger(formData.minTeams);
+  const maxTeamsInvalidFormat = isInvalidInteger(formData.maxTeams);
+  const minTeamsLessThanTwo = formData.minTeams && !minTeamsInvalidFormat && parseInt(formData.minTeams, 10) < 2;
+  const maxTeamsLessThanOne = formData.maxTeams && !maxTeamsInvalidFormat && parseInt(formData.maxTeams, 10) < 1;
+  const minTeamsHasError = minGtMax || minTeamsInvalidFormat || minTeamsLessThanTwo;
+  const maxTeamsHasError = minGtMax || maxTeamsInvalidFormat || maxTeamsLessThanOne;
+
   const hasDateErrors = regEndBeforeStart || evtStartNotAfterReg || evtEndBeforeStart;
 
   const datePart = (dt) => (dt ? dt.split('T')[0] : '');
@@ -139,8 +148,8 @@ const EventForm = () => {
     setError('');
     if (!formData.name)                                         { triggerError('Event Name is required.', 1); return; }
     if (!formData.registrationStartDate || !formData.registrationEndDate) { triggerError('Registration open and close dates are required.', 1); return; }
-    if (!formData.maxTeams || parseInt(formData.maxTeams, 10) < 1)        { triggerError('Max Teams is required and must be at least 1.', 1); return; }
-    if (!formData.minTeams || parseInt(formData.minTeams, 10) < 2)        { triggerError('Min Teams is required and must be at least 2.', 1); return; }
+    if (!formData.maxTeams || maxTeamsInvalidFormat || maxTeamsLessThanOne) { triggerError('Max Teams is required and must be a positive whole number.', 1); return; }
+    if (!formData.minTeams || minTeamsInvalidFormat || minTeamsLessThanTwo) { triggerError('Min Teams is required, must be a positive whole number ≥ 2.', 1); return; }
     if (minGtMax)                                               { triggerError('Min Teams cannot be greater than Max Teams.', 1); return; }
     if (!formData.startDate || !formData.endDate)               { triggerError('Event start and end dates are required.', 1); return; }
     if (hasDateErrors)                                          { triggerError('Please fix the date errors on Step 1 before saving.', 1); return; }
@@ -335,12 +344,16 @@ const EventForm = () => {
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px',marginTop:'20px'}}>
                 <div>
                   <label style={lbl}>Min Teams {req}</label>
-                  <input type="number" disabled={isLocked} min="2" style={inp(minGtMax?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 5" value={formData.minTeams} onChange={e=>setFormData({...formData,minTeams:e.target.value})}/>
+                  <input type="text" disabled={isLocked} style={inp(minTeamsHasError?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 5" value={formData.minTeams} onChange={e=>setFormData({...formData,minTeams:e.target.value})}/>
+                  {minTeamsInvalidFormat && <InlineWarn msg="Must be a positive whole number (no decimals/characters)"/>}
+                  {minTeamsLessThanTwo && <InlineWarn msg="Min Teams must be at least 2"/>}
                   {minGtMax && <InlineWarn msg="Min Teams cannot exceed Max Teams"/>}
                 </div>
                 <div>
                   <label style={lbl}>Max Teams {req}</label>
-                  <input type="number" disabled={isLocked} min="1" style={inp(minGtMax?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
+                  <input type="text" disabled={isLocked} style={inp(maxTeamsHasError?errBorder:(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}))} placeholder="e.g. 50" value={formData.maxTeams} onChange={e=>setFormData({...formData,maxTeams:e.target.value})}/>
+                  {maxTeamsInvalidFormat && <InlineWarn msg="Must be a positive whole number (no decimals/characters)"/>}
+                  {maxTeamsLessThanOne && <InlineWarn msg="Max Teams must be at least 1"/>}
                   {minGtMax && <InlineWarn msg="Max Teams must be ≥ Min Teams"/>}
                 </div>
               </div>

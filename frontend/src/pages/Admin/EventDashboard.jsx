@@ -25,6 +25,7 @@ const EventDashboard = () => {
   const [teams, setTeams] = useState([]);
   const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [statusError, setStatusError] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -98,6 +99,7 @@ const EventDashboard = () => {
 
   const handleUpdateEvent = async (updates) => {
     try {
+      setStatusError('');
       const { eventService } = await import('../../api/eventService.js');
       if (updates.status) {
         setStatusActionLoading(true);
@@ -106,6 +108,8 @@ const EventDashboard = () => {
       }
     } catch (err) {
       console.error(err);
+      const msg = err.response?.data?.message || err.message || 'Failed to update event status.';
+      setStatusError(msg);
     } finally {
       setStatusActionLoading(false);
     }
@@ -205,6 +209,15 @@ const EventDashboard = () => {
         )}
       </div>
 
+
+      {/* Status Error Banner */}
+      {statusError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '24px' }}>
+          <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500', flex: 1 }}>{statusError}</span>
+          <button onClick={() => setStatusError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={16} color="#ef4444" /></button>
+        </div>
+      )}
 
       <div className="stats-grid">
         <div className="stat-card glass-panel">
