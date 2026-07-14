@@ -84,7 +84,11 @@ export const authApi = {
       if (campus) formData.append('campus', campus);
       if (proofFile) formData.append('proofFile', proofFile);
       
-      const response = await apiClient.post('/api/v1/auth/register', formData);
+      const response = await apiClient.post('/api/v1/auth/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       // The register API returns the ID (unlike the login API). Store it immediately so new accounts work!
       const data = response.data?.data || {};
       if (data.id) {

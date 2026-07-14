@@ -59,6 +59,7 @@ public class RoundService {
         round.setStatus(RoundStatus.CREATED);
         round.setRoundSeq(nextSeq);
 
+        validateRoundTime(round);
         Round savedRound = roundRepository.save(round);
         validateSequentialPromotionTopN(event);
         return mapToResponse(savedRound);
@@ -78,6 +79,7 @@ public class RoundService {
         round.setDurationHours(request.getDurationHours());
         round.setPromotionTopN(request.getPromotionTopN());
 
+        validateRoundTime(round);
         Round savedRound = roundRepository.save(round);
         validateSequentialPromotionTopN(round.getEvent());
         return mapToResponse(savedRound);
@@ -165,6 +167,38 @@ public class RoundService {
                         round.getRoundSeq(), totalPromotedThisRound, promotionPerTrack, availablePool));
             }
             availablePool = totalPromotedThisRound;
+        }
+
+        if (!rounds.isEmpty() && availablePool < 1) {
+            throw new BusinessException("Total eliminated teams across rounds is too high. At least 1 team must reach the final round.");
+        }
+    }
+
+    private void validateRoundTime(Round round) {
+        Event event = round.getEvent();
+        if (event.getStartDate() != null && round.getStartTime().toLocalDate().isBefore(event.getStartDate())) {
+            throw new BusinessException("Round start time cannot be before event start date.");
+        }
+        if (event.getEndDate() != null) {
+            java.time.LocalDateTime roundEndTime = round.getStartTime().plusMinutes((long)(round.getDurationHours() * 60));
+            if (roundEndTime.toLocalDate().isAfter(event.getEndDate())) {
+                throw new BusinessException("Round end time cannot be after event end date.");
+            }
+        }
+
+        List<Round> rounds = roundRepository.findByEventId(event.getId()).stream()
+                .filter(r -> round.getId() == null || !r.getId().equals(round.getId()))
+                .collect(Collectors.toList());
+        rounds.add(round);
+        rounds.sort(Comparator.comparing(Round::getRoundSeq));
+
+        for (int i = 1; i < rounds.size(); i++) {
+            Round prev = rounds.get(i - 1);
+            Round curr = rounds.get(i);
+            java.time.LocalDateTime prevEndTime = prev.getStartTime().plusMinutes((long)(prev.getDurationHours() * 60));
+            if (curr.getStartTime().isBefore(prevEndTime)) {
+                throw new BusinessException(String.format("Round %d must start after Round %d ends.", curr.getRoundSeq(), prev.getRoundSeq()));
+            }
         }
     }
 
