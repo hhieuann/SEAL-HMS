@@ -1,16 +1,26 @@
 package com.fpt.seal.hms.round;
 
+import com.fpt.seal.hms.common.enums.AssignmentRole;
 import com.fpt.seal.hms.common.enums.RoundStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
+import com.fpt.seal.hms.criterion.CriterionRepository;
+import com.fpt.seal.hms.criterion.entity.Criterion;
 import com.fpt.seal.hms.event.EventRepository;
 import com.fpt.seal.hms.event.entity.Event;
 import com.fpt.seal.hms.round.dto.RoundRequest;
 import com.fpt.seal.hms.round.dto.RoundResponse;
 import com.fpt.seal.hms.round.dto.RoundStatusUpdateRequest;
 import com.fpt.seal.hms.round.entity.Round;
+import com.fpt.seal.hms.roundranking.RoundRankingRepository;
+import com.fpt.seal.hms.roundranking.entity.RoundRanking;
+import com.fpt.seal.hms.score.ScoreRepository;
+import com.fpt.seal.hms.submission.SubmissionRepository;
+import com.fpt.seal.hms.submission.entity.Submission;
 import com.fpt.seal.hms.track.TrackRepository;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.TrackAssignment;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
 import com.fpt.seal.hms.topic.TopicRepository;
 import com.fpt.seal.hms.topic.entity.Topic;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +39,12 @@ public class RoundService {
     private final EventRepository eventRepository;
     private final TrackRepository trackRepository;
     private final TopicRepository topicRepository;
+    private final RoundRankingRepository roundRankingRepository;
+    private final SubmissionRepository submissionRepository;
+    private final ScoreRepository scoreRepository;
+    private final CriterionRepository criterionRepository;
+    private final TrackAssignmentRepository trackAssignmentRepository;
+    private final com.fpt.seal.hms.team.TeamRepository teamRepository;
 
     @Transactional(readOnly = true)
     public List<RoundResponse> getRoundsByEventId(Long eventId) {
@@ -100,8 +116,98 @@ public class RoundService {
             round.setStartTime(java.time.LocalDateTime.now());
         }
 
+        // When moving to SCORING, disqualify teams that did not submit
+        if (currentStatus == RoundStatus.ACTIVE && newStatus == RoundStatus.SCORING) {
+            disqualifyTeamsWithoutSubmission(round);
+        }
+
+        // Validate scoring completeness before moving from SCORING to UNDER_REVIEW
+        if (currentStatus == RoundStatus.SCORING && newStatus == RoundStatus.UNDER_REVIEW) {
+            validateScoringComplete(round);
+        }
+
         round.setStatus(newStatus);
         return mapToResponse(roundRepository.save(round));
+    }
+
+    private void disqualifyTeamsWithoutSubmission(Round round) {
+        List<RoundRanking> rankings = roundRankingRepository.findByRoundId(round.getId());
+        for (RoundRanking rr : rankings) {
+            boolean hasSubmission = submissionRepository.findByRoundRankingId(rr.getId()).isPresent();
+            com.fpt.seal.hms.team.entity.Team team = rr.getTeam();
+            if (!hasSubmission && (team.getIsDisqualified() == null || !team.getIsDisqualified())) {
+                team.setIsDisqualified(true);
+                team.setDisqualificationReason("No submission received by round deadline");
+                teamRepository.save(team);
+            }
+        }
+    }
+
+    /**
+     * Validates that all judges have submitted scores for all teams in this round.
+     * Checks:
+     * 1. Every team participating in the round has a submission.
+     * 2. Every judge assigned to each team's track has scored ALL criteria for that submission.
+     */
+    private void validateScoringComplete(Round round) {
+        List<RoundRanking> rankings = roundRankingRepository.findByRoundId(round.getId());
+
+        if (rankings.isEmpty()) {
+            throw new BusinessException("Cannot end scoring: No teams are participating in this round.");
+        }
+
+        List<Criterion> criteria = criterionRepository.findByRoundId(round.getId());
+        if (criteria.isEmpty()) {
+            throw new BusinessException("Cannot end scoring: No scoring criteria have been defined for this round.");
+        }
+        int criteriaCount = criteria.size();
+
+        List<String> unscoredTeams = new java.util.ArrayList<>();
+
+        for (RoundRanking rr : rankings) {
+            if (rr.getTeam().getIsDisqualified() != null && rr.getTeam().getIsDisqualified()) {
+                continue; // Skip disqualified teams
+            }
+
+            // Check if submission exists
+            Submission submission = submissionRepository.findByRoundRankingId(rr.getId()).orElse(null);
+            if (submission == null) {
+                unscoredTeams.add(rr.getTeam().getName() + " (no submission)");
+                continue;
+            }
+
+            // Find judges assigned to this team's track
+            Long trackId = rr.getTeam().getTrack() != null ? rr.getTeam().getTrack().getId() : null;
+            if (trackId == null) {
+                unscoredTeams.add(rr.getTeam().getName() + " (no track assigned)");
+                continue;
+            }
+
+            List<TrackAssignment> judgeAssignments = trackAssignmentRepository.findByTrack_Id(trackId)
+                    .stream()
+                    .filter(a -> a.getRole() == AssignmentRole.JUDGE)
+                    .collect(Collectors.toList());
+
+            if (judgeAssignments.isEmpty()) {
+                unscoredTeams.add(rr.getTeam().getName() + " (no judges assigned to track)");
+                continue;
+            }
+
+            // Check that each judge has scored all criteria for this submission
+            for (TrackAssignment ja : judgeAssignments) {
+                Long judgeAccountId = ja.getLecturer().getAccount().getId();
+                long scoreCount = scoreRepository.findBySubmissionIdAndJudgeAccountId(submission.getId(), judgeAccountId).size();
+                if (scoreCount < criteriaCount) {
+                    String judgeName = ja.getLecturer().getFullName() != null ? ja.getLecturer().getFullName() : ja.getLecturer().getAccount().getEmail();
+                    unscoredTeams.add(rr.getTeam().getName() + " (Judge \"" + judgeName + "\" scored " + scoreCount + "/" + criteriaCount + " criteria)");
+                }
+            }
+        }
+
+        if (!unscoredTeams.isEmpty()) {
+            String details = String.join("; ", unscoredTeams);
+            throw new BusinessException("Cannot end scoring: Incomplete scores detected. " + details);
+        }
     }
 
     @Transactional

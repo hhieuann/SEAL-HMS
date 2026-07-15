@@ -242,6 +242,9 @@ const TrackDraw = () => {
       for (const t of (existingTracks.data || [])) {
          await trackService.deleteTrack(t.id);
       }
+      
+      // Also reset mentors for all teams in the event
+      await teamService.resetMentorsByEvent(targetEventId);
     } catch(e) {
       console.error(e);
       alert('Failed to clear database tracks: ' + e.message);

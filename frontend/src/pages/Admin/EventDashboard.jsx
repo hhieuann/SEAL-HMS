@@ -26,8 +26,12 @@ const EventDashboard = () => {
   const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
   const [statusError, setStatusError] = useState('');
+  const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
+    try {
+      setUserRole(localStorage.getItem('userRole') || '');
+    } catch(e) {}
     const fetchData = async () => {
       try {
         const { eventService } = await import('../../api/eventService.js');
@@ -166,7 +170,7 @@ const EventDashboard = () => {
       </div>
 
       {/* Auto-detect banner */}
-      {showRegBanner && (
+      {userRole === 'ADMIN' && showRegBanner && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '12px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <AlertTriangle size={18} color="var(--warning)" />
@@ -201,7 +205,7 @@ const EventDashboard = () => {
             </div>
           )}
         </div>
-        {sc.nextStatus && (
+        {userRole === 'ADMIN' && sc.nextStatus && (
           <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
             disabled={statusActionLoading} onClick={() => setConfirmAction({ status: sc.nextStatus, label: sc.nextLabel })}>
             {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}

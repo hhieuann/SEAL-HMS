@@ -270,10 +270,29 @@ const Workspace = () => {
   const [newTask, setNewTask] = useState('');
   const [showFullProblem, setShowFullProblem] = useState(false);
 
-  const [chatMessages, setChatMessages] = useState(() => {
-    return JSON.parse(localStorage.getItem(`ws_chat_${tId}`) || '[]');
-  });
+  const [chatMessages, setChatMessages] = useState([]);
   const [newChat, setNewChat] = useState('');
+
+  const fetchChatMessages = async () => {
+    if (tId && tId !== 'temp' && teamData?.mentor) {
+      try {
+        const res = await teamService.getMentorMessages(tId);
+        if (res && res.data) {
+          setChatMessages(res.data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch chat messages:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (teamData?.mentor) {
+      fetchChatMessages();
+      const interval = setInterval(fetchChatMessages, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [teamData?.mentor, tId]);
 
   const handleAddTask = (e) => {
     if (e.key === 'Enter' && newTask.trim()) {
@@ -295,19 +314,15 @@ const Workspace = () => {
   };
   const completedCount = tasks.filter(t => t.completed).length;
 
-  const handleSendChat = () => {
-    if (newChat.trim()) {
-      const msg = {
-        id: Date.now(),
-        sender: currentUserEmail.split('@')[0],
-        text: newChat.trim(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isMine: true
-      };
-      const newMsgs = [...chatMessages, msg];
-      setChatMessages(newMsgs);
-      localStorage.setItem(`ws_chat_${tId}`, JSON.stringify(newMsgs));
-      setNewChat('');
+  const handleSendChat = async () => {
+    if (newChat.trim() && teamData?.mentor) {
+      try {
+        await teamService.sendMentorMessage(tId, { message: newChat.trim() });
+        setNewChat('');
+        fetchChatMessages();
+      } catch (e) {
+        console.error("Failed to send message", e);
+      }
     }
   };
 
@@ -569,22 +584,38 @@ const Workspace = () => {
         <div className="ws-col-right">
           <div className="glass-panel ws-panel chat-panel">
             <div className="panel-header">
-              <h3 className="panel-title"><MessageSquare size={18} /> Team Chat</h3>
+              <h3 className="panel-title"><MessageSquare size={18} /> Mentor Chat</h3>
             </div>
-            <div className="chat-messages" style={{ overflowY: 'auto' }}>
-              {chatMessages.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No messages yet. Start chatting!</p>}
-              {chatMessages.map(msg => (
-                <div key={msg.id} className={`chat-bubble ${msg.isMine ? 'sent' : 'received'}`}>
-                  {!msg.isMine && <span className="chat-sender">{msg.sender}</span>}
-                  <p>{msg.text}</p>
-                  <span className="chat-time">{msg.time}</span>
+            {!teamData?.mentor ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <MessageSquare size={32} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                <p style={{ fontSize: '14px', lineHeight: '1.5' }}>Your team hasn't been assigned a Mentor yet.</p>
+                <p style={{ fontSize: '13px', opacity: 0.8, marginTop: '8px' }}>Once assigned, you can chat with them here.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: '8px 16px', background: 'rgba(20,184,166,0.1)', borderBottom: '1px solid rgba(20,184,166,0.2)', fontSize: '13px', color: 'var(--accent-3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <UserPlus size={14} /> Assigned Mentor: <strong>{teamData.mentor.name || teamData.mentor.email}</strong>
                 </div>
-              ))}
-            </div>
-            <div className="chat-input-area">
-              <input type="text" placeholder="Type a message..." className="chat-input" value={newChat} onChange={e => setNewChat(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChat()} />
-              <button className="btn-send" onClick={handleSendChat}><Send size={16} /></button>
-            </div>
+                <div className="chat-messages" style={{ overflowY: 'auto' }}>
+                  {chatMessages.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No messages yet. Say hi to your mentor!</p>}
+                  {chatMessages.map(msg => {
+                    const isMine = msg.senderId === parseInt(localStorage.getItem('userId') || '0');
+                    return (
+                      <div key={msg.id} className={`chat-bubble ${isMine ? 'sent' : 'received'}`}>
+                        {!isMine && <span className="chat-sender" style={{ color: msg.senderRole === 'STUDENT' ? 'var(--primary)' : 'var(--accent-3)' }}>{msg.senderName} ({msg.senderRole === 'STUDENT' ? 'Student' : 'Lecturer'})</span>}
+                        <p>{msg.message}</p>
+                        <span className="chat-time">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="chat-input-area">
+                  <input type="text" placeholder="Type a message to your mentor..." className="chat-input" value={newChat} onChange={e => setNewChat(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChat()} />
+                  <button className="btn-send" onClick={handleSendChat}><Send size={16} /></button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
