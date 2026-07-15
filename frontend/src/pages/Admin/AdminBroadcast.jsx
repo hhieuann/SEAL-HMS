@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Megaphone, Plus, Send, Pin, PinOff, Trash2, Globe, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 
@@ -19,11 +20,12 @@ const formatTime = (dateStr) => {
 };
 
 const AdminBroadcast = () => {
+  const { eventId } = useParams();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ title: '', body: '', tag: 'General' });
+  const [form, setForm] = useState({ title: '', body: '', tag: 'General', targetRole: 'ALL' });
   const [sendError, setSendError] = useState('');
   const [sendShaking, setSendShaking] = useState(false);
   const [sendToast, setSendToast] = useState('');
@@ -31,7 +33,7 @@ const AdminBroadcast = () => {
   const fetchPosts = async () => {
     setLoading(true);
     try {
-      const res = await apiClient.get('/api/v1/announcements');
+      const res = await apiClient.get('/api/v1/announcements' + (eventId ? `?eventId=${eventId}` : ''));
       const raw = res.data?.data || res.data || [];
       setPosts(Array.isArray(raw) ? raw : []);
     } catch (err) {
@@ -43,7 +45,7 @@ const AdminBroadcast = () => {
 
   useEffect(() => {
     fetchPosts();
-  }, []);
+  }, [eventId]);
 
   const handleSend = async () => {
     setSendError('');
@@ -65,9 +67,10 @@ const AdminBroadcast = () => {
       await apiClient.post('/api/v1/announcements', {
         title: form.title,
         content: form.body,
-        eventId: null, // global announcement; can be extended to pass event id
+        eventId: eventId ? parseInt(eventId) : null,
+        targetRole: form.targetRole || 'ALL',
       });
-      setForm({ title: '', body: '', tag: 'General' });
+      setForm({ title: '', body: '', tag: 'General', targetRole: 'ALL' });
       setComposing(false);
       setSendToast('Announcement sent successfully!');
       setTimeout(() => setSendToast(''), 3000);
@@ -131,8 +134,18 @@ const AdminBroadcast = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12px', padding: '3px 10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--accent-1)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Globe size={11} /> Global
+                      <Globe size={11} /> {post.eventId ? `Event #${post.eventId}` : 'Global'}
                     </span>
+                    {post.targetRole && post.targetRole !== 'ALL' && (
+                      <span style={{ fontSize: '11px', padding: '3px 10px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '10px', color: '#8b5cf6', fontWeight: '600' }}>
+                        {post.targetRole} ONLY
+                      </span>
+                    )}
+                    {(!post.targetRole || post.targetRole === 'ALL') && (
+                      <span style={{ fontSize: '11px', padding: '3px 10px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontWeight: '600' }}>
+                        ALL ROLES
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
@@ -202,6 +215,22 @@ const AdminBroadcast = () => {
                 onFocus={e => e.target.style.borderColor = 'var(--primary)'}
                 onBlur={e => e.target.style.borderColor = sendError && !form.body.trim() ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}
               />
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Target Audience *</label>
+              <select
+                value={form.targetRole}
+                onChange={e => setForm(f => ({ ...f, targetRole: e.target.value }))}
+                style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px 14px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
+              >
+                <option value="ALL">🌐 All Roles (Everyone)</option>
+                <option value="STUDENT">🎓 Students / Teams</option>
+                <option value="JUDGE">⚖️ Judges</option>
+                <option value="MENTOR">🧑‍🏫 Mentors</option>
+                <option value="STAFF">👔 Staff</option>
+                <option value="LECTURER">📚 Lecturers</option>
+              </select>
             </div>
 
             <div style={{ display: 'flex', gap: '10px' }}>

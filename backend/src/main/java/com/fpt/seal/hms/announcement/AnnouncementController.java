@@ -23,8 +23,9 @@ public class AnnouncementController {
     /** All notices; with ?eventId= returns that event's notices plus global ones. */
     @GetMapping
     public ResponseEntity<ApiResponse<List<AnnouncementResponse>>> list(
+            Authentication auth,
             @RequestParam(required = false) Long eventId) {
-        return ResponseEntity.ok(ApiResponse.ok(announcementService.list(eventId)));
+        return ResponseEntity.ok(ApiResponse.ok(announcementService.list(eventId, auth)));
     }
 
     @PostMapping
