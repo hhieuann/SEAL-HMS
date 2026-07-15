@@ -2,14 +2,19 @@ import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle, Target, Edit2 } from 'lucide-react';
 import { authApi } from '../api/auth';
+import apiClient from '../api/apiClient';
 
 import './AdminLayout.css';
 
-const systemAlerts = [
-  { id: 1, icon: <UserCheck size={15} />, color: 'var(--primary)', bg: 'rgba(59,130,246,0.12)', title: '4 accounts pending approval', sub: 'Including 1 Guest Judge request', time: '10 min ago', link: '/admin/accounts', unread: true },
-  { id: 2, icon: <GitPullRequest size={15} />, color: 'var(--warning)', bg: 'rgba(245,158,11,0.12)', title: 'Tie-breaker needed at Round 1', sub: 'NullPointerException & CircuitCare — 89.5 pts', time: '30 min ago', link: '/admin/transition', unread: true },
-  { id: 3, icon: <AlertTriangle size={15} />, color: 'var(--danger)', bg: 'rgba(239,68,68,0.12)', title: 'Violation report submitted', sub: 'DataSculpt — plagiarism flag by Judge Sarah', time: '2 hours ago', link: '/admin/courtroom', unread: true },
-];
+const calculateTimeAgo = (dateStr) => {
+  if (!dateStr) return 'Just now';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hours ago`;
+  return `${Math.floor(hrs / 24)} days ago`;
+};
 
 const AdminLayout = () => {
   const navigate = useNavigate();
@@ -18,7 +23,7 @@ const AdminLayout = () => {
   const eventId = eventMatch ? eventMatch[1] : null;
 
   const [bellOpen, setBellOpen] = useState(false);
-  const [alerts, setAlerts] = useState(systemAlerts);
+  const [alerts, setAlerts] = useState([]);
   const unreadCount = alerts.filter(a => a.unread).length;
   
   const [eventName, setEventName] = useState(null);
@@ -33,6 +38,49 @@ const AdminLayout = () => {
       if (role) setUserRole(role);
       setUserName(name);
     } catch(e) {}
+  }, []);
+
+  React.useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const res = await apiClient.get('/api/v1/audit-logs?limit=5');
+        const logs = res.data?.data || res.data || [];
+        const formattedAlerts = logs.map(log => {
+          let icon = <Bell size={15} />;
+          let color = 'var(--primary)';
+          let bg = 'rgba(59,130,246,0.12)';
+          let title = log.action;
+          
+          if (log.action.includes('CREATED') || log.action.includes('SUBMITTED')) {
+            color = 'var(--success)';
+            bg = 'rgba(16,185,129,0.12)';
+            icon = <Plus size={15} />;
+          } else if (log.action.includes('DELETED') || log.action.includes('LATE') || log.action.includes('VIOLATION')) {
+            color = 'var(--danger)';
+            bg = 'rgba(239,68,68,0.12)';
+            icon = <AlertTriangle size={15} />;
+          } else if (log.action.includes('UPDATED') || log.action.includes('CHANGED')) {
+            color = 'var(--warning)';
+            bg = 'rgba(245,158,11,0.12)';
+            icon = <Edit2 size={15} />;
+          }
+
+          return {
+            id: log.id,
+            icon, color, bg,
+            title: log.action.replace(/_/g, ' '),
+            sub: log.detail || `${log.entityType} ${log.entityId || ''}`,
+            time: calculateTimeAgo(log.createdAt),
+            link: '/admin/activity-log',
+            unread: true
+          };
+        });
+        setAlerts(formattedAlerts);
+      } catch (err) {
+        console.error('Failed to fetch system alerts', err);
+      }
+    };
+    fetchAlerts();
   }, []);
 
   React.useEffect(() => {

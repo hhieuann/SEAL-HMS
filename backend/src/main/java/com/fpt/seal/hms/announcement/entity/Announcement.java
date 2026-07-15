@@ -32,4 +32,7 @@ public class Announcement extends BaseEntity {
 
     @Column(name = "created_by_email", length = 255)
     private String createdByEmail;
+
+    @Column(name = "target_role", length = 50)
+    private String targetRole = "ALL";
 }

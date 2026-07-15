@@ -7,5 +7,6 @@ import jakarta.validation.constraints.Size;
 public record AnnouncementRequest(
         @NotBlank(message = "Title is required") @Size(max = 200) String title,
         String content,
-        Long eventId) {
+        Long eventId,
+        String targetRole) {
 }

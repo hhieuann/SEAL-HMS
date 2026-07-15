@@ -228,7 +228,6 @@ const ParticipantLayout = () => {
             <NavLink to="/participant/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Bell size={20} />
               <span>Announcements</span>
-              <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: 'white', fontSize: '11px', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>2</span>
             </NavLink>
 
             {isReady ? (

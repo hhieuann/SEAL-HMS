@@ -10,6 +10,7 @@ public record AnnouncementResponse(
         String title,
         String content,
         String createdByEmail,
+        String targetRole,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
 
@@ -20,6 +21,7 @@ public record AnnouncementResponse(
                 a.getTitle(),
                 a.getContent(),
                 a.getCreatedByEmail(),
+                a.getTargetRole(),
                 a.getCreatedAt(),
                 a.getUpdatedAt());
     }
