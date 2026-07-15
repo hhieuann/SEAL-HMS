@@ -11,6 +11,7 @@ const ExpertDashboard = () => {
   const navigate = useNavigate();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState('judge');
 
   const handleEnterWorkspace = (ctx) => {
     const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, trackId: ctx.trackId, path: ctx.path, eventId: ctx.eventId };
@@ -29,7 +30,7 @@ const ExpertDashboard = () => {
     
     const roles = [];
     if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
-    if (role === 'MENTOR') roles.push('Mentor');
+    if (role === 'MENTOR' || role === 'LECTURER') roles.push('Mentor');
     if (role === 'STAFF') roles.push('Staff');
     
     const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
@@ -86,92 +87,129 @@ const ExpertDashboard = () => {
              eventTracks = tr.data || [];
           } catch(e) {}
           
+          let teamsList = [];
+          if (evt.status !== 'CREATED') {
+            try {
+              const teamsData = await teamService.getTeamsByEvent(evt.id);
+              teamsList = teamsData?.data || teamsData || [];
+            } catch(e) {}
+          }
+          
           // Filter my assignments that match this event's tracks
           const eventTrackIds = eventTracks.map(t => t.id);
           const myAssignmentsForEvent = myAssignments.filter(a => eventTrackIds.includes(a.trackId));
+          const judgeAssignments = myAssignmentsForEvent.filter(a => a.role === 'JUDGE');
           
-          if (myAssignmentsForEvent.length === 0) {
-             // Fallback just in case
-             let fallbackRole = 'MENTOR';
-             if (currentUser.roles.includes('Judge')) fallbackRole = 'JUDGE';
-             if (currentUser.roles.includes('Staff')) fallbackRole = 'STAFF';
-             myAssignmentsForEvent.push({ role: fallbackRole, trackId: null });
-          }
-
-          for (const assignment of myAssignmentsForEvent) {
-            const trackObj = eventTracks.find(t => t.id === assignment.trackId);
-            const trackName = trackObj ? trackObj.name : 'All Tracks';
-            const trackId = trackObj ? trackObj.id : null;
-            const assignmentRole = assignment.role === 'JUDGE' ? 'Judge' : (assignment.role === 'STAFF' ? 'Staff' : 'Mentor');
-            
-            // Only show cards for roles the user actually has
-            if (!currentUser.roles.includes(assignmentRole)) continue;
-          // Calculate Judge Stats if applicable
-          let pending = '-', completed = '-';
-          if (currentUser.roles.includes('Judge') && evt.status !== 'CREATED') {
-            try {
-              let p = 0, c = 0;
-              const roundsRes = await eventService.getEventRounds(evt.id);
-              const rounds = roundsRes.data || [];
-              let activeRoundIdx = -1;
-              for (let i = rounds.length - 1; i >= 0; i--) {
-                if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
-                  activeRoundIdx = i; break;
-                }
-              }
-              const activeRound = rounds[activeRoundIdx !== -1 ? activeRoundIdx : 0];
-              
-              if (activeRound) {
-                const teamsData = await teamService.getTeamsByEvent(evt.id);
-                const teamsList = teamsData?.data || teamsData || [];
+          if (currentUser.roles.includes('Judge')) {
+            if (judgeAssignments.length > 0) {
+              for (const assignment of judgeAssignments) {
+                const trackObj = eventTracks.find(t => t.id === assignment.trackId);
+                const trackName = trackObj ? trackObj.name : 'All Tracks';
+                const trackId = trackObj ? trackObj.id : null;
                 
-                await Promise.all(teamsList.map(async (t) => {
-                  if (trackId && t.trackId !== trackId) return;
-                  if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
-                    try {
-                      const subRes = await submissionService.getSubmission(activeRound.id, t.id);
-                      if (subRes?.data?.id) {
-                        const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
-                        if (scoresRes?.data?.length > 0) c++; else p++;
+                // Calculate Judge Stats if applicable
+                let pending = '-', completed = '-';
+                if (evt.status !== 'CREATED') {
+                  try {
+                    let p = 0, c = 0;
+                    const roundsRes = await eventService.getEventRounds(evt.id);
+                    const rounds = roundsRes.data || [];
+                    let activeRoundIdx = -1;
+                    for (let i = rounds.length - 1; i >= 0; i--) {
+                      if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                        activeRoundIdx = i; break;
                       }
-                    } catch (e) {
-                      // No submission yet
                     }
+                    const activeRound = rounds[activeRoundIdx !== -1 ? activeRoundIdx : 0];
+                    
+                    if (activeRound) {
+                      await Promise.all(teamsList.map(async (t) => {
+                      if (trackId && t.trackId !== trackId) return;
+                      if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
+                        try {
+                          const subRes = await submissionService.getSubmission(activeRound.id, t.id);
+                          if (subRes?.data?.id) {
+                            const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
+                            if (scoresRes?.data?.length > 0) c++; else p++;
+                          }
+                        } catch (e) {
+                          // No submission yet
+                        }
+                      }
+                    }));
                   }
-                }));
+                  pending = p;
+                  completed = c;
+                } catch (e) { console.error(e); }
               }
-              pending = p;
-              completed = c;
-            } catch (e) { console.error(e); }
+
+              dynamicAssignments.push({
+                id: `judge-${evt.id}-${trackId || 'any'}`,
+                eventId: evt.id,
+                event: evt.name,
+                role: 'Judge',
+                track: trackName,
+                trackId: trackId,
+                path: '/judge/panel',
+                stats: { pending, flagged: 0, completed },
+                status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+              });
+            }
+          } else {
+            dynamicAssignments.push({
+                id: `judge-none-${evt.id}`,
+                eventId: evt.id,
+                event: evt.name,
+                role: 'Judge',
+                track: 'No judge assignments',
+                trackId: null,
+                path: null,
+                stats: { pending: '-', flagged: '-', completed: '-' },
+                status: 'upcoming'
+              });
+            }
           }
 
-          if (assignmentRole === 'Judge') {
-            dynamicAssignments.push({
-              id: `judge-${evt.id}-${trackId || 'any'}`,
-              eventId: evt.id,
-              event: evt.name,
-              role: 'Judge',
-              track: trackName,
-              trackId: trackId,
-              path: '/judge/panel',
-              stats: { pending, flagged: 0, completed },
-              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
-            });
+          if (currentUser.roles.includes('Mentor')) {
+            const userEmail = localStorage.getItem('userEmail');
+            const isMentor = teamsList.some(t => t.mentor && (t.mentor.email === userEmail || t.mentor.id === currentUser.userId));
+            
+            if (isMentor) {
+              const mentoredTeams = teamsList.filter(t => t.mentor && (t.mentor.email === userEmail || t.mentor.id === currentUser.userId));
+              const mentoredTrackIds = [...new Set(mentoredTeams.map(t => t.trackId).filter(Boolean))];
+              const mentoredTrackNames = mentoredTrackIds.map(tid => {
+                const tr = eventTracks.find(t => t.id === tid);
+                return tr ? tr.name : null;
+              }).filter(Boolean);
+              const trackLabel = mentoredTrackNames.length > 0 ? mentoredTrackNames.join(', ') : 'All Tracks';
+
+              dynamicAssignments.push({
+                id: `mentor-${evt.id}`,
+                eventId: evt.id,
+                event: evt.name,
+                role: 'Mentor',
+                track: trackLabel,
+                trackId: mentoredTrackIds[0] || null,
+                path: '/mentor/tickets',
+                stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
+                status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+              });
+            } else {
+              dynamicAssignments.push({
+                id: `mentor-none-${evt.id}`,
+                eventId: evt.id,
+                event: evt.name,
+                role: 'Mentor',
+                track: 'No mentor assignments',
+                trackId: null,
+                path: null,
+                stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
+                status: 'upcoming'
+              });
+            }
           }
-          if (assignmentRole === 'Mentor') {
-            dynamicAssignments.push({
-              id: `mentor-${evt.id}-${trackId || 'any'}`,
-              eventId: evt.id,
-              event: evt.name,
-              role: 'Mentor',
-              track: trackName,
-              trackId: trackId,
-              path: '/mentor/tickets',
-              stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
-              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
-            });
-          }
-          if (assignmentRole === 'Staff') {
+
+          if (currentUser.roles.includes('Staff')) {
             dynamicAssignments.push({
               id: `staff-${evt.id}`,
               eventId: evt.id,
@@ -183,7 +221,6 @@ const ExpertDashboard = () => {
               stats: { managed: true },
               status: evt.status === 'CREATED' ? 'upcoming' : 'active'
             });
-          }
           }
         }
         
@@ -200,6 +237,13 @@ const ExpertDashboard = () => {
   const hasJudge = currentUser.roles.includes('Judge');
   const hasMentor = currentUser.roles.includes('Mentor');
   const hasStaff = currentUser.roles.includes('Staff');
+  const roleCount = [hasJudge, hasMentor, hasStaff].filter(Boolean).length;
+
+  useEffect(() => {
+    if (hasJudge) setActiveTab('judge');
+    else if (hasMentor) setActiveTab('mentor');
+    else if (hasStaff) setActiveTab('staff');
+  }, [hasJudge, hasMentor, hasStaff]);
 
   return (
     <div className="expert-dashboard-container animate-fade-in" style={{ minHeight: '100vh', padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -278,12 +322,38 @@ const ExpertDashboard = () => {
             <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Welcome back, {currentUser.name.split(' ')[0]}! 👋</h1>
             <p style={{ color: 'var(--text-secondary)', fontSize: '16px', marginBottom: '40px' }}>Here is an overview of your current assignments and pending tasks.</p>
 
+            {roleCount > 1 && (
+              <div style={{ display: 'flex', width: '100%', borderBottom: '1px solid var(--border-color)', marginBottom: '32px' }}>
+                {hasJudge && (
+                  <button 
+                    onClick={() => setActiveTab('judge')}
+                    style={{ flex: 1, justifyContent: 'center', background: 'transparent', border: 'none', padding: '12px 16px', fontSize: '16px', fontWeight: activeTab === 'judge' ? '700' : '500', color: activeTab === 'judge' ? '#f59e0b' : 'var(--text-secondary)', borderBottom: activeTab === 'judge' ? '2px solid #f59e0b' : '2px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s ease-in-out' }}
+                  >
+                    <Shield size={18} /> Judge Assignments
+                  </button>
+                )}
+                {hasMentor && (
+                  <button 
+                    onClick={() => setActiveTab('mentor')}
+                    style={{ flex: 1, justifyContent: 'center', background: 'transparent', border: 'none', padding: '12px 16px', fontSize: '16px', fontWeight: activeTab === 'mentor' ? '700' : '500', color: activeTab === 'mentor' ? '#14b8a6' : 'var(--text-secondary)', borderBottom: activeTab === 'mentor' ? '2px solid #14b8a6' : '2px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s ease-in-out' }}
+                  >
+                    <BookOpen size={18} /> Mentor Assignments
+                  </button>
+                )}
+                {hasStaff && (
+                  <button 
+                    onClick={() => setActiveTab('staff')}
+                    style={{ flex: 1, justifyContent: 'center', background: 'transparent', border: 'none', padding: '12px 16px', fontSize: '16px', fontWeight: activeTab === 'staff' ? '700' : '500', color: activeTab === 'staff' ? '#8b5cf6' : 'var(--text-secondary)', borderBottom: activeTab === 'staff' ? '2px solid #8b5cf6' : '2px solid transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s ease-in-out' }}
+                  >
+                    <User size={18} /> Staff Assignments
+                  </button>
+                )}
+              </div>
+            )}
+
         {/* JUDGE SECTION */}
-        {hasJudge && (
+        {hasJudge && activeTab === 'judge' && (
         <div style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#f59e0b' }}>
-            <Shield size={24} /> Judge Assignments
-          </h2>
           {assignments.filter(item => item.role === 'Judge').length === 0 ? (
             <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               No Judge assignments at the moment.
@@ -307,38 +377,48 @@ const ExpertDashboard = () => {
                   <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
 
                   <div style={{ flex: 1 }}>
-                    {item.status === 'active' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Pending</span>
-                          <span style={{ fontWeight: '600' }}>{item.stats.pending}</span>
+                    {item.path ? (
+                      item.status === 'active' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Pending</span>
+                            <span style={{ fontWeight: '600' }}>{item.stats.pending}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Flagged</span>
+                            <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.flagged}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Completed</span>
+                            <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.completed}</span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Flagged</span>
-                          <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.flagged}</span>
+                      ) : (
+                        <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                          Starts in {item.startsIn || 'soon'}
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Completed</span>
-                          <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.completed}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.status === 'upcoming' && (
-                      <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        Starts in {item.startsIn}
+                      )
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        No {item.role} work assigned.
                       </div>
                     )}
                   </div>
 
-                  <button 
-                    onClick={() => handleEnterWorkspace(item)}
-                    className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
-                    style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
-                    disabled={item.status === 'upcoming'}
-                  >
-                    Enter Workspace <ArrowRight size={16} />
-                  </button>
+                  {item.path ? (
+                    <button 
+                      onClick={() => handleEnterWorkspace(item)}
+                      className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
+                      style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                      disabled={item.status === 'upcoming'}
+                    >
+                      Enter Workspace <ArrowRight size={16} />
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: '24px', padding: '12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', textAlign: 'center', borderRadius: '8px', fontSize: '14px' }}>
+                      Not Assigned
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -347,11 +427,8 @@ const ExpertDashboard = () => {
         )}
 
         {/* MENTOR SECTION */}
-        {hasMentor && (
+        {hasMentor && activeTab === 'mentor' && (
         <div>
-          <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#14b8a6' }}>
-            <BookOpen size={24} /> Mentor Assignments
-          </h2>
           {assignments.filter(item => item.role === 'Mentor').length === 0 ? (
             <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               No Mentor assignments at the moment.
@@ -375,38 +452,48 @@ const ExpertDashboard = () => {
                   <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>Track: <strong style={{ color: 'var(--text-primary)' }}>{item.track}</strong></div>
 
                   <div style={{ flex: 1 }}>
-                    {item.status === 'active' && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Open Tickets</span>
-                          <span style={{ fontWeight: '600' }}>{item.stats.openTickets}</span>
+                    {item.path ? (
+                      item.status === 'active' ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)' }}><Clock size={16} /> Open Tickets</span>
+                            <span style={{ fontWeight: '600' }}>{item.stats.openTickets}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Urgent</span>
+                            <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.urgentTickets}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Resolved</span>
+                            <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.resolved}</span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}><AlertCircle size={16} /> Urgent</span>
-                          <span style={{ fontWeight: '600', color: 'var(--danger)' }}>{item.stats.urgentTickets}</span>
+                      ) : (
+                        <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                          Starts in {item.startsIn || 'soon'}
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success)' }}><CheckCircle2 size={16} /> Resolved</span>
-                          <span style={{ fontWeight: '600', color: 'var(--success)' }}>{item.stats.resolved}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.status === 'upcoming' && (
-                      <div style={{ background: 'var(--bg-subtle)', padding: '16px', borderRadius: '8px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                        Starts in {item.startsIn}
+                      )
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        No {item.role} work assigned.
                       </div>
                     )}
                   </div>
 
-                  <button 
-                    onClick={() => handleEnterWorkspace(item)}
-                    className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
-                    style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
-                    disabled={item.status === 'upcoming'}
-                  >
-                    Enter Workspace <ArrowRight size={16} />
-                  </button>
+                  {item.path ? (
+                    <button 
+                      onClick={() => handleEnterWorkspace(item)}
+                      className={item.status === 'active' ? 'btn btn-primary' : 'btn btn-secondary'} 
+                      style={{ marginTop: '24px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+                      disabled={item.status === 'upcoming'}
+                    >
+                      Enter Workspace <ArrowRight size={16} />
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: '24px', padding: '12px', background: 'var(--bg-hover)', color: 'var(--text-secondary)', textAlign: 'center', borderRadius: '8px', fontSize: '14px' }}>
+                      Not Assigned
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -415,11 +502,8 @@ const ExpertDashboard = () => {
         )}
 
         {/* STAFF SECTION */}
-        {hasStaff && (
+        {hasStaff && activeTab === 'staff' && (
         <div style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#8b5cf6' }}>
-            <User size={24} /> Staff Assignments
-          </h2>
           {assignments.filter(item => item.role === 'Event Staff').length === 0 ? (
             <div style={{ padding: '24px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               No Staff assignments at the moment.

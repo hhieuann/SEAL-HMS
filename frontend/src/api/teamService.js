@@ -61,5 +61,20 @@ export const teamService = {
   applyPenalty: async (teamId, roundId, penaltyData) => {
     const response = await apiClient.put(`/api/v1/teams/${teamId}/rounds/${roundId}/penalty`, penaltyData);
     return response.data;
+  },
+
+  resetMentorsByEvent: async (eventId) => {
+    const response = await apiClient.post(`/api/v1/events/${eventId}/teams/reset-mentors`);
+    return response.data;
+  },
+
+  getMentorMessages: async (teamId) => {
+    const response = await apiClient.get(`/api/v1/teams/${teamId}/messages`);
+    return response.data;
+  },
+
+  sendMentorMessage: async (teamId, messageData) => {
+    const response = await apiClient.post(`/api/v1/teams/${teamId}/messages`, messageData);
+    return response.data;
   }
 };

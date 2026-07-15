@@ -146,7 +146,8 @@ const RoundTransition = () => {
               const penalty = (teamId && dbPenaltyMap[teamId] != null) ? dbPenaltyMap[teamId] : 0;
               const penaltyReason = (teamId && dbReasonMap[teamId]) ? dbReasonMap[teamId] : '';
               const isDisqualified = teamObj?.isDisqualified || false;
-              return { team: teamNameStr, teamId, score, penalty, penaltyReason, isDisqualified };
+              const disqualificationReason = teamObj?.disqualificationReason || '';
+              return { team: teamNameStr, teamId, score, penalty, penaltyReason, isDisqualified, disqualificationReason };
             });
 
             // Sort by score desc (null scores go to bottom, disqualified to very bottom)
@@ -640,21 +641,27 @@ const RoundTransition = () => {
             </div>
           </div>
           <div>
-            {finalsTeamList.map((s, i) => (
-              <div key={i} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', background: i < 3 ? 'rgba(245,158,11,0.03)' : 'transparent' }}>
-                <div style={{
-                  width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : 'var(--bg-active)',
-                  color: 'white', fontWeight: '800', fontSize: '14px', flexShrink: 0
-                }}>
-                  {i < 3 ? ['🥇','🥈','🥉'][i] : s.rank}
-                </div>
+            {finalsTeamList.map((s, i) => {
+              const isFinished = actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED');
+              return (
+              <div key={i} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', background: isFinished && i < 3 ? 'rgba(245,158,11,0.03)' : 'transparent' }}>
+                {isFinished ? (
+                  <div style={{
+                    width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : 'var(--bg-active)',
+                    color: 'white', fontWeight: '800', fontSize: '14px', flexShrink: 0
+                  }}>
+                    {i < 3 ? ['🥇','🥈','🥉'][i] : s.rank}
+                  </div>
+                ) : (
+                  <div style={{ width: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: '600' }}>•</div>
+                )}
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: '600', fontSize: '15px', textDecoration: s.isDisqualified ? 'line-through' : 'none', color: s.isDisqualified ? 'var(--danger)' : 'inherit' }}>{s.team}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <span>From: {s.fromTrack}</span>
-                    {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800' }}>DISQUALIFIED</span>}
-                    {s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600' }}>Penalty: -{s.penalty} pts</span>}
+                    {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800' }} title={s.disqualificationReason || 'Disqualified'}>DISQUALIFIED</span>}
+                    {isFinished && s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600' }}>Penalty: -{s.penalty} pts</span>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -667,19 +674,25 @@ const RoundTransition = () => {
                   >
                     <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
                   </button>
-                  <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                    <div style={{ fontSize: '18px', fontWeight: '800', color: i === 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
-                      {s.score ?? '—'}
-                    </div>
-                    {i < 3 && (
-                      <div style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
-                        <Trophy size={11} /> Top {i + 1}
+                  {isFinished ? (
+                    <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                      <div style={{ fontSize: '18px', fontWeight: '800', color: i === 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
+                        {s.score ?? '—'}
                       </div>
-                    )}
-                  </div>
+                      {i < 3 && (
+                        <div style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>
+                          <Trophy size={11} /> Top {i + 1}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                      <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>—</span>
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
       )}
@@ -717,9 +730,15 @@ const RoundTransition = () => {
                 </div>
               </div>
 
-              <div style={{ padding: '6px 24px', background: 'rgba(59,130,246,0.08)', borderBottom: '1px solid rgba(59,130,246,0.2)', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}>
-                Top {rounds[currentRoundIndex]?.promotionTopN ?? activeTrackData?.teams?.filter(t => t.status === 'advance').length ?? '?'} from each track will advance to <strong>{nextRound?.name}</strong>
-              </div>
+              {(actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED')) ? (
+                <div style={{ padding: '6px 24px', background: 'rgba(59,130,246,0.08)', borderBottom: '1px solid rgba(59,130,246,0.2)', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}>
+                  Top {rounds[currentRoundIndex]?.promotionTopN ?? activeTrackData?.teams?.filter(t => t.status === 'advance').length ?? '?'} from each track will advance to <strong>{nextRound?.name}</strong>
+                </div>
+              ) : (
+                <div style={{ padding: '6px 24px', background: 'rgba(245,158,11,0.06)', borderBottom: '1px solid rgba(245,158,11,0.15)', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>
+                  Rankings and scores will appear after scoring is complete
+                </div>
+              )}
 
               <div style={{ position: 'relative' }}>
                 {activeTrackData.teams.length === 0 ? (
@@ -727,7 +746,7 @@ const RoundTransition = () => {
                     <p>No teams assigned to this track yet.</p>
                   </div>
                 ) : activeTrackData.teams.map((s, i) => {
-                  const isFinished = ['SCORING', 'UNDER_REVIEW', 'COMPLETED'].includes(currentRound?.status);
+                  const isFinished = actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED');
                   const finalStatus = !isFinished ? 'neutral' : (s.status === 'tiebreak'
                     ? (resolvedTies[s.team] === 'Advanced' ? 'advance' : resolvedTies[s.team] === 'Eliminated' ? 'eliminate' : 'tiebreak')
                     : s.status);
@@ -740,13 +759,17 @@ const RoundTransition = () => {
                           <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cutoff → {nextRound?.name}</span>
                         </div>
                       )}
-                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent', opacity: finalStatus === 'eliminate' ? 0.6 : 1 }}>
-                        <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: (!isFinished || s.rank <= 2) ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
+                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: isFinished ? (finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent') : 'transparent', opacity: isFinished && finalStatus === 'eliminate' ? 0.6 : 1 }}>
+                        {isFinished ? (
+                          <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: s.rank <= 2 ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
+                        ) : (
+                          <span style={{ width: '24px', fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)', textAlign: 'center' }}>•</span>
+                        )}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: '600', fontSize: '14px', textDecoration: s.isDisqualified ? 'line-through' : 'none', color: s.isDisqualified ? 'var(--danger)' : 'inherit' }}>{s.team}</div>
                           {isFinished && s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
-                          {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800', marginLeft: '6px' }}>DISQUALIFIED</span>}
-                          {s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600', marginLeft: '6px' }}>Penalty: -{s.penalty} pts</span>}
+                          {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800', marginLeft: '6px' }} title={s.disqualificationReason || 'Disqualified'}>DISQUALIFIED</span>}
+                          {isFinished && s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600', marginLeft: '6px' }}>Penalty: -{s.penalty} pts</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                           <button 
@@ -758,14 +781,19 @@ const RoundTransition = () => {
                           >
                             <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
                           </button>
-                          <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                            <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
-                              {s.score ?? '—'}
+                          {isFinished ? (
+                            <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                              <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
+                                {s.score ?? '—'}
+                              </div>
+                              {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
+                              {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
                             </div>
-                            {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
-                            {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
-                            {finalStatus === 'neutral' && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}>—</span>}
-                          </div>
+                          ) : (
+                            <div style={{ textAlign: 'right', minWidth: '70px' }}>
+                              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>—</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </React.Fragment>

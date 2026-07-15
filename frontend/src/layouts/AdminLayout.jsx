@@ -249,9 +249,11 @@ const AdminLayout = () => {
                 <NavLink to={`/admin/event/${eventId}/track-draw`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Shuffle size={20} /><span>Track Draw</span>
                 </NavLink>
-                <NavLink to={`/admin/event/${eventId}/edit`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Edit2 size={20} /><span>Edit Event</span>
-                </NavLink>
+                {userRole === 'ADMIN' && (
+                  <NavLink to={`/admin/event/${eventId}/edit`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Edit2 size={20} /><span>Edit Event</span>
+                  </NavLink>
+                )}
 
                 <NavLink to={`/admin/event/${eventId}/transition`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ArrowRightLeft size={20} /><span>Round Transition</span>

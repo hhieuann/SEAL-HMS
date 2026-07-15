@@ -93,4 +93,28 @@ public class TeamController {
         TeamResponse updated = teamService.applyPenalty(id, roundId, request.getPenaltyPoints(), request.getPenaltyReason());
         return ResponseEntity.ok(ApiResponse.ok("Team penalty applied", updated));
     }
+
+    @PostMapping("/events/{eventId}/teams/reset-mentors")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<Void>> resetMentors(@PathVariable Long eventId) {
+        teamService.resetAllMentorsByEvent(eventId);
+        return ResponseEntity.ok(ApiResponse.ok("Mentors reset successfully", null));
+    }
+
+    @GetMapping("/teams/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<java.util.List<com.fpt.seal.hms.team.dto.MentorMessageDto>>> getMentorMessages(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(teamService.getMentorMessages(id)));
+    }
+
+    @PostMapping("/teams/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.fpt.seal.hms.team.dto.MentorMessageDto>> sendMentorMessage(
+            @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody com.fpt.seal.hms.team.dto.MentorMessageRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        String email = authentication.getName();
+        com.fpt.seal.hms.team.dto.MentorMessageDto msg = teamService.sendMentorMessageByEmail(id, email, request.getMessage());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Message sent", msg));
+    }
 }

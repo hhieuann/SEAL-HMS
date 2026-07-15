@@ -101,8 +101,8 @@ function App() {
         <Route path="/admin/event/:eventId" element={<ProtectedRoute allowedRoles={['ADMIN', 'STAFF']}><AdminLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<EventDashboard />} />
-          <Route path="staff" element={<EventStaffManagement />} />
-          <Route path="edit" element={<EventForm />} />
+          <Route path="staff" element={<ProtectedRoute allowedRoles={['ADMIN']}><EventStaffManagement /></ProtectedRoute>} />
+          <Route path="edit" element={<ProtectedRoute allowedRoles={['ADMIN']}><EventForm /></ProtectedRoute>} />
           <Route path="teams" element={<PerformingTeams />} />
           <Route path="assignments" element={<AssignmentMatrix />} />
           <Route path="track-draw" element={<TrackDraw />} />

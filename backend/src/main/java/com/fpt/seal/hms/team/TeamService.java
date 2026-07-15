@@ -45,6 +45,8 @@ public class TeamService {
     private final LecturerRepository lecturerRepository;
     private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
     private final TrackAssignmentRepository trackAssignmentRepository;
+    private final MentorMessageRepository mentorMessageRepository;
+    private final com.fpt.seal.hms.account.AccountService accountService;
     private final Random random = new Random();
 
     @Transactional(readOnly = true)
@@ -155,6 +157,9 @@ public class TeamService {
             team.setTopic(randomTopic);
         }
 
+        // Auto-clear mentor if they are a judge for the new track (conflict of interest)
+        clearMentorIfJudgeConflict(team);
+
         return mapToResponse(teamRepository.save(team));
     }
 
@@ -170,7 +175,28 @@ public class TeamService {
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
         team.setTrack(track);
+
+        // Auto-clear mentor if they are a judge for the new track (conflict of interest)
+        clearMentorIfJudgeConflict(team);
+
         return mapToResponse(teamRepository.save(team));
+    }
+
+    /**
+     * If this team's mentor is also assigned as a JUDGE for the team's current track,
+     * automatically remove the mentor to avoid conflict of interest.
+     */
+    private void clearMentorIfJudgeConflict(Team team) {
+        if (team.getMentor() == null || team.getTrack() == null) {
+            return;
+        }
+        boolean isJudge = trackAssignmentRepository.existsByTrack_IdAndLecturer_IdAndRole(
+                team.getTrack().getId(),
+                team.getMentor().getId(),
+                com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE);
+        if (isJudge) {
+            team.setMentor(null);
+        }
     }
 
     @Transactional
@@ -266,5 +292,63 @@ public class TeamService {
         }
         
         return response;
+    }
+
+    @Transactional
+    public void resetAllMentorsByEvent(Long eventId) {
+        List<Team> teams = teamRepository.findByEventId(eventId);
+        for (Team team : teams) {
+            team.setMentor(null);
+        }
+        teamRepository.saveAll(teams);
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.fpt.seal.hms.team.dto.MentorMessageDto> getMentorMessages(Long teamId) {
+        Team team = findTeamEntityById(teamId);
+        List<com.fpt.seal.hms.team.entity.MentorMessage> messages = mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(teamId);
+        return messages.stream().map(msg -> {
+            com.fpt.seal.hms.team.dto.MentorMessageDto dto = new com.fpt.seal.hms.team.dto.MentorMessageDto();
+            dto.setId(msg.getId());
+            dto.setTeamId(msg.getTeam().getId());
+            dto.setSenderId(msg.getSender().getId());
+            String fullName = accountService.getFullName(msg.getSender());
+            if (fullName == null || fullName.trim().isEmpty()) {
+                fullName = msg.getSender().getEmail().split("@")[0];
+            }
+            dto.setSenderName(fullName);
+            dto.setSenderRole(msg.getSender().getRole().name());
+            dto.setMessage(msg.getMessage());
+            dto.setCreatedAt(msg.getCreatedAt());
+            return dto;
+        }).collect(Collectors.toList());
+    }
+
+    @Transactional
+    public com.fpt.seal.hms.team.dto.MentorMessageDto sendMentorMessageByEmail(Long teamId, String email, String message) {
+        Team team = findTeamEntityById(teamId);
+        Account sender = accountRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found with email: " + email));
+        
+        com.fpt.seal.hms.team.entity.MentorMessage mentorMessage = new com.fpt.seal.hms.team.entity.MentorMessage();
+        mentorMessage.setTeam(team);
+        mentorMessage.setSender(sender);
+        mentorMessage.setMessage(message);
+        
+        com.fpt.seal.hms.team.entity.MentorMessage saved = mentorMessageRepository.save(mentorMessage);
+        
+        com.fpt.seal.hms.team.dto.MentorMessageDto dto = new com.fpt.seal.hms.team.dto.MentorMessageDto();
+        dto.setId(saved.getId());
+        dto.setTeamId(saved.getTeam().getId());
+        dto.setSenderId(saved.getSender().getId());
+        String fullName = accountService.getFullName(saved.getSender());
+        if (fullName == null || fullName.trim().isEmpty()) {
+            fullName = saved.getSender().getEmail().split("@")[0];
+        }
+        dto.setSenderName(fullName);
+        dto.setSenderRole(saved.getSender().getRole().name());
+        dto.setMessage(saved.getMessage());
+        dto.setCreatedAt(saved.getCreatedAt());
+        return dto;
     }
 }

@@ -274,7 +274,7 @@ const JudgePanel = () => {
         </div>
       )}
 
-      <div className="judge-layout" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: '20px', alignItems: 'start' }}>
+      <div className="judge-layout" style={{ display: 'grid', gridTemplateColumns: activeTeamId ? '260px 1fr 320px' : '260px 1fr', gap: '20px', alignItems: 'start' }}>
         {/* Column 1: Team List */}
         <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-subtle)' }}>
@@ -401,99 +401,101 @@ const JudgePanel = () => {
         </div>
 
         {/* Column 3: Scoring Rubric */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="glass-panel" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Target size={18} color="var(--primary)" /> Scoring Rubric
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{currentRound.name}</p>
+        {activeTeamId && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="glass-panel" style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Target size={18} color="var(--primary)" /> Scoring Rubric
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{currentRound.name}</p>
 
-            {criteria.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {criteria.map((c) => {
-                  const val = scores[c.id] ?? 0;
-                  const max = parseFloat(c.maxScore) || 10;
-                  return (
-                    <div key={c.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: '600' }}>{c.name}</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input
-                            type="number" min="0" max={max} step="0.5" value={val}
-                            disabled={!isScoringAllowed}
-                            onChange={e => {
-                              const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
-                              setScores(p => ({ ...p, [c.id]: v }));
-                            }}
-                            style={{ width: '56px', padding: '4px 8px', textAlign: 'center', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', outline: 'none' }}
-                          />
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ {max}</span>
+              {criteria.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {criteria.map((c) => {
+                    const val = scores[c.id] ?? 0;
+                    const max = parseFloat(c.maxScore) || 10;
+                    return (
+                      <div key={c.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <label style={{ fontSize: '13px', fontWeight: '600' }}>{c.name}</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <input
+                              type="number" min="0" max={max} step="0.5" value={val}
+                              disabled={!isScoringAllowed}
+                              onChange={e => {
+                                const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
+                                setScores(p => ({ ...p, [c.id]: v }));
+                              }}
+                              style={{ width: '56px', padding: '4px 8px', textAlign: 'center', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', outline: 'none' }}
+                            />
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ {max}</span>
+                          </div>
+                        </div>
+                        <input
+                          type="range" min="0" max={max} step="0.5" value={val}
+                          disabled={!isScoringAllowed}
+                          onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--primary)', opacity: isScoringAllowed ? 1 : 0.5 }}
+                        />
+                        <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
+                          <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
                         </div>
                       </div>
-                      <input
-                        type="range" min="0" max={max} step="0.5" value={val}
-                        disabled={!isScoringAllowed}
-                        onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
-                        style={{ width: '100%', accentColor: 'var(--primary)', opacity: isScoringAllowed ? 1 : 0.5 }}
-                      />
-                      <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
-                        <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                  No criteria configured for this round.<br />
+                  <span style={{ fontSize: '12px' }}>Ask an admin to add criteria.</span>
+                </p>
+              )}
+
+              <div style={{ marginTop: '24px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>Feedback (Optional)</label>
+                <textarea
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  disabled={!isScoringAllowed}
+                  placeholder={isScoringAllowed ? "Write your constructive feedback here..." : "Scoring is currently locked."}
+                  rows={3}
+                  style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
+                />
               </div>
-            ) : (
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
-                No criteria configured for this round.<br />
-                <span style={{ fontSize: '12px' }}>Ask an admin to add criteria.</span>
-              </p>
-            )}
-
-            <div style={{ marginTop: '24px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>Feedback (Optional)</label>
-              <textarea
-                value={feedback}
-                onChange={e => setFeedback(e.target.value)}
-                disabled={!isScoringAllowed}
-                placeholder={isScoringAllowed ? "Write your constructive feedback here..." : "Scoring is currently locked."}
-                rows={3}
-                style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
-              />
-            </div>
-          </div>
-
-          {/* Total + Submit */}
-          <div className="glass-panel" style={{ padding: '20px', border: `1px solid ${total >= maxTotal * 0.8 ? 'rgba(16,185,129,0.3)' : total >= maxTotal * 0.5 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.2)'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>Total Score</span>
-              <span style={{ fontSize: '32px', fontWeight: '900', color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--primary)' : 'var(--warning)' }}>
-                {total.toFixed(1)}
-                <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: '400' }}>/{maxTotal}</span>
-              </span>
             </div>
 
-            {submitError && (
-              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '13px', color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={14} /> {submitError}
+            {/* Total + Submit */}
+            <div className="glass-panel" style={{ padding: '20px', border: `1px solid ${total >= maxTotal * 0.8 ? 'rgba(16,185,129,0.3)' : total >= maxTotal * 0.5 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.2)'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>Total Score</span>
+                <span style={{ fontSize: '32px', fontWeight: '900', color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--primary)' : 'var(--warning)' }}>
+                  {total.toFixed(1)}
+                  <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: '400' }}>/{maxTotal}</span>
+                </span>
               </div>
-            )}
 
-            <button
-              onClick={handleSubmitScore}
-              disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed}
-              className="btn btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
-            >
-              {isSubmitting
-                ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
-                : myScoresForActiveTeam?.length
-                  ? <><CheckCircle size={16} /> Update Score</>
-                  : <><Star size={16} /> Submit Score</>
-              }
-            </button>
+              {submitError && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '13px', color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={14} /> {submitError}
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmitScore}
+                disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed}
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
+              >
+                {isSubmitting
+                  ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
+                  : myScoresForActiveTeam?.length
+                    ? <><CheckCircle size={16} /> Update Score</>
+                    : <><Star size={16} /> Submit Score</>
+                }
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {submitToast && (
