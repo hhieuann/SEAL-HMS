@@ -1,7 +1,6 @@
 package com.fpt.seal.hms.submission.dto;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,7 +8,8 @@ import lombok.Setter;
 @Setter
 public class SubmissionRequest {
 
-    @NotNull(message = "Account ID submitting this is required")
+    // Deprecated: the submitter is now taken from the authenticated user, never from
+    // the body (a client could impersonate anyone). Kept so older FE payloads still bind.
     private Long submittedByAccountId;
 
     @NotBlank(message = "Submission name is required")

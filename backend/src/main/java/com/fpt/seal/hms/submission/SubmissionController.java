@@ -28,8 +28,9 @@ public class SubmissionController {
     public ResponseEntity<ApiResponse<SubmissionResponse>> upsertSubmission(
             @PathVariable Long roundId,
             @PathVariable Long teamId,
-            @Valid @RequestBody SubmissionRequest request) {
-        SubmissionResponse response = submissionService.upsertSubmission(roundId, teamId, request);
+            @Valid @RequestBody SubmissionRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        SubmissionResponse response = submissionService.upsertSubmission(roundId, teamId, request, authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Submission saved successfully", response));
     }
 }

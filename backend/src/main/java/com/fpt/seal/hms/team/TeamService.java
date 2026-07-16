@@ -146,8 +146,11 @@ public class TeamService {
             throw new BusinessException("Cannot assign randomly because there are no tracks in this event.");
         }
 
-        // Randomly pick a track
-        Track randomTrack = tracks.get(random.nextInt(tracks.size()));
+        // Balanced draw instead of a pure random pick: always assign into the track(s)
+        // with the fewest teams that still have capacity. With N teams over K tracks the
+        // spread never differs by more than 1 (e.g. 7 teams / 3 tracks -> 3-2-2), which is
+        // the fairest split possible when per-track promotion is used later.
+        Track randomTrack = pickLeastLoadedTrackWithCapacity(tracks, team);
         team.setTrack(randomTrack);
 
         // Fetch topics for this track and randomly pick one if available
@@ -174,12 +177,55 @@ public class TeamService {
 
         Track track = trackRepository.findById(trackId)
                 .orElseThrow(() -> new ResourceNotFoundException("Track not found with id: " + trackId));
+        requireTrackCapacity(track, team);
         team.setTrack(track);
 
         // Auto-clear mentor if they are a judge for the new track (conflict of interest)
         clearMentorIfJudgeConflict(team);
 
         return mapToResponse(teamRepository.save(team));
+    }
+
+    /**
+     * Fewest-teams-first draw: among the tracks that still have room (maxTeams == null
+     * means unlimited), pick randomly between the least-loaded ones. A team already on
+     * a track does not count against that track's capacity for itself.
+     */
+    private Track pickLeastLoadedTrackWithCapacity(List<Track> tracks, Team team) {
+        List<Track> leastLoaded = new java.util.ArrayList<>();
+        long minCount = Long.MAX_VALUE;
+        for (Track track : tracks) {
+            long count = countOtherTeams(track, team);
+            if (track.getMaxTeams() != null && count >= track.getMaxTeams()) {
+                continue; // full
+            }
+            if (count < minCount) {
+                minCount = count;
+                leastLoaded.clear();
+                leastLoaded.add(track);
+            } else if (count == minCount) {
+                leastLoaded.add(track);
+            }
+        }
+        if (leastLoaded.isEmpty()) {
+            throw new BusinessException("All tracks of this event are full (max teams reached). "
+                    + "Increase a track's max teams or add another track before assigning.");
+        }
+        return leastLoaded.get(random.nextInt(leastLoaded.size()));
+    }
+
+    /** Reject a manual assignment into a track that is already at max capacity. */
+    private void requireTrackCapacity(Track track, Team team) {
+        if (track.getMaxTeams() != null && countOtherTeams(track, team) >= track.getMaxTeams()) {
+            throw new BusinessException("Track '" + track.getName() + "' is full ("
+                    + track.getMaxTeams() + " teams max). Choose another track or raise its limit.");
+        }
+    }
+
+    private long countOtherTeams(Track track, Team team) {
+        long count = teamRepository.countByTrackId(track.getId());
+        boolean alreadyOnThisTrack = team.getTrack() != null && track.getId().equals(team.getTrack().getId());
+        return alreadyOnThisTrack ? count - 1 : count;
     }
 
     /**

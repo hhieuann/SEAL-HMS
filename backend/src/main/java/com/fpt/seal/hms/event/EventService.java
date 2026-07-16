@@ -274,11 +274,11 @@ public class EventService {
             event.setStatus(EventStatus.UPCOMING);
             changed = true;
         } else if (status == EventStatus.UPCOMING) {
+            long teamCount = teamRepository.countByEventId(event.getId()); // one query, reused below
             boolean regClosed = event.getRegistrationEndDate() != null && today.isAfter(event.getRegistrationEndDate());
-            boolean teamFull = event.getMaxTeams() != null && teamRepository.countByEventId(event.getId()) >= event.getMaxTeams();
+            boolean teamFull = event.getMaxTeams() != null && teamCount >= event.getMaxTeams();
             if (regClosed || teamFull) {
                 // Task 1.1: Only auto-progress to ONGOING if minTeams is met
-                long teamCount = teamRepository.countByEventId(event.getId());
                 boolean meetsMinTeams = event.getMinTeams() == null || teamCount >= event.getMinTeams();
                 if (meetsMinTeams) {
                     event.setStatus(EventStatus.ONGOING);

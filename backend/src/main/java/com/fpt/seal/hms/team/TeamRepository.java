@@ -10,5 +10,6 @@ import java.util.List;
 public interface TeamRepository extends JpaRepository<Team, Long> {
     List<Team> findByEventId(Long eventId);
     long countByEventId(Long eventId);
+    long countByTrackId(Long trackId);
     boolean existsByTrack_IdAndMentor_Id(Long trackId, Long mentorId);
 }

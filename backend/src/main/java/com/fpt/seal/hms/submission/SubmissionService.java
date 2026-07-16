@@ -32,6 +32,7 @@ public class SubmissionService {
     private final TeamRepository teamRepository;
     private final AccountRepository accountRepository;
     private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
+    private final com.fpt.seal.hms.teammember.TeamMemberRepository teamMemberRepository;
 
     @Transactional(readOnly = true)
     public SubmissionResponse getSubmission(Long roundId, Long teamId) {
@@ -45,7 +46,7 @@ public class SubmissionService {
     }
 
     @Transactional
-    public SubmissionResponse upsertSubmission(Long roundId, Long teamId, SubmissionRequest request) {
+    public SubmissionResponse upsertSubmission(Long roundId, Long teamId, SubmissionRequest request, String actorEmail) {
         Round round = roundRepository.findById(roundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found"));
 
@@ -66,8 +67,19 @@ public class SubmissionService {
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
-        Account submitter = accountRepository.findById(request.getSubmittedByAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        // The submitter is the AUTHENTICATED user — never trust an id from the request
+        // body. Only the team's LEADER may create/update the submission (members can
+        // only view); ADMIN keeps access for support/demo purposes.
+        Account submitter = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + actorEmail));
+        if (submitter.getRole() != com.fpt.seal.hms.common.enums.Role.ADMIN) {
+            var membership = teamMemberRepository.findByTeamIdAndAccountId(teamId, submitter.getId())
+                    .orElseThrow(() -> new BusinessException("You are not a member of this team."));
+            if (membership.getRole() != com.fpt.seal.hms.common.enums.MemberRole.LEADER
+                    || membership.getStatus() != com.fpt.seal.hms.common.enums.MemberStatus.ACCEPTED) {
+                throw new BusinessException("Only the team leader can submit or update the submission. Members can only view it.");
+            }
+        }
 
         // Auto-generate RoundRanking if it doesn't exist
         RoundRanking rr = roundRankingRepository.findByRoundIdAndTeamId(roundId, teamId)
