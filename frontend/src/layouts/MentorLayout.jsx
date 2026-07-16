@@ -11,14 +11,15 @@ const MentorLayout = () => {
     authApi.logout();
   };
 
+  // Fall back to neutral values only — never a fake identity or event name.
   const [activeContext] = React.useState(() => {
     const saved = localStorage.getItem('expertContext');
-    return saved ? JSON.parse(saved) : { event: 'SEAL Hackathon Spring 2026', role: 'Mentor', track: 'Technical' };
+    return saved ? JSON.parse(saved) : { event: '', role: 'Mentor', track: '' };
   });
 
   const [currentUser] = React.useState(() => {
     const saved = localStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : { name: 'Sarah Nguyen', avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=0ea5e9&color=fff' };
+    return saved ? JSON.parse(saved) : { name: 'Mentor', avatar: 'https://ui-avatars.com/api/?name=Mentor&background=1F4E79&color=fff' };
   });
 
   return (

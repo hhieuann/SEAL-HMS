@@ -157,6 +157,11 @@ const EventForm = () => {
     if (hasRoundErrors)                                         { triggerError('Please fix the round errors in Step 3 before saving.', 3); return; }
     if (hasTeamFlowError)                                       { triggerError('Promoted teams must be strictly less than the available pool from the previous round.', 3); return; }
 
+    // Editing an existing event affects live data (rounds, criteria, registered teams) — confirm first.
+    if (isEditMode && !window.confirm(`Are you sure you want to save these changes to "${formData.name}"? Rounds and criteria will be updated for all participants.`)) {
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const requestData = {

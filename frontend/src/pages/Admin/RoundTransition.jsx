@@ -345,13 +345,15 @@ const RoundTransition = () => {
             alert("Cannot start round: No judges have been assigned to tracks yet. Please assign judges in the Track Assignment menu first.");
             return;
           }
+          if (!window.confirm(`Start "${currentRoundObj.name}"? Teams will be able to submit once the round is active.`)) return;
           await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
           window.location.reload();
           return;
         }
-        
+
         // If the current round is ACTIVE, we END it for scoring.
         if (currentRoundObj.status === 'ACTIVE') {
+          if (!window.confirm(`Close submissions for "${currentRoundObj.name}" and move to scoring? Teams will no longer be able to submit.`)) return;
           await eventService.updateRoundStatus(currentRoundObj.id, 'SCORING');
           window.location.reload();
           return;
@@ -370,6 +372,12 @@ const RoundTransition = () => {
           alert("Cannot advance/finalize: Some teams have not been scored yet (score is 0), or Track Draw is missing. Please ensure Judges have finished grading all teams.");
           return;
         }
+
+      if (!window.confirm(isLastRound
+          ? 'Finalize the event results? Rankings will be computed and this cannot be undone.'
+          : 'Confirm eliminations and advance to the next round? Eliminated teams cannot submit anymore.')) {
+        return;
+      }
 
       setConfirmed(true);
       setLockToast(true);

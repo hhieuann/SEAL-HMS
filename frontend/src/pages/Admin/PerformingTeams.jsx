@@ -141,6 +141,8 @@ const PerformingTeams = () => {
   }, [eventId]);
 
   const handleStatusChange = async (teamId, newStatus) => {
+    const teamName = teams.find(t => t.id === teamId)?.name || `#${teamId}`;
+    if (!window.confirm(`Change status of team "${teamName}" to ${newStatus}?`)) return;
     try {
       const { teamService } = await import('../../api/teamService.js');
       await teamService.updateTeamStatus(teamId, newStatus);
@@ -152,6 +154,8 @@ const PerformingTeams = () => {
   };
 
   const handleRandomAssign = async (teamId) => {
+    const teamName = teams.find(t => t.id === teamId)?.name || `#${teamId}`;
+    if (!window.confirm(`Randomly assign team "${teamName}" to a track and topic? This may replace its current assignment.`)) return;
     try {
       const { teamService } = await import('../../api/teamService.js');
       const res = await teamService.randomAssign(teamId, 1);
