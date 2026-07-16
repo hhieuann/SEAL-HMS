@@ -5,7 +5,6 @@ import { authApi } from '../../api/auth';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [accountId, setAccountId] = useState('sarah');
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,14 +19,6 @@ const Login = () => {
     ];
     keysToRemove.forEach(key => localStorage.removeItem(key));
   }, []);
-
-  const accounts = {
-    admin: { name: 'System Admin', type: 'admin' },
-    participant: { name: 'Participant (Team Null)', type: 'participant' },
-    sarah: { name: 'Sarah Nguyen', type: 'expert', roles: ['Judge', 'Mentor'], avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=14b8a6&color=fff' },
-    alan: { name: 'Alan Turing', type: 'expert', roles: ['Judge'], avatar: 'https://ui-avatars.com/api/?name=Alan+Turing&background=10b981&color=fff' },
-    david: { name: 'David Kim', type: 'expert', roles: ['Mentor'], avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
-  };
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,27 +39,13 @@ const Login = () => {
       // Call real backend API
       const { role, name: backendName, avatarUrl: backendAvatarUrl } = await authApi.login(cleanEmail, cleanPassword);
       
-      // Giả lập lưu currentUser để tương thích giao diện cũ
-      let user = accounts['participant'];
-      if (role === 'ADMIN' || role === 'STAFF') user = accounts['admin'];
-      else if (role === 'GUEST_JUDGE' || role === 'JUDGE') user = accounts['alan'];
-      else if (role === 'LECTURER' || role === 'MENTOR') user = accounts['david'];
-      
-      // Override with actual backend name if available
-      if (backendName) {
-        user = { ...user, name: backendName };
-      } else if (localStorage.getItem('userName')) {
-        user = { ...user, name: localStorage.getItem('userName') };
-      }
-
-      // Override with actual avatar if available
-      if (backendAvatarUrl) {
-        user = { ...user, avatarUrl: backendAvatarUrl };
-      } else if (localStorage.getItem('avatarUrl')) {
-        user = { ...user, avatarUrl: localStorage.getItem('avatarUrl') };
-      }
-      
-      localStorage.setItem('currentUser', JSON.stringify(user));
+      // Build currentUser from real data only — no mock identities.
+      const type = (role === 'ADMIN' || role === 'STAFF') ? 'admin'
+        : (role === 'STUDENT') ? 'participant' : 'expert';
+      const name = backendName || localStorage.getItem('userName') || cleanEmail;
+      const avatarUrl = backendAvatarUrl || localStorage.getItem('avatarUrl')
+        || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1F4E79&color=fff`;
+      localStorage.setItem('currentUser', JSON.stringify({ name, type, avatarUrl, avatar: avatarUrl }));
 
       // Navigate based on actual role returned from Spring Boot
       if (role === 'ADMIN') navigate('/admin/dashboard');
