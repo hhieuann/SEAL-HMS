@@ -44,6 +44,8 @@ class ScoreServiceTest {
     private RoundRankingRepository roundRankingRepository;
     @Mock
     private com.fpt.seal.hms.team.TeamRepository teamRepository;
+    @Mock
+    private com.fpt.seal.hms.lecturer.LecturerRepository lecturerRepository;
     @InjectMocks
     private ScoreService scoreService;
 
