@@ -14,6 +14,7 @@ public record TrackAssignmentResponse(
         String lecturerEmail,
         String department,
         AssignmentRole role,
+        Boolean scoringCompleted,
         LocalDateTime createdAt) {
 
     public static TrackAssignmentResponse from(TrackAssignment a) {
@@ -26,6 +27,7 @@ public record TrackAssignmentResponse(
                 a.getLecturer().getAccount().getEmail(),
                 a.getLecturer().getDepartment(),
                 a.getRole(),
+                a.getScoringCompleted(),
                 a.getCreatedAt());
     }
 }

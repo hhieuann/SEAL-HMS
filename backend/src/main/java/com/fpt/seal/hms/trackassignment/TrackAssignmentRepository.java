@@ -11,9 +11,13 @@ public interface TrackAssignmentRepository extends JpaRepository<TrackAssignment
 
     List<TrackAssignment> findByTrack_Id(Long trackId);
 
+    List<TrackAssignment> findByTrack_Event_Id(Long eventId);
+
     List<TrackAssignment> findByLecturer_Id(Long lecturerId);
 
     List<TrackAssignment> findByLecturer_Account_Email(String email);
+
+    java.util.Optional<TrackAssignment> findByTrack_IdAndLecturer_Account_EmailAndRole(Long trackId, String email, AssignmentRole role);
 
     boolean existsByTrack_IdAndLecturer_IdAndRole(Long trackId, Long lecturerId, AssignmentRole role);
 

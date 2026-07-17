@@ -84,4 +84,12 @@ public class TrackAssignmentService {
         }
         assignmentRepository.deleteById(assignmentId);
     }
+
+    @Transactional
+    public void completeScoring(Long trackId, String email) {
+        TrackAssignment assignment = assignmentRepository.findByTrack_IdAndLecturer_Account_EmailAndRole(trackId, email, com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE)
+                .orElseThrow(() -> new ResourceNotFoundException("Judge assignment not found for this track and email"));
+        assignment.setScoringCompleted(true);
+        assignmentRepository.save(assignment);
+    }
 }

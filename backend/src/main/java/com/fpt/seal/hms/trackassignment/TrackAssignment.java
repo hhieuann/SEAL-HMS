@@ -41,4 +41,7 @@ public class TrackAssignment {
     @CreatedDate
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "scoring_completed", nullable = false)
+    private Boolean scoringCompleted = false;
 }
