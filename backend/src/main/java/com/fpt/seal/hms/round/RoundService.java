@@ -114,6 +114,15 @@ public class RoundService {
         
         if (newStatus == RoundStatus.ACTIVE && currentStatus == RoundStatus.CREATED) {
             round.setStartTime(java.time.LocalDateTime.now());
+            
+            // Reset scoringCompleted for all judges when a new round starts
+            List<TrackAssignment> assignments = trackAssignmentRepository.findByTrack_Event_Id(round.getEvent().getId());
+            for (TrackAssignment assignment : assignments) {
+                if (assignment.getRole() == AssignmentRole.JUDGE) {
+                    assignment.setScoringCompleted(false);
+                }
+            }
+            trackAssignmentRepository.saveAll(assignments);
         }
 
         // When moving to SCORING, disqualify teams that did not submit
@@ -126,19 +135,45 @@ public class RoundService {
             validateScoringComplete(round);
         }
 
+        // Eliminate teams that were not promoted when completing the round
+        if (currentStatus == RoundStatus.UNDER_REVIEW && newStatus == RoundStatus.COMPLETED) {
+            eliminateNonPromotedTeams(round);
+        }
+
         round.setStatus(newStatus);
         return mapToResponse(roundRepository.save(round));
     }
 
     private void disqualifyTeamsWithoutSubmission(Round round) {
+        List<com.fpt.seal.hms.team.entity.Team> eventTeams = teamRepository.findByEventId(round.getEvent().getId());
+        for (com.fpt.seal.hms.team.entity.Team team : eventTeams) {
+            if (team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.REGISTERED ||
+                team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.CONFIRMED ||
+                team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.IN_PROGRESS) {
+                
+                if (team.getTrack() != null) {
+                    boolean hasSubmission = roundRankingRepository.findByRoundIdAndTeamId(round.getId(), team.getId()).isPresent();
+                    if (!hasSubmission) {
+                        team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED);
+                        team.setIsDisqualified(true);
+                        team.setDisqualificationReason("No submission received by round deadline");
+                        teamRepository.save(team);
+                    }
+                }
+            }
+        }
+    }
+
+    private void eliminateNonPromotedTeams(Round round) {
         List<RoundRanking> rankings = roundRankingRepository.findByRoundId(round.getId());
         for (RoundRanking rr : rankings) {
-            boolean hasSubmission = submissionRepository.findByRoundRankingId(rr.getId()).isPresent();
             com.fpt.seal.hms.team.entity.Team team = rr.getTeam();
-            if (!hasSubmission && (team.getIsDisqualified() == null || !team.getIsDisqualified())) {
-                team.setIsDisqualified(true);
-                team.setDisqualificationReason("No submission received by round deadline");
-                teamRepository.save(team);
+            if (rr.getIsPromoted() == null || !rr.getIsPromoted()) {
+                if (team.getStatus() != com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED && 
+                    team.getStatus() != com.fpt.seal.hms.common.enums.TeamStatus.DISQUALIFIED) {
+                    team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED);
+                    teamRepository.save(team);
+                }
             }
         }
     }
@@ -193,13 +228,11 @@ public class RoundService {
                 continue;
             }
 
-            // Check that each judge has scored all criteria for this submission
+            // Check that each judge has explicitly clicked "Complete Scoring"
             for (TrackAssignment ja : judgeAssignments) {
-                Long judgeAccountId = ja.getLecturer().getAccount().getId();
-                long scoreCount = scoreRepository.findBySubmissionIdAndJudgeAccountId(submission.getId(), judgeAccountId).size();
-                if (scoreCount < criteriaCount) {
+                if (ja.getScoringCompleted() == null || !ja.getScoringCompleted()) {
                     String judgeName = ja.getLecturer().getFullName() != null ? ja.getLecturer().getFullName() : ja.getLecturer().getAccount().getEmail();
-                    unscoredTeams.add(rr.getTeam().getName() + " (Judge \"" + judgeName + "\" scored " + scoreCount + "/" + criteriaCount + " criteria)");
+                    unscoredTeams.add(rr.getTeam().getName() + " (Judge \"" + judgeName + "\" chưa bấm hoàn thành chấm bài)");
                 }
             }
         }
@@ -222,6 +255,10 @@ public class RoundService {
     }
 
     private void validateOneWayStatusTransition(RoundStatus current, RoundStatus next) {
+        if (next == RoundStatus.CREATED) {
+            return; // Allow resetting to CREATED for Draw Resets
+        }
+        
         boolean isValid = false;
         switch (current) {
             case CREATED:

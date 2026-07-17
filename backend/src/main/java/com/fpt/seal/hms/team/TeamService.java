@@ -251,8 +251,14 @@ public class TeamService {
         team.setIsDisqualified(disqualified);
         if (disqualified) {
             team.setDisqualificationReason(reason);
+            team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.DISQUALIFIED);
         } else {
             team.setDisqualificationReason(null);
+            // When requalifying, if they were eliminated or disqualified, bring them back to IN_PROGRESS
+            if (team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.DISQUALIFIED || 
+                team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED) {
+                team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.IN_PROGRESS);
+            }
         }
         return mapToResponse(teamRepository.save(team));
     }
@@ -345,6 +351,10 @@ public class TeamService {
         List<Team> teams = teamRepository.findByEventId(eventId);
         for (Team team : teams) {
             team.setMentor(null);
+            List<com.fpt.seal.hms.team.entity.MentorMessage> msgs = mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(team.getId());
+            if (!msgs.isEmpty()) {
+                mentorMessageRepository.deleteAll(msgs);
+            }
         }
         teamRepository.saveAll(teams);
     }
