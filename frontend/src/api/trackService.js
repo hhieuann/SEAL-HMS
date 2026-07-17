@@ -59,5 +59,20 @@ export const trackService = {
   deleteTrack: async (id) => {
     const response = await apiClient.delete(`/api/v1/tracks/${id}`);
     return response.data;
+  },
+
+  completeScoring: async (trackId) => {
+    const response = await apiClient.post(`/api/v1/tracks/${trackId}/complete-scoring`);
+    return response.data;
+  },
+
+  getEventAssignments: async (eventId) => {
+    const response = await apiClient.get(`/api/v1/events/${eventId}/assignments`);
+    return response.data?.data || [];
+  },
+
+  getMyAssignments: async () => {
+    const response = await apiClient.get(`/api/v1/users/me/assignments`);
+    return response.data?.data || [];
   }
 };

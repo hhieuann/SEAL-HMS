@@ -4,6 +4,7 @@ import { Shuffle, CheckCircle, AlertCircle, ChevronRight, Users, Tag, Lock, Unlo
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { trackService } from '../../api/trackService';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const TrackDraw = () => {
   const navigate = useNavigate();
@@ -17,12 +18,14 @@ const TrackDraw = () => {
   const [activeTeamsList, setActiveTeamsList] = useState([]);
   const [topicDrawn, setTopicDrawn] = useState(false);
   const [teamsAssigned, setTeamsAssigned] = useState(false);
-  const parsedInitEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+  const parsedInitEventId = parseInt(eventId);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [toast, setToast] = useState('');
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
+  const [resetModal, setResetModal] = useState(false);
 
   const trackColors = [
     { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
@@ -34,7 +37,7 @@ const TrackDraw = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        const parsedEventId = parseInt(eventId);
         const eventRes = await eventService.getEventDetails(parsedEventId);
         const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
         
@@ -126,7 +129,13 @@ const TrackDraw = () => {
 
   const handleDrawTopics = () => {
     if (isLocked) {
-      alert("Track Draw is locked during the Registration phase.");
+      setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
       return;
     }
     setDrawing(true);
@@ -148,7 +157,13 @@ const TrackDraw = () => {
   // Step 2: Random assign teams to tracks
   const handleAssignTeams = () => {
     if (isLocked) {
-      alert("Track Draw is locked during the Registration phase.");
+      setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
       return;
     }
     setDrawing(true);
@@ -186,13 +201,13 @@ const TrackDraw = () => {
     
     setDrawing(true);
     try {
-      const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      const parsedEventId = parseInt(eventId);
       
       // 1. Create Tracks in DB and Assign Topics
       for (const track of tracks) {
         if (!track.id || track.id.toString().startsWith('T')) {
           const trackPayload = { name: track.name, description: 'Generated during Track Draw' };
-          const createdTrack = await trackService.createTrack(targetEventId, trackPayload);
+          const createdTrack = await trackService.createTrack(parsedEventId, trackPayload);
           const dbTrack = createdTrack.data;
           
           if (dbTrack && track.subTopic && track.subTopic.id) {
@@ -212,8 +227,8 @@ const TrackDraw = () => {
       }
 
       setConfirmed(true);
-      localStorage.setItem(`trackDrawConfirmed_${targetEventId}`, 'true');
-      localStorage.setItem(`trackDraw_${targetEventId}`, JSON.stringify(tracks));
+      localStorage.setItem(`trackDrawConfirmed_${parsedEventId}`, 'true');
+      localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(tracks));
       
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
@@ -230,32 +245,54 @@ const TrackDraw = () => {
 
   const handleResetDraw = async () => {
     if (isLocked) {
-      alert("Track Draw is locked during the Registration phase.");
-      return;
-    }
-    if (!window.confirm('Reset the draw? This will delete all Tracks for this event from the Database and allow a new draw.')) return;
-    const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
+        return;
+      }
+      setResetModal(true);
+  };
+
+  const executeResetDraw = async () => {
+    const parsedEventId = parseInt(eventId);
     
     try {
       // Delete all existing tracks (which unassigns topics and teams due to CASCADE or logic)
-      const existingTracks = await trackService.getTracksByEvent(targetEventId);
+      const existingTracks = await trackService.getTracksByEvent(parsedEventId);
       for (const t of (existingTracks.data || [])) {
-         await trackService.deleteTrack(t.id);
+         try { await trackService.deleteTrack(t.id); } catch(e) { console.warn('Failed to delete track', e); }
       }
       
       // Also reset mentors for all teams in the event
-      await teamService.resetMentorsByEvent(targetEventId);
+      try { await teamService.resetMentorsByEvent(parsedEventId); } catch(e) { console.warn('Failed to reset mentors', e); }
+      
+      // Wipe out all submissions, scores, and round rankings for a clean slate
+      try { await eventService.resetEventData(parsedEventId); } catch(e) { console.warn('Failed to reset event submissions and scores', e); }
+      
+      // Roll back all rounds to CREATED status
+      const roundsRes = await eventService.getEventDetails(parsedEventId);
+      const rounds = roundsRes?.data?.rounds || [];
+      for (const round of rounds) {
+        if (round.status !== 'CREATED' && round.status !== 'PLANNED') {
+          try { await eventService.updateRoundStatus(round.id, 'CREATED'); } catch(e) { console.warn('Failed to update round', e); }
+        }
+      }
+      
     } catch(e) {
       console.error(e);
-      alert('Failed to clear database tracks: ' + e.message);
-      return;
+      showToast('Encountered an issue during reset: ' + e.message, 'warning');
     }
 
     setConfirmed(false);
     setTopicDrawn(false);
     setTeamsAssigned(false);
-    localStorage.removeItem(`trackDrawConfirmed_${targetEventId}`);
-    localStorage.removeItem(`trackDraw_${targetEventId}`);
+    setStep(1);
+    localStorage.removeItem(`trackDrawConfirmed_${parsedEventId}`);
+    localStorage.removeItem(`trackDraw_${parsedEventId}`);
     
     // Re-initialize for Draw
     const initTracks = subTopics.map((st, i) => ({
@@ -542,6 +579,29 @@ const TrackDraw = () => {
         .spin { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
+
+      <ConfirmModal
+        isOpen={modalConfig.isOpen}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        confirmText="Proceed"
+        cancelText="Cancel"
+        type={modalConfig.type}
+      />
+
+      <ConfirmModal
+        isOpen={resetModal}
+        onClose={() => setResetModal(false)}
+        onConfirm={executeResetDraw}
+        title="DANGER: Reset Draw"
+        message="Are you absolutely sure you want to reset the draw? This action CANNOT be undone. It will DELETE all Tracks, all Submissions, all Scores, and all Rankings for this entire Event."
+        confirmText="Yes, delete everything"
+        cancelText="Cancel"
+        type="error"
+        requireInput="RESET"
+      />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useParams } from 'react-router-dom';
 import { Search, Filter, Users, Star, TrendingUp, Code, Zap, Globe, Shield, ChevronRight, X, ExternalLink, Monitor, Trophy } from 'lucide-react';
 
@@ -141,21 +142,17 @@ const PerformingTeams = () => {
   }, [eventId]);
 
   const handleStatusChange = async (teamId, newStatus) => {
-    const teamName = teams.find(t => t.id === teamId)?.name || `#${teamId}`;
-    if (!window.confirm(`Change status of team "${teamName}" to ${newStatus}?`)) return;
     try {
       const { teamService } = await import('../../api/teamService.js');
       await teamService.updateTeamStatus(teamId, newStatus);
       setTeams(prev => prev.map(t => t.id === teamId ? { ...t, status: newStatus } : t));
     } catch (err) {
       console.error("Failed to update team status via real API", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      showToast('Error: ' + (err.response?.data?.message || err.message), 'error');
     }
   };
 
   const handleRandomAssign = async (teamId) => {
-    const teamName = teams.find(t => t.id === teamId)?.name || `#${teamId}`;
-    if (!window.confirm(`Randomly assign team "${teamName}" to a track and topic? This may replace its current assignment.`)) return;
     try {
       const { teamService } = await import('../../api/teamService.js');
       const res = await teamService.randomAssign(teamId, 1);
@@ -180,10 +177,10 @@ const PerformingTeams = () => {
         }));
       }
       
-      alert("Team successfully assigned to a random track & topic!");
+      showToast('Team successfully assigned to a random track & topic!', 'success');
     } catch (err) {
       console.error("Failed to assign random track", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      showToast('Error: ' + (err.response?.data?.message || err.message), 'error');
     }
   };
 
@@ -278,7 +275,10 @@ const PerformingTeams = () => {
     const matchesSearch =
       team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (team.project || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'All' || team.status === filterStatus;
+    const matchesStatus = filterStatus === 'All' || 
+      (filterStatus === 'Pending' && team.status === 'CREATED') ||
+      (filterStatus === 'Active' && ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status)) ||
+      (filterStatus === 'Eliminated' && ['ELIMINATED', 'DISQUALIFIED', 'REJECTED', 'WITHDRAWN'].includes(team.status));
     return matchesSearch && matchesStatus;
   });
 
@@ -290,9 +290,6 @@ const PerformingTeams = () => {
           <p className="page-subtitle">Monitor and manage all participating teams ({teams.length} total)</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary">
-            <Filter size={18} /> Export Data
-          </button>
         </div>
       </div>
 
@@ -329,7 +326,7 @@ const PerformingTeams = () => {
         <div className="teams-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
           {filteredTeams.map(team => (
             <div key={team.id} className="team-card glass-panel" style={{ padding: '24px', borderRadius: '16px', transition: 'transform 0.2s ease, box-shadow 0.2s ease', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: team.status === 'Active' ? 'var(--primary)' : 'var(--text-secondary)' }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? 'var(--primary)' : 'var(--text-secondary)' }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -344,8 +341,8 @@ const PerformingTeams = () => {
                   </div>
                 </div>
                 <div style={{ 
-                  background: ['REGISTERED', 'APPROVED'].includes(team.status) ? 'rgba(16,185,129,0.1)' : team.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
-                  color: ['REGISTERED', 'APPROVED'].includes(team.status) ? '#10b981' : team.status === 'CREATED' ? '#f59e0b' : '#ef4444', 
+                  background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? 'rgba(16,185,129,0.1)' : team.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
+                  color: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? '#10b981' : team.status === 'CREATED' ? '#f59e0b' : '#ef4444', 
                   padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' 
                 }}>
                   {team.status}
@@ -412,7 +409,7 @@ const PerformingTeams = () => {
                   <span style={{ fontSize: '13px', padding: '4px 12px', background: 'rgba(59,130,246,0.1)', color: selectedTeam.trackColor, borderRadius: '20px', fontWeight: '600' }}>
                     {selectedTeam.track}
                   </span>
-                  <span style={{ fontSize: '13px', padding: '4px 12px', background: ['REGISTERED', 'APPROVED'].includes(selectedTeam.status) ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: ['REGISTERED', 'APPROVED'].includes(selectedTeam.status) ? 'var(--success)' : 'var(--danger)', borderRadius: '20px', fontWeight: '600' }}>
+                  <span style={{ fontSize: '13px', padding: '4px 12px', background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) ? 'rgba(16,185,129,0.1)' : selectedTeam.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', color: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) ? 'var(--success)' : selectedTeam.status === 'CREATED' ? '#f59e0b' : 'var(--danger)', borderRadius: '20px', fontWeight: '600' }}>
                     {selectedTeam.status}
                   </span>
                   {selectedTeam.isDisqualified && (
@@ -422,7 +419,7 @@ const PerformingTeams = () => {
                   )}
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Invite: <code>{selectedTeam.inviteCode}</code></span>
                   
-                  {['REGISTERED', 'APPROVED'].includes(selectedTeam.status) && (!selectedTeam.track || selectedTeam.track === 'Not assigned') && (
+                  {['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) && (!selectedTeam.track || selectedTeam.track === 'Not assigned') && (
                     <button 
                       onClick={() => handleRandomAssign(selectedTeam.id)}
                       className="btn btn-primary btn-sm" 

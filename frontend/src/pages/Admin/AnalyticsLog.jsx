@@ -161,7 +161,7 @@ const AnalyticsLog = () => {
                   {entry.detail && (
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{entry.detail}</div>
                   )}
-                  <div style={{ fontSize: '11px', color: 'var(--bg-active)' }}>{entry.time}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{entry.time}</div>
                 </div>
               </div>
             ))}

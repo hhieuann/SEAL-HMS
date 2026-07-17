@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download, Gavel } from 'lucide-react';
 import { teamService } from '../../api/teamService';
+import ConfirmModal from '../../components/ConfirmModal';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
 
@@ -13,16 +14,19 @@ const RoundTransition = () => {
   const [lockShaking, setLockShaking] = useState(false);
   const [lockToast, setLockToast] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [resolvedTies, setResolvedTies] = useState({});
+  const [selectedTeams, setSelectedTeams] = useState(new Set());
   const [activeTrack, setActiveTrack] = useState(null);
 
   const [event, setEvent] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
+  const [showManualAdvanceModal, setShowManualAdvanceModal] = useState(false);
+  const [manualOverrideList, setManualOverrideList] = useState([]);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [viewRoundIndex, setViewRoundIndex] = useState(-1);
   const [trackStandings, setTrackStandings] = useState([]);
-  const [hasJudges, setHasJudges] = useState(false); // Default false: strict block until API confirms
+  const [startRoundError, setStartRoundError] = useState(null);
 
   // Penalty Modal State
   const [showPenaltyModal, setShowPenaltyModal] = useState(false);
@@ -45,15 +49,7 @@ const RoundTransition = () => {
         const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
         const eventRes = await eventService.getEventDetails(parsedEventId);
         
-        // Fetch judge assignments to validate starting rounds
-        try {
-          const { adminApi } = await import('../../api/adminApi.js');
-          const assignments = await adminApi.getEventAssignments(parsedEventId);
-          const judges = assignments.filter(a => a.role === 'JUDGE');
-          setHasJudges(judges.length > 0);
-        } catch (e) {
-          console.warn("Could not load assignments", e);
-        }
+        // We will validate assignments after fetching tracks and teams
         const evt = eventRes.data;
         setEvent(evt);
         if (evt && (evt.status === 'CREATED' || evt.status === 'UPCOMING')) {
@@ -61,11 +57,8 @@ const RoundTransition = () => {
         }
 
         let rounds = evt.rounds || [];
-        // Sort rounds chronologically or by ID to prevent inverted UI
-        rounds.sort((a, b) => {
-          if (a.startTime && b.startTime) return new Date(a.startTime) - new Date(b.startTime);
-          return a.id - b.id;
-        });
+        // Sort rounds chronologically by roundSeq
+        rounds.sort((a, b) => (a.roundSeq || 0) - (b.roundSeq || 0));
         evt.rounds = rounds; // Ensure the sorted array is used everywhere
 
         let savedRoundIdx = 0;
@@ -121,6 +114,35 @@ const RoundTransition = () => {
           const { trackService } = await import('../../api/trackService.js');
           dbTracks = (await trackService.getTracksByEvent(parsedEventId))?.data || [];
         } catch (e) {}
+
+        // Validate starting rounds (check judges for tracks, and mentors for teams)
+        try {
+          const { adminApi } = await import('../../api/adminApi.js');
+          const assignments = await adminApi.getEventAssignments(parsedEventId);
+          
+          let errorMsg = null;
+          // Check if every track has at least one judge
+          for (const track of dbTracks) {
+            const hasJudge = assignments.some(a => a.trackId === track.id && a.role === 'JUDGE');
+            if (!hasJudge) {
+              errorMsg = `Cannot start round: Track "${track.name}" is missing a judge. Please assign at least one judge to every track.`;
+              break;
+            }
+          }
+
+          if (!errorMsg) {
+             // Check if every team has a mentor
+             for (const team of teamsList) {
+               if (!team.mentor) {
+                 errorMsg = `Cannot start round: Team "${team.name}" is missing a mentor. Please assign a mentor to every participating team.`;
+                 break;
+               }
+             }
+          }
+          setStartRoundError(errorMsg);
+        } catch (e) {
+          console.warn("Could not validate assignments", e);
+        }
         
         const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
         let baseDraw = null;
@@ -160,23 +182,11 @@ const RoundTransition = () => {
               return b.score - a.score;
             });
 
-            // Assign rank and detect ties at the cutoff.
+            // Assign rank
             const roundObj = evt.rounds?.[activeIdx];
-            const promotionTopN = roundObj?.promotionTopN ?? teamEntries.length;
-            const cutoff = promotionTopN;
             const ranked = teamEntries.map((entry, idx) => {
               const rank = idx + 1;
-              const cutoffScore = teamEntries[cutoff - 1]?.score;
-              const belowCutoffScore = teamEntries[cutoff]?.score;
-              const isTiedAtCutoff = cutoffScore !== null && belowCutoffScore !== null
-                && cutoffScore === belowCutoffScore
-                && (idx === cutoff - 1 || idx === cutoff);
-
-              let status = idx < cutoff ? 'advance' : 'eliminate';
-              if (isTiedAtCutoff) status = 'tiebreak';
-              if (entry.isDisqualified) status = 'eliminate';
-
-              return { rank, team: entry.team, teamId: entry.teamId, score: entry.score, penalty: entry.penalty, penaltyReason: entry.penaltyReason, isDisqualified: entry.isDisqualified, status, tied: isTiedAtCutoff };
+              return { rank, team: entry.team, teamId: entry.teamId, score: entry.score, penalty: entry.penalty, penaltyReason: entry.penaltyReason, isDisqualified: entry.isDisqualified };
             });
 
             return {
@@ -203,9 +213,10 @@ const RoundTransition = () => {
   const currentRound = rounds[currentRoundIndex] || null;
   const nextRound = rounds[currentRoundIndex + 1] || null;
   const isLastRound = !nextRound;
+  const isFinalsMode = isLastRound && currentRoundIndex > 0;
 
-  // If finals (last round): flatten all teams into one list (no tracks)
-  const finalsTeamList = isLastRound
+  // If finals (last round AND not the first round): flatten all teams into one list (no tracks)
+  const finalsTeamList = isFinalsMode
     ? trackStandings.flatMap(track =>
         track.teams.map(t => ({ ...t, fromTrack: track.name }))
       ).sort((a, b) => {
@@ -215,23 +226,11 @@ const RoundTransition = () => {
       }).map((t, i) => ({ ...t, rank: i + 1 }))
     : [];
 
-  const tiebreakerTeams = trackStandings.flatMap(track =>
-    track.teams.filter(t => t.status === 'tiebreak').map(t => ({ ...t, trackId: track.id, trackName: track.name }))
-  );
-  const allTiesResolved = tiebreakerTeams.every(t => resolvedTies[t.team]);
-
   const handleComputeStandings = async () => {
     if (!currentRound) return;
     try {
       const { standingsService } = await import('../../api/scoreService.js');
-      // Pass the manually resolved teams as promotedTeamIds
-      const manuallyPromoted = Object.entries(resolvedTies)
-        .filter(([_, status]) => status === 'Advanced')
-        .map(([teamName]) => {
-          const team = trackStandings.flatMap(t => t.teams).find(t => t.team === teamName);
-          return team?.teamId;
-        })
-        .filter(Boolean);
+      const manuallyPromoted = Array.from(selectedTeams);
 
       await standingsService.computeRoundRanking(currentRound.id, manuallyPromoted);
       alert('Round rankings computed successfully and saved to database!');
@@ -240,12 +239,12 @@ const RoundTransition = () => {
     }
   };
 
-  const openPenaltyModal = (teamId, isDisqualified = false) => {
+  const openPenaltyModal = (teamId) => {
     let t = trackStandings.flatMap(ts => ts.teams).find(x => x.teamId === teamId);
     if (!t) t = finalsTeamList.find(x => x.teamId === teamId);
 
     setPenaltyTeamId(teamId);
-    setPenaltyAction(isDisqualified ? 'requalify' : 'deduct');
+    setPenaltyAction('deduct');
     setPenaltyPoints(t?.penalty || '');
     setPenaltyReason(t?.penaltyReason || '');
     setDisqualificationReason('');
@@ -277,9 +276,6 @@ const RoundTransition = () => {
       if (penaltyAction === 'disqualify') {
         await teamService.disqualifyTeam(penaltyTeamId, true, disqualificationReason);
         showToast("Team disqualified successfully!");
-      } else if (penaltyAction === 'requalify') {
-        await teamService.disqualifyTeam(penaltyTeamId, false, '');
-        showToast("Team re-qualified successfully!");
       } else {
         const parsedPoints = parseFloat(penaltyPoints) || 0;
         await teamService.applyPenalty(penaltyTeamId, currentRound.id, { 
@@ -321,131 +317,206 @@ const RoundTransition = () => {
     document.body.removeChild(link);
   };
 
-  const handleLock = async () => {
-    if (isLocked) {
-      alert("Round transitions are locked during the Registration phase. Please wait until registration ends and the event begins.");
-      return;
+  // Helper for advancing round
+  const proceedWithAdvance = async (currentRoundObj) => {
+    setConfirmed(true);
+    setLockToast(true);
+    
+    const promotedTeamIds = Array.from(selectedTeams);
+    
+    // Compute round ranking in backend before advancing (sets promoted flags)
+    try {
+      await standingsService.computeRoundRanking(currentRoundObj.id, promotedTeamIds);
+    } catch (e) {
+      console.error('Failed to compute round ranking:', e);
     }
-    if (tiebreakerTeams.length > 0 && !allTiesResolved) {
+
+    const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
+    const startIdx = statuses.indexOf(currentRoundObj.status);
+    if (startIdx !== -1) {
+      for (let i = startIdx + 1; i <= statuses.indexOf('COMPLETED'); i++) {
+         await eventService.updateRoundStatus(currentRoundObj.id, statuses[i]);
+      }
+    } else {
+      await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
+    }
+
+    if (!isLastRound) {
+      // Build next round track draw (only keep advanced teams)
+      const nextRoundDraw = trackStandings.map(track => {
+        const advancedTeams = track.teams
+          .filter(t => selectedTeams.has(t.teamId))
+          .map(t => t.team);
+        return { ...track, teams: advancedTeams };
+      });
+      const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(nextRoundDraw));
+      
+      const nextRoundObj = event?.rounds?.[currentRoundIndex + 1];
+      if (nextRoundObj) {
+         await eventService.updateRoundStatus(nextRoundObj.id, 'ACTIVE');
+      }
+      
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    }
+  };
+
+  const handleShowResults = async () => {
+    const currentRoundObj = event?.rounds?.[currentRoundIndex];
+    if (!currentRoundObj) return;
+
+    if (trackStandings.length === 0 && !isLastRound) {
       setLockError(true);
       setLockShaking(true);
       setTimeout(() => setLockShaking(false), 500);
+      setModalConfig({ isOpen: true, title: 'Missing Tracks', message: 'Cannot show results: Track Draw is missing. Please ensure tracks are set up.', onConfirm: null, type: 'warning' });
       return;
     }
-    setLockError(false);
-    
+
+    // Check if all judges have completed scoring
     try {
-        const currentRoundObj = rounds[currentRoundIndex];
-        // If the current round hasn't started yet, we START it.
+      const parsedEvId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      const { adminApi } = await import('../../api/adminApi.js');
+      const allAssignments = await adminApi.getEventAssignments(parsedEvId);
+      const judgeAssignments = allAssignments.filter(a => a.role === 'JUDGE');
+      const incompleteJudges = judgeAssignments.filter(a => !a.scoringCompleted);
+      
+      if (incompleteJudges.length > 0) {
+        const details = incompleteJudges.map(j => 
+          `• "${j.lecturerFullName || j.lecturerEmail}" (Track: ${j.trackName || j.trackId})`
+        ).join('\n');
+        setLockError(true);
+        setLockShaking(true);
+        setTimeout(() => setLockShaking(false), 500);
+        setModalConfig({ 
+          isOpen: true, 
+          title: 'Judges have not completed scoring', 
+          message: `Cannot show results: The following judge(s) have not clicked "Complete Scoring" yet:\n\n${details}\n\nPlease wait for all judges to finalize their scores before proceeding.`, 
+          onConfirm: null, 
+          type: 'warning' 
+        });
+        return;
+      }
+    } catch (e) {
+      console.warn('Could not validate judge scoring completion', e);
+    }
+
+    setModalConfig({
+      isOpen: true,
+      title: 'Show Results',
+      message: 'Compute round rankings and proceed to manual team selection?',
+      onConfirm: async () => {
+        try {
+          const { standingsService } = await import('../../api/scoreService.js');
+          await standingsService.computeRoundRanking(currentRoundObj.id, []);
+          await eventService.updateRoundStatus(currentRoundObj.id, 'UNDER_REVIEW');
+          window.location.reload();
+        } catch (err) {
+          console.error("Error updating round status", err);
+          showToast('Failed to update round status', 'error');
+        }
+      },
+      type: 'warning'
+    });
+  };
+
+  const handleLock = async () => {
+    if (confirmed) return;
+    const currentRoundObj = event?.rounds?.[currentRoundIndex];
+    if (!currentRoundObj) return;
+
+    try {
         if (currentRoundObj.status === 'CREATED' || currentRoundObj.status?.toLowerCase() === 'planned') {
-          if (!hasJudges) {
+          if (startRoundError) {
             setLockError(true);
             setLockShaking(true);
             setTimeout(() => setLockShaking(false), 500);
-            alert("Cannot start round: No judges have been assigned to tracks yet. Please assign judges in the Track Assignment menu first.");
+            setModalConfig({ isOpen: true, title: 'Start round incomplete', message: startRoundError, onConfirm: null, type: 'warning' });
             return;
           }
-          if (!window.confirm(`Start "${currentRoundObj.name}"? Teams will be able to submit once the round is active.`)) return;
-          await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
-          window.location.reload();
+
+          setModalConfig({
+            isOpen: true,
+            title: 'Start Round',
+            message: `Are you sure you want to start "${currentRoundObj.name}"? Submissions will be opened for teams.`,
+            onConfirm: async () => {
+              await eventService.updateRoundStatus(currentRoundObj.id, 'ACTIVE');
+              window.location.reload();
+            },
+            type: 'warning'
+          });
           return;
         }
 
         // If the current round is ACTIVE, we END it for scoring.
         if (currentRoundObj.status === 'ACTIVE') {
-          if (!window.confirm(`Close submissions for "${currentRoundObj.name}" and move to scoring? Teams will no longer be able to submit.`)) return;
-          await eventService.updateRoundStatus(currentRoundObj.id, 'SCORING');
-          window.location.reload();
+          setModalConfig({
+            isOpen: true,
+            title: 'End Round',
+            message: `Close submissions for "${currentRoundObj.name}" and move to scoring? Teams will no longer be able to submit.`,
+            onConfirm: async () => {
+              await eventService.updateRoundStatus(currentRoundObj.id, 'SCORING');
+              window.location.reload();
+            },
+            type: 'warning'
+          });
           return;
         }
 
-        // Otherwise (SCORING or UNDER_REVIEW), validate scores before advancing to next round (COMPLETED)
-        // Check if any team has null or 0 score
-        const hasMissingScores = isLastRound
-          ? finalsTeamList.some(t => t.score == null || t.score === 0)
-          : trackStandings.some(track => track.teams.some(t => t.score == null || t.score === 0));
-        
-        if (trackStandings.length === 0 || hasMissingScores) {
-          setLockError(true);
-          setLockShaking(true);
-          setTimeout(() => setLockShaking(false), 500);
-          alert("Cannot advance/finalize: Some teams have not been scored yet (score is 0), or Track Draw is missing. Please ensure Judges have finished grading all teams.");
+        // Advance to next round (from UNDER_REVIEW to COMPLETED)
+        if (currentRoundObj.status === 'UNDER_REVIEW' || isLastRound) {
+          const promotionTopN = currentRoundObj.promotionTopN || 0;
+          const targetCount = promotionTopN * trackStandings.length;
+          const selectedCount = selectedTeams.size;
+
+          if (!isLastRound && selectedCount > targetCount) {
+             setLockError(true);
+             setLockShaking(true);
+             setTimeout(() => setLockShaking(false), 500);
+             setModalConfig({
+               isOpen: true,
+               title: 'Error: Too many teams selected',
+               message: `You have selected ${selectedCount} teams, but the maximum quota is only ${targetCount} teams (${promotionTopN} teams per track). Please deselect some teams to proceed.`,
+               onConfirm: null,
+               type: 'error'
+             });
+             return;
+          }
+
+          if (!isLastRound && selectedCount < targetCount) {
+             setModalConfig({
+               isOpen: true,
+               title: 'Warning: Missing Teams',
+               message: `Attention: You have only selected ${selectedCount} teams to advance, which is less than the target quota of ${targetCount} teams (${promotionTopN} teams per track). Are you sure you want to force advance with this list?`,
+               onConfirm: async () => {
+                  await proceedWithAdvance(currentRoundObj);
+               },
+               type: 'warning'
+             });
+             return;
+          }
+
+          setModalConfig({
+            isOpen: true,
+            title: isLastRound ? 'Finalize Event' : 'Advance Round',
+            message: isLastRound ? 'Finalize the event results? Rankings will be computed and this cannot be undone.' : `Confirm eliminations and advance ${selectedCount} teams to the next round? Eliminated teams cannot submit anymore.`,
+            onConfirm: async () => {
+               await proceedWithAdvance(currentRoundObj);
+            },
+            type: 'info'
+          });
+        }
+
           return;
-        }
-
-      if (!window.confirm(isLastRound
-          ? 'Finalize the event results? Rankings will be computed and this cannot be undone.'
-          : 'Confirm eliminations and advance to the next round? Eliminated teams cannot submit anymore.')) {
-        return;
-      }
-
-      setConfirmed(true);
-      setLockToast(true);
-
-      // Collect IDs of all teams that advanced
-      let promotedTeamIds = [];
-      if (trackStandings) {
-         trackStandings.forEach(track => {
-            track.teams.forEach(t => {
-               if (t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass')) {
-                  if (t.teamId) promotedTeamIds.push(t.teamId);
-               }
-            });
-         });
-      }
-      
-      // Compute round ranking in backend before advancing (sets promoted flags)
-      try {
-        const manuallyPromoted = Object.entries(resolvedTies)
-          .filter(([_, status]) => status === 'Advanced')
-          .map(([teamName]) => {
-            const team = trackStandings.flatMap(t => t.teams).find(t => t.team === teamName);
-            return team?.teamId;
-          })
-          .filter(Boolean);
-        await standingsService.computeRoundRanking(currentRoundObj.id, manuallyPromoted);
-      } catch (e) {
-        console.error('Failed to compute round ranking:', e);
-      }
-
-      const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
-      const startIdx = statuses.indexOf(currentRoundObj.status);
-      if (startIdx !== -1) {
-        for (let i = startIdx + 1; i <= statuses.indexOf('COMPLETED'); i++) {
-           await eventService.updateRoundStatus(currentRoundObj.id, statuses[i]);
-        }
-      } else {
-        // fallback if somehow status is not found, attempt direct transition
-        await eventService.updateRoundStatus(currentRoundObj.id, 'COMPLETED');
-      }
-
-      if (!isLastRound) {
-        // Build next round track draw (only keep advanced teams)
-        const nextRoundDraw = trackStandings.map(track => {
-          const advancedTeams = track.teams
-            .filter(t => t.status === 'advance' || (t.status === 'tiebreak' && resolvedTies[t.teamId] === 'pass'))
-            .map(t => t.team);
-          return { ...track, teams: advancedTeams };
-        });
-        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-        localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(nextRoundDraw));
-        
-        const nextRoundObj = rounds[currentRoundIndex + 1];
-        if (nextRoundObj) {
-           await eventService.updateRoundStatus(nextRoundObj.id, 'ACTIVE');
-        }
-        
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } else {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      }
     } catch (err) {
        console.error("Error updating round status", err);
-       alert("Failed to update round status");
+       showToast('Failed to update round status', 'error');
     }
   };
 
@@ -475,7 +546,7 @@ const RoundTransition = () => {
       }, 500);
     } catch (err) {
       console.error("Error finalizing event", err);
-      alert("Failed to finalize event");
+      showToast('Failed to finalize event', 'error');
     }
   };
 
@@ -506,7 +577,7 @@ const RoundTransition = () => {
 
           {actualViewIdx === currentRoundIndex && (!isLastRound || currentRound?.status !== 'COMPLETED') && (
             <button
-              onClick={handleLock}
+              onClick={currentRound?.status === 'SCORING' ? handleShowResults : handleLock}
               disabled={confirmed}
               className="btn btn-primary"
               style={{
@@ -523,9 +594,11 @@ const RoundTransition = () => {
                   ? <><ArrowRight size={16} /> Start {currentRound?.name || 'Round'}</>
                   : currentRound?.status === 'ACTIVE'
                     ? <><Lock size={16} /> End {currentRound?.name} for Scoring</>
-                    : isLastRound
-                      ? <><CheckCircle size={16} /> Confirm Results & Publish Scores</>
-                      : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
+                    : currentRound?.status === 'SCORING'
+                      ? <><CheckCircle size={16} /> Show Results</>
+                      : isLastRound
+                        ? <><CheckCircle size={16} /> Confirm Results & Publish Scores</>
+                        : <><ArrowRight size={16} /> Advance to {nextRound?.name || 'Next Round'}</>
               }
             </button>
           )}
@@ -576,64 +649,21 @@ const RoundTransition = () => {
       )}
 
       {/* Lock Error Banner */}
-      {lockError && !allTiesResolved && (
+      {lockError && (
         <div
           className={lockShaking ? 'shake' : ''}
           style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px 20px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '14px', marginBottom: '24px' }}
         >
           <XCircle size={20} color="#ef4444" style={{ flexShrink: 0 }} />
           <div>
-            <div style={{ fontWeight: '600', fontSize: '14px', color: '#ef4444', marginBottom: '2px' }}>Cannot advance round!</div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>There are tied teams at the cutoff. Please resolve via Penalty Evaluation first.</div>
+            <div style={{ fontWeight: '600', fontSize: '14px', color: '#ef4444', marginBottom: '2px' }}>Action Blocked!</div>
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Please review your team selections or check if the round conditions are met.</div>
           </div>
         </div>
       )}
 
-      {/* Tiebreaker Alert */}
-      {tiebreakerTeams.length > 0 && (
-        <div style={{ padding: '24px', background: 'linear-gradient(to right, rgba(245,158,11,0.08), rgba(245,158,11,0.02))', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '16px', marginBottom: '28px', display: 'flex', gap: '20px' }}>
-          <AlertTriangle size={28} color="var(--warning)" style={{ flexShrink: 0, marginTop: '4px' }} />
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: '18px', color: 'var(--warning)', marginBottom: '8px' }}>Tie-break / Penalty Required</h3>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: '1.6' }}>
-              The following teams have <strong>tied scores</strong> at the cutoff. Judges must conduct a rapid evaluation to determine who advances.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {tiebreakerTeams.map((t, i) => (
-                <div key={i} style={{ padding: '16px 20px', background: '#FFFFFF', borderRadius: '12px', border: `1px solid ${resolvedTies[t.team] === 'Advanced' ? 'rgba(16,185,129,0.5)' : resolvedTies[t.team] === 'Eliminated' ? 'rgba(239,68,68,0.3)' : 'rgba(245,158,11,0.4)'}`, display: 'flex', flexDirection: 'column', gap: '16px', transition: 'all 0.3s' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{t.trackName}</div>
-                      <div style={{ fontWeight: '700', fontSize: '15px' }}>{t.team}</div>
-                    </div>
-                    <div style={{ background: 'rgba(245,158,11,0.2)', color: 'var(--warning)', padding: '4px 10px', borderRadius: '8px', fontWeight: '800', fontSize: '14px' }}>
-                      {t.score ?? '—'} pt
-                    </div>
-                  </div>
-                  {resolvedTies[t.team] ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: resolvedTies[t.team] === 'Advanced' ? 'var(--success)' : 'var(--danger)', fontWeight: '600', padding: '10px', background: resolvedTies[t.team] === 'Advanced' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', borderRadius: '8px' }}>
-                      {resolvedTies[t.team] === 'Advanced' ? <CheckCircle size={16} /> : <XCircle size={16} />}
-                      Decision: {resolvedTies[t.team] === 'Advanced' ? 'Advance' : 'Eliminated'}
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      <button onClick={() => setResolvedTies(prev => ({ ...prev, [t.team]: 'Advanced' }))} style={{ flex: 1, padding: '8px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '8px', color: 'var(--success)', fontSize: '13px', cursor: 'pointer', fontWeight: '600', display: 'flex', justifyContent: 'center', gap: '6px' }}>
-                        <CheckCircle size={15} /> Pass
-                      </button>
-                      <button onClick={() => setResolvedTies(prev => ({ ...prev, [t.team]: 'Eliminated' }))} style={{ flex: 1, padding: '8px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: 'var(--danger)', fontSize: '13px', cursor: 'pointer', fontWeight: '600', display: 'flex', justifyContent: 'center', gap: '6px' }}>
-                        <XCircle size={15} /> Fail
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── FINALS MODE: flat list, no tracks ── */}
-      {isLastRound && finalsTeamList.length > 0 && (
+      {/* FINALS MODE: flat list, no tracks */}
+      {isFinalsMode && finalsTeamList.length > 0 && (
         <div className="glass-panel animate-fade-in" style={{ overflow: 'hidden' }}>
           <div style={{ padding: '20px 24px', background: 'linear-gradient(135deg, rgba(245,158,11,0.15), rgba(245,158,11,0.03))', borderBottom: '2px solid var(--warning)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
@@ -650,7 +680,7 @@ const RoundTransition = () => {
           </div>
           <div>
             {finalsTeamList.map((s, i) => {
-              const isFinished = actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED');
+              const isFinished = actualViewIdx < currentRoundIndex || (isLastRound && (currentRound?.status === 'COMPLETED' || currentRound?.status === 'UNDER_REVIEW'));
               return (
               <div key={i} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px', background: isFinished && i < 3 ? 'rgba(245,158,11,0.03)' : 'transparent' }}>
                 {isFinished ? (
@@ -673,15 +703,17 @@ const RoundTransition = () => {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <button 
-                    onClick={() => openPenaltyModal(s.teamId, s.isDisqualified)}
-                    style={{ padding: '4px', background: 'transparent', border: 'none', color: s.isDisqualified ? 'var(--text-secondary)' : 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = s.isDisqualified ? 'var(--success)' : 'var(--danger)'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
-                    title={s.isDisqualified ? "Re-qualify Team" : "Apply Penalty"}
-                  >
-                    <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
-                  </button>
+                  {!s.isDisqualified && (
+                    <button 
+                      onClick={() => openPenaltyModal(s.teamId)}
+                      style={{ padding: '4px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = 'var(--danger)'}
+                      onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                      title="Apply Penalty"
+                    >
+                      <Gavel size={14} /> Penalty
+                    </button>
+                  )}
                   {isFinished ? (
                     <div style={{ textAlign: 'right', minWidth: '70px' }}>
                       <div style={{ fontSize: '18px', fontWeight: '800', color: i === 0 ? 'var(--warning)' : 'var(--text-primary)' }}>
@@ -706,7 +738,7 @@ const RoundTransition = () => {
       )}
 
       {/* ── QUALIFYING MODE: track tabs ── */}
-      {!isLastRound && trackStandings.length > 0 && (
+      {!isFinalsMode && trackStandings.length > 0 && (
         <>
           <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
             {trackStandings.map(track => (
@@ -754,48 +786,62 @@ const RoundTransition = () => {
                     <p>No teams assigned to this track yet.</p>
                   </div>
                 ) : activeTrackData.teams.map((s, i) => {
-                  const isFinished = actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED');
-                  const finalStatus = !isFinished ? 'neutral' : (s.status === 'tiebreak'
-                    ? (resolvedTies[s.team] === 'Advanced' ? 'advance' : resolvedTies[s.team] === 'Eliminated' ? 'eliminate' : 'tiebreak')
-                    : s.status);
+                  const isScoringComplete = actualViewIdx < currentRoundIndex || currentRound?.status === 'UNDER_REVIEW' || currentRound?.status === 'COMPLETED';
+                  const isUnderReview = currentRound?.status === 'UNDER_REVIEW' && actualViewIdx === currentRoundIndex;
+                  const isChecked = selectedTeams.has(s.teamId);
 
                   return (
                     <React.Fragment key={i}>
-                      {isFinished && i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
+                      {isScoringComplete && !isUnderReview && i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
                         <div style={{ padding: '8px 24px', background: 'rgba(16,185,129,0.1)', borderTop: '1px dashed rgba(16,185,129,0.6)', borderBottom: '1px dashed rgba(16,185,129,0.6)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ChevronRight size={14} color="var(--success)" />
                           <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cutoff → {nextRound?.name}</span>
                         </div>
                       )}
-                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: isFinished ? (finalStatus === 'advance' ? 'rgba(16,185,129,0.04)' : finalStatus === 'tiebreak' ? 'rgba(245,158,11,0.05)' : 'transparent') : 'transparent', opacity: isFinished && finalStatus === 'eliminate' ? 0.6 : 1 }}>
-                        {isFinished ? (
+                      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: isChecked ? 'rgba(16,185,129,0.04)' : 'transparent', opacity: isScoringComplete && !isChecked && !isUnderReview ? 0.6 : 1 }}>
+                        {isUnderReview && !s.isDisqualified ? (
+                          <div style={{ width: '24px', display: 'flex', justifyContent: 'center' }}>
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={(e) => {
+                                const newSet = new Set(selectedTeams);
+                                if (e.target.checked) newSet.add(s.teamId);
+                                else newSet.delete(s.teamId);
+                                setSelectedTeams(newSet);
+                              }}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--primary)' }}
+                            />
+                          </div>
+                        ) : isScoringComplete ? (
                           <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: s.rank <= 2 ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
                         ) : (
                           <span style={{ width: '24px', fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)', textAlign: 'center' }}>•</span>
                         )}
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: '600', fontSize: '14px', textDecoration: s.isDisqualified ? 'line-through' : 'none', color: s.isDisqualified ? 'var(--danger)' : 'inherit' }}>{s.team}</div>
-                          {isFinished && s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
+                          {isScoringComplete && s.tied && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontWeight: '600' }}>TIED</span>}
                           {s.isDisqualified && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.15)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '800', marginLeft: '6px' }} title={s.disqualificationReason || 'Disqualified'}>DISQUALIFIED</span>}
-                          {isFinished && s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600', marginLeft: '6px' }}>Penalty: -{s.penalty} pts</span>}
+                          {isScoringComplete && s.penalty > 0 && <span style={{ fontSize: '10px', padding: '2px 6px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '6px', fontWeight: '600', marginLeft: '6px' }}>Penalty: -{s.penalty} pts</span>}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                          <button 
-                            onClick={() => openPenaltyModal(s.teamId, s.isDisqualified)}
-                            style={{ padding: '4px', background: 'transparent', border: 'none', color: s.isDisqualified ? 'var(--success)' : 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = s.isDisqualified ? 'var(--success)' : 'var(--danger)'}
-                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
-                            title={s.isDisqualified ? "Re-qualify Team" : "Apply Penalty"}
-                          >
-                            <Gavel size={14} /> {s.isDisqualified ? "Re-qualify" : "Penalty"}
-                          </button>
-                          {isFinished ? (
+                          {!s.isDisqualified && (
+                            <button 
+                              onClick={() => openPenaltyModal(s.teamId)}
+                              style={{ padding: '4px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--danger)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                              title="Apply Penalty"
+                            >
+                              <Gavel size={14} /> Penalty
+                            </button>
+                          )}
+                          {isScoringComplete ? (
                             <div style={{ textAlign: 'right', minWidth: '70px' }}>
-                              <div style={{ fontSize: '16px', fontWeight: '800', color: finalStatus === 'advance' ? 'var(--success)' : finalStatus === 'tiebreak' ? 'var(--warning)' : 'var(--text-secondary)' }}>
+                              <div style={{ fontSize: '16px', fontWeight: '800', color: isChecked ? 'var(--success)' : 'var(--text-secondary)' }}>
                                 {s.score ?? '—'}
                               </div>
-                              {finalStatus === 'advance' && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
-                              {finalStatus === 'tiebreak' && <span style={{ fontSize: '11px', color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><AlertCircle size={12} /> Review</span>}
+                              {isChecked && <span style={{ fontSize: '11px', color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end', marginTop: '2px' }}><CheckCircle size={12} /> Advance</span>}
                             </div>
                           ) : (
                             <div style={{ textAlign: 'right', minWidth: '70px' }}>
@@ -840,38 +886,28 @@ const RoundTransition = () => {
         </div>
       )}
 
+      <ConfirmModal
+        isOpen={modalConfig.isOpen}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onConfirm={modalConfig.onConfirm}
+        onClose={() => setModalConfig({ ...modalConfig, isOpen: false })}
+        confirmText="Proceed"
+        cancelText="Cancel"
+        type={modalConfig.type}
+      />
+
       {/* End Event Confirmation Modal */}
-      {showEndConfirmModal && (
-        <div className="animate-fade-in" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(12px)', zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="glass-panel" style={{ padding: '40px', maxWidth: '480px', width: '90%', textAlign: 'center', border: '1px solid var(--danger)', background: 'var(--bg-panel)', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
-            <div style={{ width: '80px', height: '80px', background: 'rgba(239,68,68,0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', border: '2px solid rgba(239,68,68,0.3)' }}>
-              <AlertTriangle size={40} color="var(--danger)" />
-            </div>
-            <h2 style={{ fontSize: '26px', fontWeight: '800', marginBottom: '16px', color: 'var(--text-primary)' }}>
-              End Event?
-            </h2>
-            <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '15px', marginBottom: '32px' }}>
-              Are you sure you want to officially end this event? This action will permanently move the event to the Archive for all participants. Make sure everyone has had time to review their published scores!
-            </p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button 
-                onClick={() => setShowEndConfirmModal(false)}
-                className="btn btn-secondary" 
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600' }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={executeEndEvent}
-                className="btn btn-primary" 
-                style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', gap: '8px', background: 'var(--danger)' }}
-              >
-                <Lock size={18} /> Yes, End Event
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showEndConfirmModal}
+        title="End Event?"
+        message="Are you sure you want to officially end this event? This action will permanently move the event to the Archive for all participants. Make sure everyone has had time to review their published scores!"
+        onConfirm={executeEndEvent}
+        onClose={() => setShowEndConfirmModal(false)}
+        confirmText="Yes, End Event"
+        cancelText="Cancel"
+        type="warning"
+      />
 
       {/* Celebration Modal */}
       {showCelebration && (
@@ -912,7 +948,7 @@ const RoundTransition = () => {
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
           <div className="modal-content animate-fade-in" style={{ background: 'white', borderRadius: '16px', maxWidth: '450px', width: '90%', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
             <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-primary)' }}>
-              {penaltyAction === 'requalify' ? 'Re-qualify Team' : 'Apply Penalty or Disqualify'}
+              Apply Penalty or Disqualify
             </h2>
             
             {confirmStep ? (
@@ -921,9 +957,7 @@ const RoundTransition = () => {
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>
                   {penaltyAction === 'deduct' 
                     ? `You are about to deduct ${penaltyPoints} points from this team.`
-                    : penaltyAction === 'disqualify' 
-                      ? 'You are about to DISQUALIFY this team. They will not be able to proceed.'
-                      : 'You are about to RE-QUALIFY this team.'}
+                    : 'You are about to DISQUALIFY this team. They will not be able to proceed.'}
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
                   <button className="btn btn-secondary" onClick={() => setConfirmStep(false)} style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600' }}>Back</button>
@@ -932,7 +966,6 @@ const RoundTransition = () => {
               </div>
             ) : (
               <>
-                {penaltyAction !== 'requalify' && (
                   <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', background: 'var(--bg-subtle)', padding: '6px', borderRadius: '12px' }}>
                     <button
                       className={`btn ${penaltyAction === 'deduct' ? 'btn-primary' : 'btn-secondary'}`}
@@ -949,7 +982,6 @@ const RoundTransition = () => {
                       Disqualify
                     </button>
                   </div>
-                )}
 
                 {penaltyAction === 'deduct' && (
                   <div style={{ marginBottom: '20px' }}>

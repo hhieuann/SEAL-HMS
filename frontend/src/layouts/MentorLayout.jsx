@@ -66,7 +66,6 @@ const MentorLayout = () => {
           </NavLink>
           <NavLink to="/mentor/announcements" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements
-            <span style={{ background: 'var(--danger)', color: 'white', fontSize: '10px', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>2</span>
           </NavLink>
           <NavLink to="/mentor/settings" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
             <User size={18} /> Settings
@@ -75,7 +74,7 @@ const MentorLayout = () => {
 
         <div className="mentor-actions">
           <div className="mentor-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src={currentUser.avatar} alt="Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+            <img src={currentUser.avatar?.startsWith('http') ? currentUser.avatar : `http://localhost:8080${currentUser.avatar}`} alt="Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: '13px', fontWeight: '600' }}>{currentUser.name}</div>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Expert Mentor</div>

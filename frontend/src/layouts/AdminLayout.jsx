@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutGrid, Calendar, Users, GitMerge, Scale, ArrowRightLeft, BarChart2, Search, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, GitPullRequest, X, ArrowLeft, Terminal, Shuffle, Target, Edit2 } from 'lucide-react';
+import { Code, LayoutGrid, Calendar, Users, GitMerge, ArrowRightLeft, BarChart2, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, X, ArrowLeft, Terminal, Shuffle, Edit2 } from 'lucide-react';
 import { authApi } from '../api/auth';
 import apiClient from '../api/apiClient';
 
@@ -201,7 +201,7 @@ const AdminLayout = () => {
             <img src={(() => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-                if (u.avatarUrl) return `http://localhost:8080${u.avatarUrl}`;
+                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `http://localhost:8080${u.avatarUrl}`;
               } catch(e) {}
               return "https://ui-avatars.com/api/?name=Admin+SEAL&background=fff&color=F26F21";
             })()} alt="Admin" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
@@ -305,7 +305,6 @@ const AdminLayout = () => {
 
                 <NavLink to={`/admin/event/${eventId}/transition`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <ArrowRightLeft size={20} /><span>Round Transition</span>
-                  <span style={{ marginLeft: 'auto', background: 'var(--warning)', color: '#000', fontSize: '10px', padding: '1px 6px', borderRadius: '8px', fontWeight: 'bold' }}>2</span>
                 </NavLink>
                 <NavLink to={`/admin/event/${eventId}/analytics`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <BarChart2 size={20} /><span>System Audit Log</span>

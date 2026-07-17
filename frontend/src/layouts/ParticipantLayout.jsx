@@ -28,26 +28,11 @@ const ParticipantLayout = () => {
       if (!eId || !tId) { setIsEliminated(false); return; }
 
       try {
-        const roundsRes = await eventService.getEventRounds(eId);
-        const rounds = roundsRes.data || [];
-        // Find the latest started round
-        let lastStartedIdx = -1;
-        for (let i = rounds.length - 1; i >= 0; i--) {
-          if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
-            lastStartedIdx = i; break;
-          }
-        }
-        // Only check elimination if we're beyond round 1
-        if (lastStartedIdx > 0) {
-          const prevRound = rounds[lastStartedIdx - 1];
-          const standingsRes = await standingsService.getStandings(prevRound.id);
-          const standings = standingsRes?.data || [];
-          const myStanding = standings.find(s => String(s.teamId) === String(tId));
-          if (myStanding && myStanding.promoted === false) {
-            setIsEliminated(true);
-          } else {
-            setIsEliminated(false);
-          }
+        const { teamService } = await import('../api/teamService.js');
+        const teamRes = await teamService.getTeamDetails(tId);
+        const team = teamRes?.data;
+        if (team && (team.status === 'ELIMINATED' || team.isDisqualified)) {
+          setIsEliminated(true);
         } else {
           setIsEliminated(false);
         }
@@ -196,7 +181,7 @@ const ParticipantLayout = () => {
             <img src={(() => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-                if (u.avatarUrl) return `http://localhost:8080${u.avatarUrl}`;
+                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `http://localhost:8080${u.avatarUrl}`;
               } catch(e) {}
               return `https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`;
             })()} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none', objectFit: 'cover' }} />
