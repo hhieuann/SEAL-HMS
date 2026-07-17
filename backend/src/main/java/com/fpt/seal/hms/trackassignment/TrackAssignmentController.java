@@ -54,4 +54,11 @@ public class TrackAssignmentController {
         assignmentService.remove(assignmentId);
         return ApiResponse.ok("Assignment removed", null);
     }
+
+    @PostMapping("/api/v1/tracks/{trackId}/complete-scoring")
+    @PreAuthorize("hasAnyRole('LECTURER', 'GUEST_JUDGE', 'ADMIN')")
+    public ApiResponse<Void> completeScoring(@PathVariable Long trackId, org.springframework.security.core.Authentication auth) {
+        assignmentService.completeScoring(trackId, auth.getName());
+        return ApiResponse.ok("Scoring completed for this track", null);
+    }
 }
