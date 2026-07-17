@@ -30,6 +30,9 @@ public class EventService {
     private final com.fpt.seal.hms.account.AccountRepository accountRepository;
     private final com.fpt.seal.hms.staff.StaffRepository staffRepository;
     private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
+    private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
+    private final com.fpt.seal.hms.submission.SubmissionRepository submissionRepository;
+    private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
@@ -369,5 +372,21 @@ public class EventService {
             !request.getEndDate().isAfter(request.getStartDate())) {
             throw new IllegalArgumentException("Event end date must be strictly after event start date.");
         }
+    }
+
+    @Transactional
+    public void resetEventData(Long eventId) {
+        // Delete all scores, submissions, and round rankings for this event
+        List<com.fpt.seal.hms.roundranking.entity.RoundRanking> rankings = roundRankingRepository.findByRound_Event_Id(eventId);
+        for (com.fpt.seal.hms.roundranking.entity.RoundRanking rr : rankings) {
+            java.util.Optional<com.fpt.seal.hms.submission.entity.Submission> subOpt = submissionRepository.findByRoundRankingId(rr.getId());
+            if (subOpt.isPresent()) {
+                com.fpt.seal.hms.submission.entity.Submission sub = subOpt.get();
+                List<com.fpt.seal.hms.score.entity.Score> scores = scoreRepository.findBySubmissionId(sub.getId());
+                scoreRepository.deleteAll(scores);
+                submissionRepository.delete(sub);
+            }
+        }
+        roundRankingRepository.deleteAll(rankings);
     }
 }

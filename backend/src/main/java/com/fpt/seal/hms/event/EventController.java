@@ -102,4 +102,11 @@ public class EventController {
     public ApiResponse<java.util.List<com.fpt.seal.hms.event.dto.EventStaffResponse>> getAssignedStaff(@PathVariable Long id) {
         return ApiResponse.ok(eventService.getAssignedStaff(id));
     }
+
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    @DeleteMapping("/{id}/reset-data")
+    public ResponseEntity<ApiResponse<Void>> resetEventData(@PathVariable Long id) {
+        eventService.resetEventData(id);
+        return ResponseEntity.ok(ApiResponse.ok("Event data (submissions and scores) have been reset successfully.", null));
+    }
 }

@@ -64,6 +64,22 @@ public class SubmissionService {
             throw new BusinessException("Deadline has passed. Submissions are now locked for this round.");
         }
 
+        // Eligibility check for subsequent rounds
+        if (round.getRoundSeq() > 1) {
+            java.util.List<Round> previousRounds = roundRepository.findByEventId(round.getEvent().getId()).stream()
+                    .filter(r -> r.getRoundSeq() < round.getRoundSeq())
+                    .sorted((r1, r2) -> r2.getRoundSeq().compareTo(r1.getRoundSeq()))
+                    .collect(java.util.stream.Collectors.toList());
+            if (!previousRounds.isEmpty()) {
+                Round previousRound = previousRounds.get(0);
+                RoundRanking prevRr = roundRankingRepository.findByRoundIdAndTeamId(previousRound.getId(), teamId)
+                        .orElseThrow(() -> new BusinessException("Team did not participate in the previous round."));
+                if (prevRr.getIsPromoted() == null || !prevRr.getIsPromoted()) {
+                    throw new BusinessException("Cannot submit: Team was not promoted from the previous round.");
+                }
+            }
+        }
+
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
