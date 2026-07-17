@@ -25,15 +25,24 @@ const Notifications = () => {
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [eventName, setEventName] = useState('');
 
   const fetchAnnouncements = async () => {
     setLoading(true);
     setError(null);
     try {
       // Get eventId from localStorage if participant is in an event
-      const eventId = localStorage.getItem('currentEventId');
+      const eventId = localStorage.getItem('currentEventId') || localStorage.getItem('p_selectedEventId') || localStorage.getItem('p_eventId');
       const params = {};
-      if (eventId) params.eventId = eventId;
+      if (eventId) {
+        params.eventId = eventId;
+        try {
+          const { eventService } = await import('../../api/eventService');
+          const evt = await eventService.getEventDetails(eventId);
+          if (evt?.data?.title) setEventName(evt.data.title);
+          else if (evt?.data?.name) setEventName(evt.data.name);
+        } catch(e) {}
+      }
 
       const res = await apiClient.get('/api/v1/announcements', { params });
       const raw = res.data?.data || res.data || [];
@@ -55,7 +64,9 @@ const Notifications = () => {
       <div className="page-header" style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Notifications</h1>
-          <p className="subtitle">Stay updated with important announcements and alerts.</p>
+          <p className="subtitle">
+            {eventName ? `Stay updated with important announcements and alerts for [${eventName}]` : 'Stay updated with important announcements and alerts.'}
+          </p>
         </div>
         <button
           className="btn btn-secondary"

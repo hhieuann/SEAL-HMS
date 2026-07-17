@@ -136,7 +136,7 @@ const AssignmentMatrix = () => {
     <div className="animate-fade-in">
       <div className="page-header">
         <div>
-          <h1>Lecturer Assignments</h1>
+          <h1>Judge Assignments</h1>
           <p className="subtitle">Assign judges to specific tracks in this event.</p>
         </div>
       </div>
@@ -232,7 +232,12 @@ const AssignmentMatrix = () => {
             </div>
           </div>
           
-          {teams.length === 0 ? (
+          {tracks.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+              <p>No tracks configured for this event yet.</p>
+            </div>
+          ) : teams.length === 0 ? (
             <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
               <p>No teams found for this event.</p>
             </div>

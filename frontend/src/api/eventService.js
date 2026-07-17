@@ -58,6 +58,11 @@ export const eventService = {
     return response.data;
   },
 
+  resetEventData: async (id) => {
+    const response = await apiClient.delete(`/api/v1/events/${id}/reset-data`);
+    return response.data;
+  },
+
   updateRound: async (id, roundData) => {
     const response = await apiClient.put(`/api/v1/rounds/${id}`, roundData);
     return response.data;

@@ -4,6 +4,7 @@ import { teamService } from '../../api/teamService';
 
 const MentorChat = () => {
   const [teams, setTeams] = useState([]);
+  const [tracks, setTracks] = useState([]);
   const [activeTeamId, setActiveTeamId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [reply, setReply] = useState('');
@@ -17,8 +18,16 @@ const MentorChat = () => {
       try {
         const res = await teamService.getTeamsByEvent(eventId);
         const allTeams = res.data || [];
+        
+        let allTracks = [];
+        try {
+          const { trackService } = await import('../../api/trackService.js');
+          allTracks = (await trackService.getTracksByEvent(eventId))?.data || [];
+        } catch (err) {}
+        setTracks(allTracks);
+
         // Filter teams mentored by current user
-        const mentoredTeams = allTeams.filter(t => t.mentor && t.mentor.email === userEmail);
+        const mentoredTeams = allTeams.filter(t => t.mentor && t.mentor.email === userEmail && t.status !== 'ELIMINATED' && t.status !== 'DISQUALIFIED');
         setTeams(mentoredTeams);
         if (mentoredTeams.length > 0 && !activeTeamId) {
           setActiveTeamId(mentoredTeams[0].id);
@@ -88,7 +97,7 @@ const MentorChat = () => {
                 }}
               >
                 <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>{team.name}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Track: {team.trackId || 'Any'}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Track: {tracks.find(tr => tr.id === team.trackId)?.name || team.trackId || 'Any'}</div>
               </div>
             ))
           )}

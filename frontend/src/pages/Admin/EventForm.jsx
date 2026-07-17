@@ -486,7 +486,7 @@ const EventForm = () => {
                         </div>
                         {!isFinalRound?(
                           <div style={{flex:1,minWidth:'140px'}}>
-                            <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Teams Promoted <span style={{fontSize:'10px',fontWeight:'400'}}>(per track)</span></label>
+                            <label style={{fontSize:'12px',color:'var(--text-secondary)',marginBottom:'4px',display:'block'}}>Total Advancing Teams <span style={{fontSize:'10px',fontWeight:'400'}}>(all tracks)</span></label>
                             <div style={{position:'relative'}}>
                               <input type="number" min="1" disabled={isLocked} style={{...inp(isLocked?{background:'var(--bg-hover)',cursor:'not-allowed'}:{}),paddingRight:'40px'}} placeholder="e.g. 10" value={round.promotionTopN} onChange={e=>updateRound(round.id,'promotionTopN',e.target.value)}/>
                               <span style={{position:'absolute',right:'10px',top:'50%',transform:'translateY(-50%)',fontSize:'11px',color:'var(--text-secondary)',pointerEvents:'none'}}>teams</span>

@@ -3,6 +3,8 @@ import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, User
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
+import { trackService } from '../../api/trackService';
+import ConfirmModal from '../../components/ConfirmModal';
 import './JudgePanel.css';
 
 const JudgePanel = () => {
@@ -21,6 +23,10 @@ const JudgePanel = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitToast, setSubmitToast] = useState('');
   const [submitError, setSubmitError] = useState('');
+  const [completeScoringModal, setCompleteScoringModal] = useState(false);
+  const [completeScoringErrorModal, setCompleteScoringErrorModal] = useState(false);
+  const [scoringCompleted, setScoringCompleted] = useState(false);
+  const [judgeTrackId, setJudgeTrackId] = useState(null);
 
   const judgeAccountId = parseInt(localStorage.getItem('userId') || '1');
 
@@ -87,6 +93,33 @@ const JudgePanel = () => {
               approvedTeams = approvedTeams.filter(t => advancedTeamNames.has(t.name));
             }
           }
+        }
+
+        // Check if this judge has already completed scoring for this track
+        try {
+          const myAssignments = await trackService.getMyAssignments();
+          // Find assignment matching ctx.trackId, or just the first JUDGE assignment for this event
+          const targetTrackId = ctx?.trackId;
+          const evtTrackIds = evt.rounds?.[0]?.tracks?.map(t => t.id) || [];
+          
+          let myJudgeAssignment = null;
+          if (targetTrackId) {
+            myJudgeAssignment = myAssignments.find(a => a.role === 'JUDGE' && a.trackId === targetTrackId);
+          }
+          if (!myJudgeAssignment) {
+             myJudgeAssignment = myAssignments.find(a => 
+               a.role === 'JUDGE' && (!evtTrackIds.length || evtTrackIds.includes(a.trackId))
+             );
+          }
+          
+          if (myJudgeAssignment) {
+            setJudgeTrackId(myJudgeAssignment.trackId);
+            if (myJudgeAssignment.scoringCompleted) {
+              setScoringCompleted(true);
+            }
+          }
+        } catch (e) {
+          console.warn('Could not check scoring completion status', e);
         }
 
         if (approvedTeams.length > 0) {
@@ -199,9 +232,11 @@ const JudgePanel = () => {
       }));
 
       const result = await scoreService.gradeSubmission(submission.id, judgeAccountId, scoreItems);
-      const newScores = result?.data || [];
+      const allNewScores = result?.data || [];
+      // Filter to only keep current judge's scores (avoid doubling with other judges' scores)
+      const myNewScores = allNewScores.filter(s => s.judgeAccountId === judgeAccountId);
 
-      setExistingScores(prev => ({ ...prev, [activeTeamId]: newScores }));
+      setExistingScores(prev => ({ ...prev, [activeTeamId]: myNewScores }));
       setSubmitToast(`✓ Score submitted: ${total.toFixed(1)} pts for ${activeTeam?.name}`);
       setTimeout(() => setSubmitToast(''), 3500);
     } catch (e) {
@@ -224,8 +259,41 @@ const JudgePanel = () => {
     return new Date().getTime() >= (start + durationMs);
   };
 
-  const isScoringAllowed = currentRound?.status === 'SCORING' || 
-                           (currentRound?.status === 'ACTIVE' && isDeadlinePassed());
+  const isScoringAllowed = !scoringCompleted && (currentRound?.status === 'SCORING' || 
+                           (currentRound?.status === 'ACTIVE' && isDeadlinePassed()));
+
+  // Check if all teams have been scored by this judge
+  const allTeamsScored = teams.length > 0 && teams.every(t => (existingScores[t.id]?.length || 0) > 0);
+
+  const handleCompleteScoring = async () => {
+    if (!judgeTrackId) {
+      // fallback: try from expert context
+      const ctxStr = localStorage.getItem('expertContext');
+      const ctx = ctxStr ? JSON.parse(ctxStr) : null;
+      if (ctx?.trackId) {
+        setJudgeTrackId(ctx.trackId);
+        try {
+          await trackService.completeScoring(ctx.trackId);
+          setScoringCompleted(true);
+          setSubmitToast('✓ Scoring session completed successfully!');
+          setTimeout(() => setSubmitToast(''), 3500);
+        } catch (e) {
+          const errorMsg = e.response?.data?.message || e.response?.data?.error || (e.response?.status === 403 ? "Permission denied. Please ensure you are authorized as a Judge for this track." : e.message);
+          setSubmitError('Failed to complete scoring: ' + errorMsg);
+        }
+      }
+      return;
+    }
+    try {
+      await trackService.completeScoring(judgeTrackId);
+      setScoringCompleted(true);
+      setSubmitToast('✓ Scoring session completed successfully!');
+      setTimeout(() => setSubmitToast(''), 3500);
+    } catch (e) {
+      const errorMsg = e.response?.data?.message || e.response?.data?.error || (e.response?.status === 403 ? "Permission denied. Please ensure you are authorized as a Judge for this track." : e.message);
+      setSubmitError('Failed to complete scoring: ' + errorMsg);
+    }
+  };
 
   if (loading) {
     return (
@@ -262,7 +330,7 @@ const JudgePanel = () => {
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', color: 'var(--danger)', fontSize: '13px', fontWeight: '600' }}>
-            <Lock size={15} /> Waiting for Deadline
+            <Lock size={15} /> {scoringCompleted ? 'Scoring Completed' : 'Waiting for Deadline'}
           </div>
         )}
       </div>
@@ -421,7 +489,7 @@ const JudgePanel = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <input
                               type="number" min="0" max={max} step="0.5" value={val}
-                              disabled={!isScoringAllowed}
+                              disabled={!isScoringAllowed || scoringCompleted}
                               onChange={e => {
                                 const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
                                 setScores(p => ({ ...p, [c.id]: v }));
@@ -482,7 +550,7 @@ const JudgePanel = () => {
 
               <button
                 onClick={handleSubmitScore}
-                disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed}
+                disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed || scoringCompleted}
                 className="btn btn-primary"
                 style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
               >
@@ -494,9 +562,56 @@ const JudgePanel = () => {
                 }
               </button>
             </div>
+
+            {/* Complete Scoring Panel */}
+            <div className="glass-panel" style={{ padding: '20px', marginTop: '16px' }}>
+              {!scoringCompleted ? (
+                <button
+                  onClick={() => {
+                    if (!allTeamsScored) {
+                      setCompleteScoringErrorModal(true);
+                    } else {
+                      setCompleteScoringModal(true);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  className="btn btn-success"
+                  style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '14px' }}
+                >
+                  Complete Scoring
+                </button>
+              ) : (
+                <div style={{ padding: '8px', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', color: 'var(--success)', fontWeight: '600', textAlign: 'center' }}>
+                  Scoring completed for this track.
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      {completeScoringModal && (
+        <ConfirmModal
+          isOpen={completeScoringModal}
+          onClose={() => setCompleteScoringModal(false)}
+          onConfirm={() => { setCompleteScoringModal(false); handleCompleteScoring(); }}
+          title="Confirm Completion"
+          message="Are you sure you have finished scoring all teams for this track? This will lock scoring for the track."
+          confirmText="Yes, Complete"
+          cancelText="Cancel"
+          type="warning"
+        />
+      )}
+
+      {completeScoringErrorModal && (
+        <ConfirmModal
+          isOpen={completeScoringErrorModal}
+          onClose={() => setCompleteScoringErrorModal(false)}
+          title="Incomplete Scoring"
+          message="You cannot complete scoring yet. Please ensure you have submitted scores for all teams that have submitted their work."
+          type="warning"
+        />
+      )}
 
       {submitToast && (
         <div className="animate-fade-in" style={{ position: 'fixed', bottom: '24px', right: '24px', background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 999 }}>
