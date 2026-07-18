@@ -222,6 +222,16 @@ public class AccountService {
     @Transactional(readOnly = true)
     public List<com.fpt.seal.hms.account.dto.AccountProfileResponse> getAccountProfiles(AccountStatus status) {
         List<Account> accounts = list(status);
+
+        // Load each profile table once and index by account id — the previous
+        // per-account lookups issued 1 query per row (~200 queries for 200 accounts).
+        var studentByAccount = studentRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(s -> s.getAccount().getId(), s -> s, (a, b) -> a));
+        var lecturerByAccount = lecturerRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(l -> l.getAccount().getId(), l -> l, (a, b) -> a));
+        var staffByAccount = staffRepository.findAll().stream()
+                .collect(java.util.stream.Collectors.toMap(st -> st.getAccount().getId(), st -> st, (a, b) -> a));
+
         return accounts.stream().map(acc -> {
             final String[] fullName = {null};
             final String[] studentCode = {null};
@@ -231,30 +241,33 @@ public class AccountService {
             final String[] phone = {null};
 
             if (acc.getRole() == Role.STUDENT) {
-                studentRepository.findByAccount_Id(acc.getId()).ifPresent(student -> {
-                    fullName[0] = (student.getFirstName() != null ? student.getFirstName() + " " : "") + 
+                var student = studentByAccount.get(acc.getId());
+                if (student != null) {
+                    fullName[0] = (student.getFirstName() != null ? student.getFirstName() + " " : "") +
                                   (student.getLastName() != null ? student.getLastName() : "");
                     if (fullName[0].trim().isEmpty()) fullName[0] = null;
                     else fullName[0] = fullName[0].trim();
-                    
+
                     studentCode[0] = student.getStudentCode();
                     campus[0] = student.getCampus();
                     proof[0] = student.getProofUrl();
-                });
+                }
             } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
-                lecturerRepository.findByAccount_Id(acc.getId()).ifPresent(lecturer -> {
+                var lecturer = lecturerByAccount.get(acc.getId());
+                if (lecturer != null) {
                     fullName[0] = lecturer.getFullName();
                     campus[0] = lecturer.getCampus();
                     department[0] = lecturer.getDepartment();
                     phone[0] = lecturer.getPhone();
-                });
+                }
             } else if (acc.getRole() == Role.STAFF) {
-                staffRepository.findByAccount_Id(acc.getId()).ifPresent(staff -> {
+                var staff = staffByAccount.get(acc.getId());
+                if (staff != null) {
                     fullName[0] = staff.getFullName();
                     campus[0] = staff.getCampus();
                     department[0] = staff.getDepartment();
                     phone[0] = staff.getPhone();
-                });
+                }
             }
 
             return new com.fpt.seal.hms.account.dto.AccountProfileResponse(

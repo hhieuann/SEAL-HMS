@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Code, LogOut, Bell, Shield, BookOpen, ArrowLeft } from 'lucide-react';
+import { Code, LogOut, Bell, Shield, ArrowLeft } from 'lucide-react';
 import { authApi } from '../api/auth';
 import './JudgeLayout.css';
 
@@ -62,9 +62,6 @@ const JudgeLayout = () => {
         <nav className="judge-nav">
           <NavLink to="/judge/panel" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`} end>
             <Shield size={18} /> Evaluation
-          </NavLink>
-          <NavLink to="/judge/history" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`}>
-            <BookOpen size={18} /> Scoring History
           </NavLink>
           <NavLink to="/judge/announcements" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements

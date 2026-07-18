@@ -43,6 +43,10 @@ public class SecurityConfig {
                                 "/uploads/**",
                                 "/error"
                         ).permitAll()
+                        // Contest info is public so visitors can browse events before signing up
+                        // (read-only: writes stay behind @PreAuthorize ADMIN/STAFF on the methods).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/v1/events", "/api/v1/events/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
