@@ -472,7 +472,7 @@ const RoundTransition = () => {
         // Advance to next round (from UNDER_REVIEW to COMPLETED)
         if (currentRoundObj.status === 'UNDER_REVIEW' || isLastRound) {
           const promotionTopN = currentRoundObj.promotionTopN || 0;
-          const targetCount = promotionTopN * trackStandings.length;
+          const targetCount = promotionTopN;
           const selectedCount = selectedTeams.size;
 
           if (!isLastRound && selectedCount > targetCount) {
@@ -482,7 +482,7 @@ const RoundTransition = () => {
              setModalConfig({
                isOpen: true,
                title: 'Error: Too many teams selected',
-               message: `You have selected ${selectedCount} teams, but the maximum quota is only ${targetCount} teams (${promotionTopN} teams per track). Please deselect some teams to proceed.`,
+               message: `You have selected ${selectedCount} teams, but the maximum quota is only ${targetCount} teams in total. Please deselect some teams to proceed.`,
                onConfirm: null,
                type: 'error'
              });
@@ -493,7 +493,7 @@ const RoundTransition = () => {
              setModalConfig({
                isOpen: true,
                title: 'Warning: Missing Teams',
-               message: `Attention: You have only selected ${selectedCount} teams to advance, which is less than the target quota of ${targetCount} teams (${promotionTopN} teams per track). Are you sure you want to force advance with this list?`,
+               message: `Attention: You have only selected ${selectedCount} teams to advance, which is less than the target quota of ${targetCount} teams in total. Are you sure you want to force advance with this list?`,
                onConfirm: async () => {
                   await proceedWithAdvance(currentRoundObj);
                },
@@ -772,7 +772,7 @@ const RoundTransition = () => {
 
               {(actualViewIdx < currentRoundIndex || (isLastRound && currentRound?.status === 'COMPLETED')) ? (
                 <div style={{ padding: '6px 24px', background: 'rgba(59,130,246,0.08)', borderBottom: '1px solid rgba(59,130,246,0.2)', fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}>
-                  Top {rounds[currentRoundIndex]?.promotionTopN ?? activeTrackData?.teams?.filter(t => t.status === 'advance').length ?? '?'} from each track will advance to <strong>{nextRound?.name}</strong>
+                  Top {rounds[currentRoundIndex]?.promotionTopN ?? activeTrackData?.teams?.filter(t => t.status === 'advance').length ?? '?'} teams in total will advance to <strong>{nextRound?.name}</strong>
                 </div>
               ) : (
                 <div style={{ padding: '6px 24px', background: 'rgba(245,158,11,0.06)', borderBottom: '1px solid rgba(245,158,11,0.15)', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500' }}>
@@ -795,7 +795,7 @@ const RoundTransition = () => {
                       {isScoringComplete && !isUnderReview && i === (rounds[currentRoundIndex]?.promotionTopN ?? 2) && (
                         <div style={{ padding: '8px 24px', background: 'rgba(16,185,129,0.1)', borderTop: '1px dashed rgba(16,185,129,0.6)', borderBottom: '1px dashed rgba(16,185,129,0.6)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <ChevronRight size={14} color="var(--success)" />
-                          <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cutoff → {nextRound?.name}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Global Cutoff reached</span>
                         </div>
                       )}
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: isChecked ? 'rgba(16,185,129,0.04)' : 'transparent', opacity: isScoringComplete && !isChecked && !isUnderReview ? 0.6 : 1 }}>

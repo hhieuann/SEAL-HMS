@@ -82,10 +82,9 @@ const EventForm = () => {
   const teamFlow = formData.rounds.reduce((acc, round, idx) => {
     const isFinal    = idx === formData.rounds.length - 1;
     const prevLeft   = acc.length > 0 ? acc[acc.length - 1].promotedTotal : maxTeamsNum;
-    const promotedPerTrack = (!isFinal && round.promotionTopN) ? (parseInt(round.promotionTopN) || 0) : 0;
-    const promotedTotal = promotedPerTrack * trackCount;
+    const promotedTotal = (!isFinal && round.promotionTopN) ? (parseInt(round.promotionTopN) || 0) : 0;
     const isInvalid = !isFinal && (promotedTotal < 1 || promotedTotal >= prevLeft);
-    acc.push({ name: round.name || `Round ${idx + 1}`, isFinal, promotedPerTrack, promotedTotal, isInvalid });
+    acc.push({ name: round.name || `Round ${idx + 1}`, isFinal, promotedTotal, isInvalid });
     return acc;
   }, []);
   const hasTeamFlowError = teamFlow.some(r => r.isInvalid);
@@ -446,7 +445,7 @@ const EventForm = () => {
                       <span style={{fontSize:'11px',color:'var(--text-secondary)',padding:'0 2px'}}>→</span>
                       <span style={{fontSize:'13px',padding:'4px 10px',borderRadius:'8px',fontWeight:'600',display:'flex',alignItems:'center',gap:'4px',background:r.isInvalid?'rgba(239,68,68,0.15)':r.isFinal?'rgba(255,215,0,0.15)':'var(--bg-hover)',color:r.isInvalid?'var(--danger)':r.isFinal?'#b8860b':'var(--text-primary)',border:`1px solid ${r.isInvalid?'rgba(239,68,68,0.4)':'transparent'}`}}>
                         {r.isFinal?'🏆':r.isInvalid?'❌':''}{r.name}
-                        {!r.isFinal&&<span style={{fontSize:'11px',color:r.isInvalid?'var(--danger)':'var(--text-secondary)'}}>({r.promotedPerTrack} per track = {r.promotedTotal} total)</span>}
+                        {!r.isFinal&&<span style={{fontSize:'11px',color:r.isInvalid?'var(--danger)':'var(--text-secondary)'}}>({r.promotedTotal} total)</span>}
                       </span>
                     </React.Fragment>
                   ))}
