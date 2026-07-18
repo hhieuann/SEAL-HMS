@@ -42,6 +42,7 @@ const AdminLayout = () => {
 
   React.useEffect(() => {
     const fetchAlerts = async () => {
+      if (localStorage.getItem('userRole') === 'STAFF') return;
       try {
         const res = await apiClient.get('/api/v1/audit-logs?limit=5');
         const logs = res.data?.data || res.data || [];
@@ -72,10 +73,28 @@ const AdminLayout = () => {
             sub: log.detail || `${log.entityType} ${log.entityId || ''}`,
             time: calculateTimeAgo(log.createdAt),
             link: '/admin/activity-log',
-            unread: true
+            unread: true,
+            ts: new Date(log.createdAt).getTime()
           };
         });
-        setAlerts(formattedAlerts);
+
+        const annRes = await apiClient.get('/api/v1/announcements');
+        const anns = annRes.data?.data || annRes.data || [];
+        const formattedAnns = anns.slice(0, 5).map(ann => ({
+          id: `ann_${ann.id}`,
+          icon: <Megaphone size={15} />,
+          color: 'var(--primary)',
+          bg: 'rgba(59,130,246,0.12)',
+          title: `Announcement: ${ann.title}`,
+          sub: ann.eventName || 'Global',
+          time: calculateTimeAgo(ann.createdAt),
+          link: ann.eventId ? `/admin/event/${ann.eventId}/broadcast` : '/admin/dashboard',
+          unread: true,
+          ts: new Date(ann.createdAt).getTime()
+        }));
+
+        const merged = [...formattedAlerts, ...formattedAnns].sort((a, b) => b.ts - a.ts).slice(0, 8);
+        setAlerts(merged);
       } catch (err) {
         console.error('Failed to fetch system alerts', err);
       }
@@ -138,64 +157,66 @@ const AdminLayout = () => {
 
         <div className="topbar-actions" style={{ paddingRight: '24px' }}>
           {/* Bell with dropdown */}
-          <div style={{ position: 'relative' }}>
-            <button
-              className="action-btn notification-btn"
-              onClick={() => setBellOpen(o => !o)}
-              style={{ color: 'white', background: bellOpen ? 'rgba(255,255,255,0.2)' : 'transparent', padding: '8px', borderRadius: '50%' }}
-            >
-              <Bell size={20} />
-              {unreadCount > 0 && <span className="badge" style={{ background: 'var(--danger)' }}>{unreadCount}</span>}
-            </button>
+          {userRole !== 'STAFF' && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className="action-btn notification-btn"
+                onClick={() => setBellOpen(o => !o)}
+                style={{ color: 'white', background: bellOpen ? 'rgba(255,255,255,0.2)' : 'transparent', padding: '8px', borderRadius: '50%' }}
+              >
+                <Bell size={20} />
+                {unreadCount > 0 && <span className="badge" style={{ background: 'var(--danger)' }}>{unreadCount}</span>}
+              </button>
 
-            {bellOpen && (
-              <>
-                <div onClick={() => setBellOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
-                <div style={{ position: 'absolute', top: 'calc(100% + 12px)', right: 0, width: '360px', zIndex: 100, background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: '0 20px 60px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
-                  <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-primary)' }}>
-                    <span style={{ fontWeight: '700', fontSize: '15px' }}>System Alerts</span>
-                    {unreadCount > 0 && (
-                      <button onClick={() => setAlerts(prev => prev.map(a => ({ ...a, unread: false })))} style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                        Mark all read
-                      </button>
-                    )}
-                  </div>
-
-                  {alerts.length === 0 ? (
-                    <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
-                      🎉 No pending alerts
+              {bellOpen && (
+                <>
+                  <div onClick={() => setBellOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 12px)', right: 0, width: '360px', zIndex: 100, background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: '0 20px 60px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: 'var(--text-primary)' }}>
+                      <span style={{ fontWeight: '700', fontSize: '15px' }}>System Alerts</span>
+                      {unreadCount > 0 && (
+                        <button onClick={() => setAlerts(prev => prev.map(a => ({ ...a, unread: false })))} style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                          Mark all read
+                        </button>
+                      )}
                     </div>
-                  ) : alerts.map(alert => (
-                    <div key={alert.id}
-                      onClick={() => { markRead(alert.id); setBellOpen(false); navigate(alert.link); }}
-                      style={{ padding: '14px 20px', display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: 'pointer', background: alert.unread ? 'var(--bg-subtle)' : 'transparent', borderBottom: '1px solid var(--border-color)', transition: 'var(--transition)', position: 'relative' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                      onMouseLeave={e => e.currentTarget.style.background = alert.unread ? 'var(--bg-subtle)' : 'transparent'}
-                    >
-                      {alert.unread && <div style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }} />}
-                      <div style={{ width: '32px', height: '32px', minWidth: '32px', borderRadius: '8px', background: alert.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: alert.color }}>
-                        {alert.icon}
+
+                    {alerts.length === 0 ? (
+                      <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                        🎉 No pending alerts
                       </div>
-                      <div style={{ flex: 1, color: 'var(--text-primary)' }}>
-                        <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '2px' }}>{alert.title}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{alert.sub}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>{alert.time}</div>
+                    ) : alerts.map(alert => (
+                      <div key={alert.id}
+                        onClick={() => { markRead(alert.id); setBellOpen(false); navigate(alert.link); }}
+                        style={{ padding: '14px 20px', display: 'flex', gap: '12px', alignItems: 'flex-start', cursor: 'pointer', background: alert.unread ? 'var(--bg-subtle)' : 'transparent', borderBottom: '1px solid var(--border-color)', transition: 'var(--transition)', position: 'relative' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                        onMouseLeave={e => e.currentTarget.style.background = alert.unread ? 'var(--bg-subtle)' : 'transparent'}
+                      >
+                        {alert.unread && <div style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary)' }} />}
+                        <div style={{ width: '32px', height: '32px', minWidth: '32px', borderRadius: '8px', background: alert.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: alert.color }}>
+                          {alert.icon}
+                        </div>
+                        <div style={{ flex: 1, color: 'var(--text-primary)' }}>
+                          <div style={{ fontSize: '13px', fontWeight: '600', marginBottom: '2px' }}>{alert.title}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{alert.sub}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>{alert.time}</div>
+                        </div>
+                        <button onClick={(e) => dismiss(alert.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px', display: 'flex' }}>
+                          <X size={14} />
+                        </button>
                       </div>
-                      <button onClick={(e) => dismiss(alert.id, e)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '2px', display: 'flex' }}>
-                        <X size={14} />
+                    ))}
+
+                    <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--border-color)' }}>
+                      <button onClick={() => { setBellOpen(false); navigate('/admin/analytics'); }} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
+                        View full audit log →
                       </button>
                     </div>
-                  ))}
-
-                  <div style={{ padding: '12px 20px', textAlign: 'center', borderTop: '1px solid var(--border-color)' }}>
-                    <button onClick={() => { setBellOpen(false); navigate('/admin/analytics'); }} style={{ fontSize: '13px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                      View full audit log →
-                    </button>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 12px', borderRadius: '12px', background: 'rgba(255,255,255,0.15)', marginLeft: '8px', color: 'white' }}>
             <img src={(() => {
@@ -314,8 +335,13 @@ const AdminLayout = () => {
 
               <div className="nav-section">
                 <p className="nav-section-title">COMMUNICATION</p>
+                {userRole === 'STAFF' && (
+                  <NavLink to={`/admin/event/${eventId}/notifications`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    <Bell size={20} /><span>Inbox</span>
+                  </NavLink>
+                )}
                 <NavLink to={`/admin/event/${eventId}/broadcast`} className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                  <Megaphone size={20} /><span>Announcements</span>
+                  <Megaphone size={20} /><span>Broadcast Center</span>
                 </NavLink>
               </div>
             </>

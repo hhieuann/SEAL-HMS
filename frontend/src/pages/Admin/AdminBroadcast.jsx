@@ -25,7 +25,8 @@ const AdminBroadcast = () => {
   const [loading, setLoading] = useState(true);
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ title: '', body: '', tag: 'General', targetRole: 'ALL' });
+  const defaultRole = localStorage.getItem('userRole') === 'STAFF' ? 'STUDENT' : 'ALL';
+  const [form, setForm] = useState({ title: '', body: '', tag: 'General', targetRole: defaultRole });
   const [sendError, setSendError] = useState('');
   const [sendShaking, setSendShaking] = useState(false);
   const [sendToast, setSendToast] = useState('');
@@ -161,7 +162,7 @@ const AdminBroadcast = () => {
                 <h3 style={{ fontSize: '17px', fontWeight: '700', marginBottom: '10px' }}>{post.title}</h3>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.7' }}>{post.content}</p>
 
-                <div style={{ marginTop: '16px', display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--bg-active)' }}>
+                <div style={{ marginTop: '16px', display: 'flex', gap: '16px', fontSize: '12px', color: 'var(--text-secondary)' }}>
                   <span>Posted {formatTime(post.createdAt)}</span>
                   {post.createdByEmail && <span>by {post.createdByEmail}</span>}
                 </div>
@@ -224,11 +225,15 @@ const AdminBroadcast = () => {
                 onChange={e => setForm(f => ({ ...f, targetRole: e.target.value }))}
                 style={{ width: '100%', background: 'rgba(0,0,0,0.25)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '10px 14px', color: 'white', fontSize: '14px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', cursor: 'pointer' }}
               >
-                <option value="ALL">🌐 All Roles (Everyone)</option>
+                {localStorage.getItem('userRole') !== 'STAFF' && (
+                  <>
+                    <option value="ALL">🌐 All Roles (Everyone)</option>
+                    <option value="STAFF">👔 Staff</option>
+                  </>
+                )}
                 <option value="STUDENT">🎓 Students / Teams</option>
                 <option value="JUDGE">⚖️ Judges</option>
                 <option value="MENTOR">🧑‍🏫 Mentors</option>
-                <option value="STAFF">👔 Staff</option>
                 <option value="LECTURER">📚 Lecturers</option>
               </select>
             </div>

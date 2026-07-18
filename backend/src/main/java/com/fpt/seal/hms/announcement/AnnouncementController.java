@@ -33,6 +33,16 @@ public class AnnouncementController {
     public ResponseEntity<ApiResponse<AnnouncementResponse>> create(
             Authentication auth,
             @Valid @RequestBody AnnouncementRequest request) {
+        
+        boolean isStaff = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_STAFF"));
+        if (isStaff) {
+            String target = request.targetRole() != null ? request.targetRole().toUpperCase() : "ALL";
+            if (target.equals("ALL") || target.equals("STAFF") || target.equals("ADMIN")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Staff can only send announcements to Student, Lecturer, Judge, and Mentor roles."));
+            }
+        }
+
         AnnouncementResponse created = announcementService.create(auth.getName(), request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Announcement created", created));
@@ -41,8 +51,19 @@ public class AnnouncementController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<AnnouncementResponse>> update(
+            Authentication auth,
             @PathVariable Long id,
             @Valid @RequestBody AnnouncementRequest request) {
+        
+        boolean isStaff = auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_STAFF"));
+        if (isStaff) {
+            String target = request.targetRole() != null ? request.targetRole().toUpperCase() : "ALL";
+            if (target.equals("ALL") || target.equals("STAFF") || target.equals("ADMIN")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.error("Staff can only send announcements to Student, Lecturer, Judge, and Mentor roles."));
+            }
+        }
+
         return ResponseEntity.ok(ApiResponse.ok("Announcement updated", announcementService.update(id, request)));
     }
 

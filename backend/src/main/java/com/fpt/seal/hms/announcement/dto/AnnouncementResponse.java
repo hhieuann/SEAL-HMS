@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public record AnnouncementResponse(
         Long id,
         Long eventId,
+        String eventName,
         String title,
         String content,
         String createdByEmail,
@@ -18,6 +19,7 @@ public record AnnouncementResponse(
         return new AnnouncementResponse(
                 a.getId(),
                 a.getEvent() != null ? a.getEvent().getId() : null,
+                a.getEvent() != null ? a.getEvent().getName() : null,
                 a.getTitle(),
                 a.getContent(),
                 a.getCreatedByEmail(),
