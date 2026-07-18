@@ -107,6 +107,7 @@ function App() {
           <Route path="transition" element={<RoundTransition />} />
           <Route path="analytics" element={<AnalyticsLog />} />
           <Route path="broadcast" element={<AdminBroadcast />} />
+          <Route path="notifications" element={<Notifications />} />
         </Route>
 
         {/* Judge & Mentor & Staff Routes */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Info, Loader2, AlertTriangle, RefreshCw, Globe } from 'lucide-react';
 import './Workspace.css';
+import { useParams } from 'react-router-dom';
 import apiClient from '../../api/apiClient';
 
 const formatTime = (dateStr) => {
@@ -22,6 +23,7 @@ const formatTime = (dateStr) => {
 };
 
 const Notifications = () => {
+  const { eventId: paramEventId } = useParams();
   const [announcements, setAnnouncements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,8 +33,8 @@ const Notifications = () => {
     setLoading(true);
     setError(null);
     try {
-      // Get eventId from localStorage if participant is in an event
-      const eventId = localStorage.getItem('currentEventId') || localStorage.getItem('p_selectedEventId') || localStorage.getItem('p_eventId');
+      // Get eventId from URL params first, then localStorage
+      const eventId = paramEventId || localStorage.getItem('currentEventId') || localStorage.getItem('p_selectedEventId') || localStorage.getItem('p_eventId');
       const params = {};
       if (eventId) {
         params.eventId = eventId;
@@ -45,8 +47,16 @@ const Notifications = () => {
       }
 
       const res = await apiClient.get('/api/v1/announcements', { params });
-      const raw = res.data?.data || res.data || [];
-      setAnnouncements(Array.isArray(raw) ? raw : []);
+      let raw = res.data?.data || res.data || [];
+      if (Array.isArray(raw)) {
+        const userRole = localStorage.getItem('userRole');
+        if (userRole === 'STAFF' || userRole === 'ADMIN') {
+          raw = raw.filter(a => !a.targetRole || a.targetRole === 'ALL' || a.targetRole === userRole);
+        }
+        setAnnouncements(raw);
+      } else {
+        setAnnouncements([]);
+      }
     } catch (err) {
       console.error('Failed to fetch announcements', err);
       setError('Could not load announcements. Please try again.');
@@ -130,15 +140,21 @@ const Notifications = () => {
                 </span>
               </div>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>{item.content}</p>
-              <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--bg-active)', display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', alignItems: 'center' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Info size={11} />
                   Posted by {item.createdByEmail || 'Coordinator'}
                 </span>
-                {!item.eventId && (
+                {!item.eventId ? (
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-1)' }}>
                     <Globe size={11} /> Global
                   </span>
+                ) : (
+                  item.eventName && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                      <Globe size={11} /> {item.eventName}
+                    </span>
+                  )
                 )}
               </div>
             </div>
