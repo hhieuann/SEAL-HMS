@@ -10,7 +10,6 @@ import PerformingTeams from './pages/Admin/PerformingTeams';
 import EventsConfig from './pages/Admin/EventsConfig';
 import AccountManagement from './pages/Admin/AccountManagement';
 import AssignmentMatrix from './pages/Admin/AssignmentMatrix';
-import Courtroom from './pages/Admin/Courtroom';
 import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
 import AdminBroadcast from './pages/Admin/AdminBroadcast';
@@ -39,7 +38,6 @@ import EventArchive from './pages/Participant/EventArchive';
 
 import JudgeLayout from './layouts/JudgeLayout';
 import JudgePanel from './pages/Judge/JudgePanel';
-import ScoringHistory from './pages/Judge/ScoringHistory';
 
 import MentorLayout from './layouts/MentorLayout';
 import MentorTickets from './pages/Mentor/MentorTickets';
@@ -107,7 +105,6 @@ function App() {
           <Route path="assignments" element={<AssignmentMatrix />} />
           <Route path="track-draw" element={<TrackDraw />} />
           <Route path="transition" element={<RoundTransition />} />
-          <Route path="courtroom" element={<Courtroom />} />
           <Route path="analytics" element={<AnalyticsLog />} />
           <Route path="broadcast" element={<AdminBroadcast />} />
         </Route>
@@ -118,7 +115,6 @@ function App() {
         <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE', 'LECTURER']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
-          <Route path="history" element={<ScoringHistory />} />
           <Route path="announcements" element={<Notifications />} />
         </Route>
 

@@ -200,7 +200,7 @@ const AccountManagement = () => {
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <img 
-                      src={u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=3b82f6&color=fff`} 
+                      src={u.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=3b82f6&color=fff`} 
                       alt={u.name} 
                       style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
                     />
@@ -252,7 +252,7 @@ const AccountManagement = () => {
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <img 
-                      src={u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=8b5cf6&color=fff`} 
+                      src={u.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name)}&background=8b5cf6&color=fff`} 
                       alt={u.name} 
                       style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
                     />

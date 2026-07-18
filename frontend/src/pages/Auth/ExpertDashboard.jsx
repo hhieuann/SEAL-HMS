@@ -39,7 +39,7 @@ const ExpertDashboard = () => {
       name: userName || email.split('@')[0], 
       roles,
       userId,
-      avatar: u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || email.split('@')[0])}&background=14b8a6&color=fff` 
+      avatar: u.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName || email.split('@')[0])}&background=14b8a6&color=fff` 
     };
   });
 
@@ -51,7 +51,7 @@ const ExpertDashboard = () => {
           setCurrentUser(prev => ({
             ...prev,
             name: u.name || prev.name,
-            avatar: u.avatarUrl ? `http://localhost:8080${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || prev.name)}&background=14b8a6&color=fff`
+            avatar: u.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || prev.name)}&background=14b8a6&color=fff`
           }));
         }
       } catch(e) {}

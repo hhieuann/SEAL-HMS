@@ -6,27 +6,20 @@ import apiClient from '../api/apiClient';
 
 const LandingPage = () => {
   const [events, setEvents] = useState([]);
-  const [accounts, setAccounts] = useState([]);
 
   useEffect(() => {
+    // Public page: only the public events endpoint — never account data.
     apiClient.get('/api/v1/events')
       .then(res => {
         const data = res.data?.data || res.data || [];
         setEvents(Array.isArray(data) ? data : []);
       })
       .catch(err => console.error("Failed to fetch events", err));
-
-    apiClient.get('/api/v1/accounts')
-      .then(res => {
-        const data = res.data?.data || res.data || [];
-        setAccounts(Array.isArray(data) ? data : []);
-      })
-      .catch(err => console.error("Failed to fetch accounts", err));
   }, []);
 
   const totalEvents = events.length;
-  const totalParticipants = accounts.filter(a => a.role === 'STUDENT').length;
-  const totalTeams = events.reduce((sum, e) => sum + (e.teams || 0), 0);
+  const totalTeams = events.reduce((sum, e) => sum + (e.currentTeams || 0), 0);
+  const totalParticipants = totalTeams; // shown as "teams competing" below
   const avgSubmissions = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
 
   return (
@@ -75,7 +68,7 @@ const LandingPage = () => {
                   <span className="stat-num">{totalEvents}</span>
                 </div>
                 <div className="stat-box">
-                  <span className="stat-label">Participants</span>
+                  <span className="stat-label">Teams competing</span>
                   <span className="stat-num">{totalParticipants}</span>
                 </div>
                 <div className="stat-box">

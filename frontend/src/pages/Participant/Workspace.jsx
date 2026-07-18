@@ -85,7 +85,7 @@ const Workspace = () => {
     if (trackDrawStr) {
       try {
         const parsedDraw = JSON.parse(trackDrawStr);
-        const myTeamName = localStorage.getItem('myTeamName') || 'NullPointerException';
+        const myTeamName = localStorage.getItem('myTeamName') || 'My Team';
         
         // Find if my team is in any of the drawn tracks
         const myTrack = parsedDraw.find(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
@@ -385,7 +385,7 @@ const Workspace = () => {
               <BookOpen size={14} /> {teamTrack.topic}
             </div>
           </div>
-          <h1>Team: {localStorage.getItem('myTeamName') || 'NullPointerException'}</h1>
+          <h1>Team: {localStorage.getItem('myTeamName') || 'My Team'}</h1>
           <p className="subtitle">{eventData?.name || 'SEAL Hackathon'} — {eventData?.startDate || 'TBD'}</p>
         </div>
         <div className="workspace-actions">

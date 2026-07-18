@@ -201,7 +201,7 @@ const AdminLayout = () => {
             <img src={(() => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `http://localhost:8080${u.avatarUrl}`;
+                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}`;
               } catch(e) {}
               return "https://ui-avatars.com/api/?name=Admin+SEAL&background=fff&color=F26F21";
             })()} alt="Admin" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />

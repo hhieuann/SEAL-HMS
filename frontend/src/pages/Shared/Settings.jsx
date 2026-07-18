@@ -261,7 +261,7 @@ const Settings = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '24px' }}>
             <div style={{ position: 'relative' }}>
               <img 
-                src={avatarPreview || (profile.avatarUrl ? `http://localhost:8080${profile.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.fullName || profile.email || 'User')}&background=random`)} 
+                src={avatarPreview || (profile.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${profile.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.fullName || profile.email || 'User')}&background=random`)} 
                 alt="Profile Avatar" 
                 style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border-color)' }}
               />

@@ -181,7 +181,7 @@ const ParticipantLayout = () => {
             <img src={(() => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `http://localhost:8080${u.avatarUrl}`;
+                if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}`;
               } catch(e) {}
               return `https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`;
             })()} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none', objectFit: 'cover' }} />
