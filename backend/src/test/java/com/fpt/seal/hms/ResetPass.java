@@ -6,7 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 
+@Disabled("Utility script, not a unit test: needs a live PostgreSQL/Spring context. Run manually from the IDE to reset a password.")
 @SpringBootTest
 public class ResetPass {
 

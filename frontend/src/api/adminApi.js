@@ -26,8 +26,18 @@ export const adminApi = {
       role: acc.role,
       avatarUrl: acc.avatarUrl,
       status: acc.status.toLowerCase(),
+      studentCode: acc.studentCode || null,
+      campus: acc.campus || null,
+      department: acc.department || null,
+      phone: acc.phone || null,
+      proofUrl: acc.proof || null,
       joined: 'Just now'
     }));
+  },
+
+  updateAccountStatus: async (id, status) => {
+    const response = await apiClient.patch(`/api/v1/accounts/${id}/status`, { status });
+    return response.data.data;
   },
 
   approveAccount: async (accountId) => {
