@@ -32,6 +32,10 @@ public class Student extends BaseEntity {
     @JoinColumn(name = "account_id", nullable = false, unique = true)
     private Account account;
 
+    // Student code, e.g. "SE161234". Unique across students.
+    @Column(name = "student_code", length = 20, unique = true)
+    private String studentCode;
+
     @Column(name = "first_name", length = 100)
     private String firstName;
 
@@ -40,4 +44,7 @@ public class Student extends BaseEntity {
 
     @Column(length = 100)
     private String campus;
+
+    @Column(name = "proof_url", length = 500)
+    private String proofUrl;
 }

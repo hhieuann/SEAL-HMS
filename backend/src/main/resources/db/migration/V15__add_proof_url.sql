@@ -1,0 +1,1 @@
+ALTER TABLE student ADD COLUMN proof_url VARCHAR(500);

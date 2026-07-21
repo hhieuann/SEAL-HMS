@@ -33,6 +33,7 @@ public class StudentService {
         Student s = new Student();
         s.setAccount(account);
         apply(s, req);
+        applyStudentCode(s, req);
         return StudentResponse.from(studentRepository.save(s));
     }
 
@@ -43,9 +44,13 @@ public class StudentService {
 
     @Transactional
     public StudentResponse updateMyProfile(String email, StudentRequest req) {
-        Student s = myProfileEntity(requireAccount(email).getId());
+        Account account = requireAccount(email);
+        Student s = myProfileEntity(account.getId());
         apply(s, req);
-        return StudentResponse.from(s); // managed entity flushes on commit
+        applyStudentCode(s, req);
+        accountService.updateEmail(account, req.email());
+        s = studentRepository.save(s);
+        return StudentResponse.from(s); 
     }
 
     @Transactional(readOnly = true)
@@ -73,5 +78,20 @@ public class StudentService {
         s.setFirstName(req.firstName());
         s.setLastName(req.lastName());
         s.setCampus(req.campus());
+    }
+
+    /** Validate + set the student code only when a new, different value is supplied. */
+    private void applyStudentCode(Student s, StudentRequest req) {
+        String code = req.studentCode() != null ? req.studentCode().trim() : null;
+        if (code == null || code.isBlank() || code.equalsIgnoreCase(s.getStudentCode())) {
+            return; // not provided or unchanged
+        }
+        if (!code.toUpperCase().matches("^[A-Za-z]{2}\\d{6}$")) {
+            throw new BusinessException("Student code must be 2 letters followed by 6 digits (e.g. SE204911)");
+        }
+        if (studentRepository.existsByStudentCode(code)) {
+            throw new BusinessException("Student code already registered: " + code);
+        }
+        s.setStudentCode(code);
     }
 }

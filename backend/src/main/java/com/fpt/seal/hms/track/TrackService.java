@@ -13,12 +13,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.fpt.seal.hms.team.TeamRepository;
+import com.fpt.seal.hms.team.entity.Team;
+import com.fpt.seal.hms.topic.TopicRepository;
+import com.fpt.seal.hms.topic.entity.Topic;
+
 @Service
 @RequiredArgsConstructor
 public class TrackService {
 
     private final TrackRepository trackRepository;
     private final EventRepository eventRepository;
+    private final TeamRepository teamRepository;
+    private final TopicRepository topicRepository;
 
     @Transactional(readOnly = true)
     public List<TrackResponse> getTracksByEventId(Long eventId) {
@@ -61,6 +68,21 @@ public class TrackService {
     @Transactional
     public void deleteTrack(Long id) {
         Track track = findTrackEntityById(id);
+        
+        List<Team> teams = teamRepository.findByEventId(track.getEvent().getId());
+        for(Team t : teams) {
+            if(t.getTrack() != null && t.getTrack().getId().equals(id)) {
+                t.setTrack(null);
+                teamRepository.save(t);
+            }
+        }
+        
+        List<Topic> topics = topicRepository.findByTrackId(id);
+        for(Topic t : topics) {
+            t.setTrack(null);
+            topicRepository.save(t);
+        }
+        
         trackRepository.delete(track);
     }
 

@@ -44,5 +44,37 @@ export const teamService = {
   acceptInvite: async (teamId, accountId) => {
     const response = await apiClient.patch(`/api/v1/teams/${teamId}/members/${accountId}/accept`);
     return response.data;
+  },
+
+  assignMentor: async (teamId, mentorId) => {
+    const response = await apiClient.post(`/api/v1/teams/${teamId}/mentor`, { mentorId });
+    return response.data;
+  },
+
+  disqualifyTeam: async (teamId, disqualified, reason = '') => {
+    const params = new URLSearchParams({ disqualified });
+    if (reason) params.append('reason', reason);
+    const response = await apiClient.put(`/api/v1/teams/${teamId}/disqualify?${params.toString()}`);
+    return response.data;
+  },
+
+  applyPenalty: async (teamId, roundId, penaltyData) => {
+    const response = await apiClient.put(`/api/v1/teams/${teamId}/rounds/${roundId}/penalty`, penaltyData);
+    return response.data;
+  },
+
+  resetMentorsByEvent: async (eventId) => {
+    const response = await apiClient.post(`/api/v1/events/${eventId}/teams/reset-mentors`);
+    return response.data;
+  },
+
+  getMentorMessages: async (teamId) => {
+    const response = await apiClient.get(`/api/v1/teams/${teamId}/messages`);
+    return response.data;
+  },
+
+  sendMentorMessage: async (teamId, messageData) => {
+    const response = await apiClient.post(`/api/v1/teams/${teamId}/messages`, messageData);
+    return response.data;
   }
 };

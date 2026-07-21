@@ -5,6 +5,7 @@ import com.fpt.seal.hms.common.entity.BaseEntity;
 import com.fpt.seal.hms.common.enums.TeamStatus;
 import com.fpt.seal.hms.topic.entity.Topic;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.lecturer.Lecturer;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,12 @@ public class Team extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "team_id")
     private Long id;
+
+    @Column(name = "is_disqualified", nullable = false)
+    private Boolean isDisqualified = false;
+
+    @Column(name = "disqualification_reason", columnDefinition = "TEXT")
+    private String disqualificationReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "event_id")
@@ -55,4 +62,12 @@ public class Team extends BaseEntity {
 
     @org.hibernate.annotations.Formula("(SELECT count(*) FROM team_member tm WHERE tm.team_id = team_id AND tm.status = 'ACCEPTED')")
     private Integer memberCount;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "mentor",
+            joinColumns = @JoinColumn(name = "team_id", unique = true),
+            inverseJoinColumns = @JoinColumn(name = "lecturer_id")
+    )
+    private Lecturer mentor;
 }

@@ -2,6 +2,7 @@ package com.fpt.seal.hms.submission;
 
 import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
+import com.fpt.seal.hms.common.enums.RoundStatus;
 import com.fpt.seal.hms.common.enums.SubmissionStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
@@ -30,6 +31,8 @@ public class SubmissionService {
     private final RoundRepository roundRepository;
     private final TeamRepository teamRepository;
     private final AccountRepository accountRepository;
+    private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
+    private final com.fpt.seal.hms.teammember.TeamMemberRepository teamMemberRepository;
 
     @Transactional(readOnly = true)
     public SubmissionResponse getSubmission(Long roundId, Long teamId) {
@@ -43,23 +46,56 @@ public class SubmissionService {
     }
 
     @Transactional
-    public SubmissionResponse upsertSubmission(Long roundId, Long teamId, SubmissionRequest request) {
+    public SubmissionResponse upsertSubmission(Long roundId, Long teamId, SubmissionRequest request, String actorEmail) {
         Round round = roundRepository.findById(roundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found"));
 
-        if (round.getEndTime() == null) {
-            throw new BusinessException("Cannot submit: Round does not have an end time (deadline) configured.");
+        if (round.getStatus() != RoundStatus.ACTIVE) {
+            throw new BusinessException("Cannot submit: The round is not currently active.");
         }
 
-        if (LocalDateTime.now().isAfter(round.getEndTime())) {
+        if (round.getStartTime() == null || round.getDurationHours() == null) {
+            throw new BusinessException("Cannot submit: Round start time or duration is not configured.");
+        }
+
+        long minutes = (long)(round.getDurationHours() * 60);
+        LocalDateTime endTime = round.getStartTime().plusMinutes(minutes);
+        if (LocalDateTime.now().isAfter(endTime)) {
             throw new BusinessException("Deadline has passed. Submissions are now locked for this round.");
+        }
+
+        // Eligibility check for subsequent rounds
+        if (round.getRoundSeq() > 1) {
+            java.util.List<Round> previousRounds = roundRepository.findByEventId(round.getEvent().getId()).stream()
+                    .filter(r -> r.getRoundSeq() < round.getRoundSeq())
+                    .sorted((r1, r2) -> r2.getRoundSeq().compareTo(r1.getRoundSeq()))
+                    .collect(java.util.stream.Collectors.toList());
+            if (!previousRounds.isEmpty()) {
+                Round previousRound = previousRounds.get(0);
+                RoundRanking prevRr = roundRankingRepository.findByRoundIdAndTeamId(previousRound.getId(), teamId)
+                        .orElseThrow(() -> new BusinessException("Team did not participate in the previous round."));
+                if (prevRr.getIsPromoted() == null || !prevRr.getIsPromoted()) {
+                    throw new BusinessException("Cannot submit: Team was not promoted from the previous round.");
+                }
+            }
         }
 
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
-        Account submitter = accountRepository.findById(request.getSubmittedByAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Account not found"));
+        // The submitter is the AUTHENTICATED user — never trust an id from the request
+        // body. Only the team's LEADER may create/update the submission (members can
+        // only view); ADMIN keeps access for support/demo purposes.
+        Account submitter = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + actorEmail));
+        if (submitter.getRole() != com.fpt.seal.hms.common.enums.Role.ADMIN) {
+            var membership = teamMemberRepository.findByTeamIdAndAccountId(teamId, submitter.getId())
+                    .orElseThrow(() -> new BusinessException("You are not a member of this team."));
+            if (membership.getRole() != com.fpt.seal.hms.common.enums.MemberRole.LEADER
+                    || membership.getStatus() != com.fpt.seal.hms.common.enums.MemberStatus.ACCEPTED) {
+                throw new BusinessException("Only the team leader can submit or update the submission. Members can only view it.");
+            }
+        }
 
         // Auto-generate RoundRanking if it doesn't exist
         RoundRanking rr = roundRankingRepository.findByRoundIdAndTeamId(roundId, teamId)

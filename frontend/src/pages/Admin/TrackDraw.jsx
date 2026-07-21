@@ -4,29 +4,40 @@ import { Shuffle, CheckCircle, AlertCircle, ChevronRight, Users, Tag, Lock, Unlo
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { trackService } from '../../api/trackService';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const TrackDraw = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
   const [isConfigured, setIsConfigured] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
   const [subTopics, setSubTopics] = useState([]);
   const [tracks, setTracks] = useState([]);
-  const [step, setStep] = useState(1); // 1 = sub-topic draw, 2 = team assignment
+  const [step, setStep] = useState(1); // 1 = sub-topic draw, 2 = team assignment, 3 = confirm
   const [unassignedTeams, setUnassignedTeams] = useState([]);
   const [activeTeamsList, setActiveTeamsList] = useState([]);
   const [topicDrawn, setTopicDrawn] = useState(false);
   const [teamsAssigned, setTeamsAssigned] = useState(false);
-  const parsedInitEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-  const [confirmed, setConfirmed] = useState(() => localStorage.getItem(`trackDrawConfirmed_${parsedInitEventId}`) === 'true');
+  const parsedInitEventId = parseInt(eventId);
+  const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [toast, setToast] = useState('');
+  const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
+  const [resetModal, setResetModal] = useState(false);
+
+  const trackColors = [
+    { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
+    { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
+    { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
+    { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
+  ];
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+        const parsedEventId = parseInt(eventId);
         const eventRes = await eventService.getEventDetails(parsedEventId);
         const teamsRes = await teamService.getTeamsByEvent(parsedEventId);
         
@@ -36,15 +47,19 @@ const TrackDraw = () => {
           return;
         }
 
+        if (activeEvent.status === 'CREATED' || activeEvent.status === 'UPCOMING') {
+          setIsLocked(true);
+        } else {
+          setIsLocked(false);
+        }
+
+        // Fetch topics directly from the Event (no tracks required yet!)
         let realSubTopics = [];
         try {
-           const tracksRes = await trackService.getTracksByEvent(parsedEventId);
-           const tracks = tracksRes.data || [];
-           const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(res => res.data || []));
-           const allTopics = await Promise.all(topicsPromises);
-           realSubTopics = allTopics.flat();
+           const topicsRes = await trackService.getTopicsByEvent(parsedEventId);
+           realSubTopics = topicsRes.data || [];
         } catch (e) {
-           console.error("Failed to load tracks/topics", e);
+           console.error("Failed to load topics", e);
         }
 
         if (realSubTopics.length === 0) {
@@ -54,40 +69,40 @@ const TrackDraw = () => {
 
         setSubTopics(realSubTopics);
 
-        const validTeams = (teamsRes.data || []).filter(t => ['CREATED', 'REGISTERED', 'APPROVED', 'CONFIRMED'].includes(t.status));
-        const realTeams = validTeams.map(t => ({ id: t.id, name: t.name })); // Keep objects for ID usage
+        const validTeams = (teamsRes.data || []).filter(t => ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status));
+        const realTeams = validTeams.map(t => ({ id: t.id, name: t.name, trackId: t.trackId })); // Keep objects for ID usage
         setActiveTeamsList(realTeams);
         setIsConfigured(true);
 
-        const drawResStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
-        if (drawResStr && localStorage.getItem(`trackDrawConfirmed_${parsedEventId}`) === 'true') {
-          const savedTracks = JSON.parse(drawResStr);
-          // Cross-check: only restore if the saved teams actually exist in DB
-          const savedTeamIds = savedTracks.flatMap(t => t.teams.map(tm => tm.id)).filter(Boolean);
-          const realTeamIds = realTeams.map(t => t.id);
-          const isStale = savedTeamIds.length > 0 && !savedTeamIds.some(id => realTeamIds.includes(id));
-          
-          if (isStale) {
-            // Stale cache from a different event — clear it
-            localStorage.removeItem(`trackDraw_${parsedEventId}`);
-            localStorage.removeItem(`trackDrawConfirmed_${parsedEventId}`);
-          } else {
-            setTracks(savedTracks);
-            setConfirmed(true);
-            setTopicDrawn(true);
-            setTeamsAssigned(true);
-            setUnassignedTeams([]);
-            return;
-          }
-        }
-        
-        const trackColors = [
-          { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
-          { color: 'var(--accent-1)', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.3)' },
-          { color: 'var(--accent-3)', bg: 'rgba(20,184,166,0.1)', border: 'rgba(20,184,166,0.3)' },
-          { color: 'var(--warning)', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
-        ];
+        // Check if tracks already exist for this event (Draw has already happened!)
+        let realTracks = [];
+        try {
+           const tracksRes = await trackService.getTracksByEvent(parsedEventId);
+           realTracks = tracksRes.data || [];
+        } catch (e) {}
 
+        if (realTracks.length > 0) {
+           // We have real tracks! The draw is already confirmed.
+           const displayTracks = realTracks.map((dbTrack, i) => {
+              const trackTopic = realSubTopics.find(st => st.trackId === dbTrack.id) || null;
+              const teamsForTrack = realTeams.filter(t => t.trackId === dbTrack.id);
+              return {
+                 id: dbTrack.id,
+                 name: dbTrack.name || `Unnamed Track (ID: ${dbTrack.id})`,
+                 ...trackColors[i % trackColors.length],
+                 subTopic: trackTopic,
+                 teams: teamsForTrack
+              };
+           });
+           setTracks(displayTracks);
+           setConfirmed(true);
+           setTopicDrawn(true);
+           setTeamsAssigned(true);
+           setUnassignedTeams([]);
+           return;
+        }
+
+        // NO TRACKS EXIST - Time to set up the Draw UI!
         const initTracks = realSubTopics.map((st, i) => ({
           id: `T${i}`, 
           name: `Track ${String.fromCharCode(65 + i)}`, 
@@ -104,7 +119,7 @@ const TrackDraw = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [eventId]);
 
   const triggerError = (msg) => {
     setError(msg);
@@ -113,6 +128,16 @@ const TrackDraw = () => {
   };
 
   const handleDrawTopics = () => {
+    if (isLocked) {
+      setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
+      return;
+    }
     setDrawing(true);
     setError('');
     setTimeout(() => {
@@ -131,6 +156,16 @@ const TrackDraw = () => {
 
   // Step 2: Random assign teams to tracks
   const handleAssignTeams = () => {
+    if (isLocked) {
+      setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
+      return;
+    }
     setDrawing(true);
     setError('');
     
@@ -166,54 +201,108 @@ const TrackDraw = () => {
     
     setDrawing(true);
     try {
-      const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+      const parsedEventId = parseInt(eventId);
+      
+      // 1. Create Tracks in DB and Assign Topics
       for (const track of tracks) {
-        // 1. Create track in DB
-        const trackPayload = { trackName: track.name };
-        let dbTrack;
-        try {
-          const created = await trackService.createTrack(targetEventId, trackPayload);
-          dbTrack = created.data;
-        } catch (e) {
-          // If already exists or error, try fetching or skip gracefully for demo
-          const existing = await trackService.getTracksByEvent(eventId);
-          dbTrack = existing.data?.find(t => t.name === track.name);
-          if (!dbTrack) throw e;
-        }
-
-        // 2. Assign teams to track in DB
-        if (dbTrack && dbTrack.id) {
-          track.id = dbTrack.id; // update client id
-          for (const team of track.teams) {
-            if (team.id) {
-              await teamService.assignTrack(team.id, dbTrack.id);
+        if (!track.id || track.id.toString().startsWith('T')) {
+          const trackPayload = { name: track.name, description: 'Generated during Track Draw' };
+          const createdTrack = await trackService.createTrack(parsedEventId, trackPayload);
+          const dbTrack = createdTrack.data;
+          
+          if (dbTrack && track.subTopic && track.subTopic.id) {
+             await trackService.assignTopicToTrack(track.subTopic.id, dbTrack.id);
+          }
+          
+          // 2. Assign teams to the newly created DB track
+          if (dbTrack && dbTrack.id) {
+            track.id = dbTrack.id; // update client id
+            for (const team of track.teams) {
+              if (team.id) {
+                await teamService.assignTrack(team.id, dbTrack.id);
+              }
             }
           }
         }
       }
 
       setConfirmed(true);
-      localStorage.setItem(`trackDrawConfirmed_${targetEventId}`, 'true');
-      localStorage.setItem(`trackDraw_${targetEventId}`, JSON.stringify(tracks));
+      localStorage.setItem(`trackDrawConfirmed_${parsedEventId}`, 'true');
+      localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(tracks));
       
-      // Backend automatically persists the track assignments now
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {
-      triggerError('Failed to save to database: ' + (e?.response?.data?.message || e.message));
+      let errMsg = e?.response?.data?.message || e.message;
+      if (errMsg.includes('still open') || errMsg.includes('registration first')) {
+         errMsg = "Cannot assign tracks while Event is PLANNED/UPCOMING. Please lock registration (change status to ONGOING) first.";
+      }
+      triggerError('Failed to save to database: ' + errMsg);
+    } finally {
       setDrawing(false);
     }
   };
 
-  const handleResetDraw = () => {
-    if (!window.confirm('Reset the draw? This will clear all track assignments and allow a new draw.')) return;
-    const targetEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-    localStorage.removeItem(`trackDraw_${targetEventId}`);
-    localStorage.removeItem(`trackDrawConfirmed_${targetEventId}`);
+  const handleResetDraw = async () => {
+    if (isLocked) {
+        setModalConfig({
+          isOpen: true,
+          title: 'Track Draw Locked',
+          message: 'Track Draw is locked during the Registration phase. Please lock registration first before performing the track draw.',
+          onConfirm: null,
+          type: 'warning',
+        });
+        return;
+      }
+      setResetModal(true);
+  };
+
+  const executeResetDraw = async () => {
+    const parsedEventId = parseInt(eventId);
+    
+    try {
+      // Delete all existing tracks (which unassigns topics and teams due to CASCADE or logic)
+      const existingTracks = await trackService.getTracksByEvent(parsedEventId);
+      for (const t of (existingTracks.data || [])) {
+         try { await trackService.deleteTrack(t.id); } catch(e) { console.warn('Failed to delete track', e); }
+      }
+      
+      // Also reset mentors for all teams in the event
+      try { await teamService.resetMentorsByEvent(parsedEventId); } catch(e) { console.warn('Failed to reset mentors', e); }
+      
+      // Wipe out all submissions, scores, and round rankings for a clean slate
+      try { await eventService.resetEventData(parsedEventId); } catch(e) { console.warn('Failed to reset event submissions and scores', e); }
+      
+      // Roll back all rounds to CREATED status
+      const roundsRes = await eventService.getEventDetails(parsedEventId);
+      const rounds = roundsRes?.data?.rounds || [];
+      for (const round of rounds) {
+        if (round.status !== 'CREATED' && round.status !== 'PLANNED') {
+          try { await eventService.updateRoundStatus(round.id, 'CREATED'); } catch(e) { console.warn('Failed to update round', e); }
+        }
+      }
+      
+    } catch(e) {
+      console.error(e);
+      showToast('Encountered an issue during reset: ' + e.message, 'warning');
+    }
+
     setConfirmed(false);
     setTopicDrawn(false);
     setTeamsAssigned(false);
-    setTracks(prev => prev.map(t => ({ ...t, subTopic: null, teams: [] })));
+    setStep(1);
+    localStorage.removeItem(`trackDrawConfirmed_${parsedEventId}`);
+    localStorage.removeItem(`trackDraw_${parsedEventId}`);
+    
+    // Re-initialize for Draw
+    const initTracks = subTopics.map((st, i) => ({
+      id: `T${i}`, 
+      name: `Track ${String.fromCharCode(65 + i)}`, 
+      ...trackColors[i % trackColors.length], 
+      subTopic: null, 
+      teams: [] 
+    }));
+    setTracks(initTracks);
     setUnassignedTeams(activeTeamsList);
   };
 
@@ -236,14 +325,23 @@ const TrackDraw = () => {
         )}
       </div>
 
+      {isLocked && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <Lock size={18} />
+          <span style={{ fontSize: '13px', fontWeight: '500' }}>
+            <strong>Action Locked:</strong> Event is still in the Registration phase. Drawing tracks is disabled until registration ends.
+          </span>
+        </div>
+      )}
+
       {!isConfigured ? (
         <div style={{ padding: '40px', textAlign: 'center', background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '16px' }}>
           <AlertCircle size={48} color="var(--warning)" style={{ marginBottom: '16px', opacity: 0.8 }} />
           <h2 style={{ fontSize: '20px', color: 'var(--warning)', marginBottom: '8px' }}>Event Not Configured</h2>
           <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', maxWidth: '500px', margin: '0 auto 24px' }}>
-            You must configure the Track list and Sub-topics Bank before conducting the draw.
+            You must configure the Sub-topics Bank before conducting the draw.
           </p>
-          <button className="btn btn-primary" onClick={() => navigate('/admin/events/edit/seal-sp26')} style={{ background: 'var(--warning)', color: '#000' }}>
+          <button className="btn btn-primary" onClick={() => navigate(`/admin/events/edit/${parsedEventId}`)} style={{ background: 'var(--warning)', color: '#000' }}>
             <Target size={18} /> Go to Event Settings
           </button>
         </div>
@@ -279,12 +377,12 @@ const TrackDraw = () => {
           {/* Left: available sub-topics */}
           <div className="glass-panel" style={{ padding: '24px' }}>
             <h3 style={{ fontSize: '16px', marginBottom: '6px' }}>Available Sub-topics</h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>All are within "Domain-Specific AI RAG Systems"</p>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>Loaded from Event Configuration</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {subTopics.map(topic => (
                 <div key={topic.id} style={{ padding: '14px 16px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '10px' }}>
                   <div style={{ fontWeight: '600', fontSize: '14px', marginBottom: '4px' }}>{topic.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{topic.desc}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>{topic.description || topic.desc}</div>
                 </div>
               ))}
             </div>
@@ -344,7 +442,7 @@ const TrackDraw = () => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
                   <h3 style={{ fontSize: '16px', marginBottom: '4px' }}>Unassigned Teams</h3>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{unassignedTeams.length} teams • Max 8 teams/track</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{unassignedTeams.length} teams</p>
                 </div>
                 <button onClick={handleAssignTeams} disabled={drawing} className="btn btn-primary" style={{ gap: '8px', background: 'var(--primary)' }}>
                   <Shuffle size={16} /> {drawing ? 'Assigning...' : 'Auto Assign Teams'}
@@ -368,7 +466,7 @@ const TrackDraw = () => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <span style={{ fontWeight: '800', fontSize: '18px', color: track.color }}>{track.name}</span>
                     <span style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: '8px' }}>
-                      {track.teams.length}/8
+                      {track.teams.length} Teams
                     </span>
                   </div>
                   {track.subTopic && (
@@ -421,7 +519,7 @@ const TrackDraw = () => {
             </h3>
             {!confirmed && (
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: '1.7' }}>
-                Once confirmed, the results will be <strong>published to all participants</strong>. Teams will see their assigned Track and Sub-topic in their accounts.
+                Once confirmed, the Tracks will be created in the database and the results will be <strong>published to all participants</strong>. Teams will see their assigned Track and Sub-topic in their accounts.
               </p>
             )}
 
@@ -453,8 +551,9 @@ const TrackDraw = () => {
             )}
 
             {!confirmed && (
-              <button onClick={handleConfirm} className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '15px', gap: '8px', background: 'var(--primary)', boxShadow: '0 4px 20px rgba(245,158,11,0.4)' }}>
-                <Lock size={16} /> Confirm & Publish Results
+              <button onClick={handleConfirm} disabled={drawing} className="btn btn-primary" style={{ padding: '14px 32px', fontSize: '15px', gap: '8px', background: 'var(--primary)', boxShadow: '0 4px 20px rgba(245,158,11,0.4)' }}>
+                {drawing ? <RefreshCw size={16} className="spin" /> : <Lock size={16} />} 
+                {drawing ? 'Publishing...' : 'Confirm & Publish Results'}
               </button>
             )}
           </div>
@@ -471,13 +570,38 @@ const TrackDraw = () => {
           </div>
         </div>
       )}
-      </>
+        </>
       )}
 
       <style>{`
         @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
+
+      <ConfirmModal
+        isOpen={modalConfig.isOpen}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        confirmText="Proceed"
+        cancelText="Cancel"
+        type={modalConfig.type}
+      />
+
+      <ConfirmModal
+        isOpen={resetModal}
+        onClose={() => setResetModal(false)}
+        onConfirm={executeResetDraw}
+        title="DANGER: Reset Draw"
+        message="Are you absolutely sure you want to reset the draw? This action CANNOT be undone. It will DELETE all Tracks, all Submissions, all Scores, and all Rankings for this entire Event."
+        confirmText="Yes, delete everything"
+        cancelText="Cancel"
+        type="error"
+        requireInput="RESET"
+      />
     </div>
   );
 };

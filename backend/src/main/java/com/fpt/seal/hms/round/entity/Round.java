@@ -32,11 +32,12 @@ public class Round extends BaseEntity {
     @Column(name = "start_time")
     private LocalDateTime startTime;
 
-    @Column(name = "end_time")
-    private LocalDateTime endTime;
+    @Column(name = "duration_hours")
+    private Double durationHours;
 
     @Column(name = "promotion_top_n")
     private Integer promotionTopN;
+
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

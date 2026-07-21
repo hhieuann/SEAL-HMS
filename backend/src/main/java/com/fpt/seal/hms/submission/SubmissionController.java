@@ -6,6 +6,7 @@ import com.fpt.seal.hms.submission.dto.SubmissionResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -23,11 +24,13 @@ public class SubmissionController {
     }
 
     @PutMapping
+    @PreAuthorize("hasAnyRole('STUDENT','ADMIN')")
     public ResponseEntity<ApiResponse<SubmissionResponse>> upsertSubmission(
             @PathVariable Long roundId,
             @PathVariable Long teamId,
-            @Valid @RequestBody SubmissionRequest request) {
-        SubmissionResponse response = submissionService.upsertSubmission(roundId, teamId, request);
+            @Valid @RequestBody SubmissionRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        SubmissionResponse response = submissionService.upsertSubmission(roundId, teamId, request, authentication.getName());
         return ResponseEntity.ok(ApiResponse.ok("Submission saved successfully", response));
     }
 }

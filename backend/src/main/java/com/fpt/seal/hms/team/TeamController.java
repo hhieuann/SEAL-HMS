@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -37,6 +38,7 @@ public class TeamController {
 
     // Endpoint for Admin/Staff to trigger random track assignment
     @PostMapping("/teams/{id}/random-assign")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> assignRandomTrack(
             @PathVariable Long id,
             @RequestParam Long eventId) {
@@ -45,17 +47,74 @@ public class TeamController {
     }
 
     @PatchMapping("/teams/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> updateTeamStatus(
             @PathVariable Long id,
             @Valid @RequestBody com.fpt.seal.hms.team.dto.TeamStatusUpdateRequest request) {
         TeamResponse updated = teamService.updateTeamStatus(id, request.getStatus());
         return ResponseEntity.ok(ApiResponse.ok("Team status updated successfully", updated));
     }
+
+    @PostMapping("/teams/{id}/mentor")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<TeamResponse>> assignMentor(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, Long> payload) {
+        Long mentorId = payload.get("mentorId");
+        TeamResponse updated = teamService.assignMentor(id, mentorId);
+        return ResponseEntity.ok(ApiResponse.ok("Mentor assigned successfully", updated));
+    }
+
     @PatchMapping("/teams/{id}/assign-track")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<TeamResponse>> assignTrack(
             @PathVariable Long id,
             @RequestParam Long trackId) {
         TeamResponse updated = teamService.assignTrack(id, trackId);
         return ResponseEntity.ok(ApiResponse.ok("Track assigned successfully", updated));
+    }
+
+    @PutMapping("/teams/{id}/disqualify")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<TeamResponse>> disqualifyTeam(
+            @PathVariable Long id,
+            @RequestParam boolean disqualified,
+            @RequestParam(required = false, defaultValue = "") String reason) {
+        TeamResponse updated = teamService.disqualifyTeam(id, disqualified, reason);
+        return ResponseEntity.ok(ApiResponse.ok("Team disqualification status updated", updated));
+    }
+
+    @PutMapping("/teams/{id}/rounds/{roundId}/penalty")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<TeamResponse>> applyPenalty(
+            @PathVariable Long id,
+            @PathVariable Long roundId,
+            @RequestBody com.fpt.seal.hms.team.dto.TeamPenaltyRequest request) {
+        TeamResponse updated = teamService.applyPenalty(id, roundId, request.getPenaltyPoints(), request.getPenaltyReason());
+        return ResponseEntity.ok(ApiResponse.ok("Team penalty applied", updated));
+    }
+
+    @PostMapping("/events/{eventId}/teams/reset-mentors")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ResponseEntity<ApiResponse<Void>> resetMentors(@PathVariable Long eventId) {
+        teamService.resetAllMentorsByEvent(eventId);
+        return ResponseEntity.ok(ApiResponse.ok("Mentors reset successfully", null));
+    }
+
+    @GetMapping("/teams/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<java.util.List<com.fpt.seal.hms.team.dto.MentorMessageDto>>> getMentorMessages(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(teamService.getMentorMessages(id)));
+    }
+
+    @PostMapping("/teams/{id}/messages")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<com.fpt.seal.hms.team.dto.MentorMessageDto>> sendMentorMessage(
+            @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody com.fpt.seal.hms.team.dto.MentorMessageRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        String email = authentication.getName();
+        com.fpt.seal.hms.team.dto.MentorMessageDto msg = teamService.sendMentorMessageByEmail(id, email, request.getMessage());
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Message sent", msg));
     }
 }

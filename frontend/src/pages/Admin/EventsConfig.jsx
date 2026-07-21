@@ -37,12 +37,7 @@ const EventsConfig = () => {
                       const [y, m, d, h, min, s] = startStr;
                       startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
                     }
-                    let endStr = r.endTime;
-                    if (Array.isArray(endStr)) {
-                      const [y, m, d, h, min, s] = endStr;
-                      endStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
-                    }
-                    return { ...r, start: startStr, end: endStr };
+                    return { ...r, start: startStr, durationHours: r.durationHours };
                   })
                 };
               } catch (e) {
@@ -93,7 +88,7 @@ const EventsConfig = () => {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <button className="btn btn-secondary" style={{ fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); navigate(`/admin/events/edit/${event.id}`); }}><Edit2 size={14} /> Edit</button>
+                <button className="btn btn-secondary" style={{ fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); navigate(`/admin/event/${event.id}/edit`); }}><Edit2 size={14} /> Edit</button>
                 {expandedEvent === event.id ? <ChevronUp size={20} color="var(--text-secondary)" /> : <ChevronDown size={20} color="var(--text-secondary)" />}
               </div>
             </div>
@@ -127,7 +122,7 @@ const EventsConfig = () => {
                             <h4 style={{ fontSize: '16px' }}>{round.name}</h4>
                             <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: round.status === 'active' ? 'rgba(59,130,246,0.2)' : round.status === 'completed' ? 'rgba(16,185,129,0.2)' : 'var(--bg-hover)', color: round.status === 'active' ? 'var(--primary)' : round.status === 'completed' ? 'var(--success)' : 'var(--text-secondary)', fontWeight: '600', textTransform: 'capitalize' }}>{round.status || 'planned'}</span>
                           </div>
-                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{round.start} → {round.end} • {round.teams || 0} teams</span>
+                          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{round.start} {round.durationHours ? `(+${round.durationHours}h)` : ''} • {round.teams || 0} teams</span>
                         </div>
                         <button className="btn-icon" style={{ padding: '6px', border: '1px solid var(--border-color)', borderRadius: '8px' }}><Settings size={16} /></button>
                       </div>
@@ -139,10 +134,10 @@ const EventsConfig = () => {
                             <div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}><Target size={13} color="var(--primary)" /> <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span></div>
                               <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                                <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                                <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
                               </div>
                             </div>
-                            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{c.weight}%</span>
+                            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round((c.weight || 0) * 100)}%</span>
                           </div>
                         ))}
                       </div>

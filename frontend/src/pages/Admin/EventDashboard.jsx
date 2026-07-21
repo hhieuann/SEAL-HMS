@@ -1,15 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Lock, Calendar, Target } from 'lucide-react';
+import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, GraduationCap, X, Plus, UserCheck, Loader2 } from 'lucide-react';
 import './EventDashboard.css';
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const parts = dateStr.split('-');
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + 
+           d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  } catch(e) { return dateStr; }
+};
 
 const EventDashboard = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
+  const [statusActionLoading, setStatusActionLoading] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [statusError, setStatusError] = useState('');
+  const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
+    try {
+      setUserRole(localStorage.getItem('userRole') || '');
+    } catch(e) {}
     const fetchData = async () => {
       try {
         const { eventService } = await import('../../api/eventService.js');
@@ -37,30 +59,40 @@ const EventDashboard = () => {
         const rawRounds = roundsRes.data || [];
 
         // Fetch Topics
-        const tracksRes = await trackService.getTracksByEvent(parsedId);
-        const tracks = tracksRes.data || [];
-        const topicsPromises = tracks.map(t => trackService.getTopicsByTrack(t.id).then(r => r.data || []));
-        const allTopics = await Promise.all(topicsPromises);
-        const subTopics = allTopics.flat();
+        const topicsRes = await trackService.getTopicsByEvent(parsedId);
+        const subTopics = topicsRes.data || [];
+
+        // Fetch Teams
+        try {
+          const teamsData = await teamService.getTeamsByEvent(parsedId);
+          setTeams(teamsData?.data || teamsData || []);
+        } catch (e) {
+          console.error("Failed to load teams", e);
+        }
+
+        // Fetch Criteria
+        const { criterionService } = await import('../../api/scoreService.js');
+        const roundsWithCriteriaPromises = rawRounds.map(async r => {
+          try {
+             const critRes = await criterionService.getCriteria(r.id);
+             return { ...r, criteria: critRes?.data || [] };
+          } catch {
+             return { ...r, criteria: [] };
+          }
+        });
+        const roundsWithCriteria = await Promise.all(roundsWithCriteriaPromises);
 
         const enrichedEvent = {
           ...rawEvent,
           subTopics: subTopics,
-          rounds: rawRounds.map(r => {
+          rounds: roundsWithCriteria.map(r => {
             let startStr = r.startTime;
-            if (Array.isArray(startStr)) startStr = `${startStr[0]}-${String(startStr[1]).padStart(2, '0')}-${String(startStr[2]).padStart(2, '0')}T${String(startStr[3] || 0).padStart(2, '0')}:${String(startStr[4] || 0).padStart(2, '0')}`;
-            let endStr = r.endTime;
-            if (Array.isArray(endStr)) endStr = `${endStr[0]}-${String(endStr[1]).padStart(2, '0')}-${String(endStr[2]).padStart(2, '0')}T${String(endStr[3] || 0).padStart(2, '0')}:${String(endStr[4] || 0).padStart(2, '0')}`;
-            return { ...r, start: startStr, end: endStr };
+            if (startStr && startStr.length > 16) startStr = startStr.slice(0, 16);
+            return { ...r, start: startStr, durationHours: r.durationHours };
           })
         };
 
         setEvent(enrichedEvent);
-
-        // Fetch Teams
-        teamService.getTeamsByEvent(parsedId)
-          .then(res => setTeams(res.data || []))
-          .catch(err => console.error(err));
 
       } catch (err) {
         console.error("Failed to load event dashboard data", err);
@@ -71,22 +103,29 @@ const EventDashboard = () => {
 
   const handleUpdateEvent = async (updates) => {
     try {
+      setStatusError('');
       const { eventService } = await import('../../api/eventService.js');
       if (updates.status) {
+        setStatusActionLoading(true);
         const res = await eventService.updateEventStatus(event.id, updates.status);
         setEvent(prev => ({ ...prev, status: res.data.status }));
       }
     } catch (err) {
       console.error(err);
+      const msg = err.response?.data?.message || err.message || 'Failed to update event status.';
+      setStatusError(msg);
+    } finally {
+      setStatusActionLoading(false);
     }
   };
 
-  const handleRoundDateChange = (roundId, field, value) => {
-    const updatedRounds = event.rounds.map(r => 
-      r.id === roundId ? { ...r, [field]: value } : r
-    );
-    setEvent({ ...event, rounds: updatedRounds });
+  const executeConfirmAction = () => {
+    if (confirmAction) {
+      handleUpdateEvent(confirmAction);
+      setConfirmAction(null);
+    }
   };
+
 
   if (!event) {
     return (
@@ -104,6 +143,19 @@ const EventDashboard = () => {
   const totalTopics = event.subTopics ? event.subTopics.length : 0;
   const totalRounds = event.rounds ? event.rounds.length : 0;
 
+  const today = new Date().toISOString().split('T')[0];
+  const statusUpper = (event.status || '').toUpperCase();
+  const showRegBanner = statusUpper === 'PLANNED' && event.registrationStartDate && today >= event.registrationStartDate;
+
+  const statusConfig = {
+    PLANNED:   { label: 'Planning Phase',    color: 'var(--text-secondary)', bg: 'var(--bg-hover)',            nextLabel: 'Open Registration', nextStatus: 'UPCOMING', icon: <Unlock size={16}/> },
+    UPCOMING:  { label: 'Registration Open', color: 'var(--primary)',        bg: 'rgba(59,130,246,0.1)',       nextLabel: 'Lock Registration', nextStatus: 'ONGOING',  icon: <Lock size={16}/> },
+    ONGOING:   { label: 'Event Ongoing',     color: 'var(--success)',        bg: 'rgba(16,185,129,0.1)',       nextLabel: 'End Event',          nextStatus: 'COMPLETED',icon: <CheckCircle2 size={16}/> },
+    COMPLETED: { label: 'Event Completed',   color: 'var(--warning)',        bg: 'rgba(245,158,11,0.1)',       nextLabel: null, nextStatus: null },
+    CANCELLED: { label: 'Cancelled',         color: 'var(--danger)',         bg: 'rgba(239,68,68,0.1)',        nextLabel: null, nextStatus: null },
+  };
+  const sc = statusConfig[statusUpper] || statusConfig['PLANNED'];
+
   return (
     <div className="animate-fade-in">
       <div className="page-header">
@@ -117,13 +169,67 @@ const EventDashboard = () => {
         </div>
       </div>
 
+      {/* Auto-detect banner */}
+      {userRole === 'ADMIN' && showRegBanner && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertTriangle size={18} color="var(--warning)" />
+            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--warning)' }}>Registration period has started</span>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>— the event is still in Planning status. Open registration so participants can sign up.</span>
+          </div>
+          <button className="btn btn-primary" style={{ background: 'var(--warning)', color: '#000', padding: '8px 16px', fontSize: '13px' }}
+            disabled={statusActionLoading} onClick={() => setConfirmAction({ status: 'UPCOMING', label: 'Open Registration' })}>
+            <Unlock size={14} /> Open Registration
+          </button>
+        </div>
+      )}
+
+      {/* Status Action Card */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 24px', background: sc.bg, border: `1px solid ${sc.color}33`, borderRadius: '12px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <PlayCircle size={20} color={sc.color} />
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Current Phase</div>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: sc.color }}>{sc.label}</div>
+          </div>
+          {event.registrationStartDate && (
+            <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Registration</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{formatDate(event.registrationStartDate)} → {formatDate(event.registrationEndDate) || 'TBD'}</div>
+            </div>
+          )}
+          {event.startDate && (
+            <div style={{ marginLeft: '24px', paddingLeft: '24px', borderLeft: '1px solid var(--border-color)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>Event Dates</div>
+              <div style={{ fontSize: '13px', fontWeight: '600' }}>{formatDate(event.startDate)} → {formatDate(event.endDate) || 'TBD'}</div>
+            </div>
+          )}
+        </div>
+        {userRole === 'ADMIN' && sc.nextStatus && (
+          <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            disabled={statusActionLoading} onClick={() => setConfirmAction({ status: sc.nextStatus, label: sc.nextLabel })}>
+            {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}
+          </button>
+        )}
+      </div>
+
+
+      {/* Status Error Banner */}
+      {statusError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '24px' }}>
+          <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: '13px', color: '#ef4444', fontWeight: '500', flex: 1 }}>{statusError}</span>
+          <button onClick={() => setStatusError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}><X size={16} color="#ef4444" /></button>
+        </div>
+      )}
+
       <div className="stats-grid">
         <div className="stat-card glass-panel">
           <div className="stat-icon gradient-1"><Users size={24} /></div>
           <div className="stat-details">
             <h3>Total Teams</h3>
-            <p className="stat-value">{totalTeams}</p>
-            <p className="stat-trend neutral">{totalTeams === 0 ? 'No teams yet' : `${totalTeams} team(s) registered`}</p>
+            <p className="stat-value">{totalTeams} <span style={{fontSize: '14px', color: 'var(--text-secondary)'}}>/ {event.maxTeams || '∞'} max</span></p>
+            <p className="stat-trend neutral">{event.minTeams ? `Min ${event.minTeams} teams required` : `${totalTeams} team(s) registered`}</p>
           </div>
         </div>
         <div className="stat-card glass-panel">
@@ -152,45 +258,7 @@ const EventDashboard = () => {
         </div>
       </div>
 
-      {/* Event Management Controls */}
-      <div className="glass-panel" style={{ marginTop: '24px', marginBottom: '24px', padding: '24px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Lock size={20} color="var(--primary)" /> Event Management Controls
-        </h2>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-          {/* Round Time Management */}
-          <div>
-            <h3 style={{ fontSize: '15px', marginBottom: '12px', color: 'var(--text-primary)' }}>Round Time Management</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', background: 'var(--bg-subtle)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', maxHeight: '200px', overflowY: 'auto' }}>
-              {event.rounds && event.rounds.length > 0 ? event.rounds.map((round) => (
-                <div key={round.id} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', alignItems: 'center' }}>
-                  <div style={{ fontWeight: '500', fontSize: '13px' }}>{round.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input 
-                      type="time" 
-                      value={round.start || ''} 
-                      onChange={e => handleRoundDateChange(round.id, 'start', e.target.value)}
-                      title="Start Time"
-                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
-                    />
-                    <span style={{ color: 'var(--text-secondary)' }}>→</span>
-                    <input 
-                      type="time" 
-                      value={round.end || ''} 
-                      onChange={e => handleRoundDateChange(round.id, 'end', e.target.value)}
-                      title="End Time"
-                      style={{ background: 'var(--bg-active)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', width: '110px' }}
-                    />
-                  </div>
-                </div>
-              )) : (
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No rounds configured</div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+
 
       <div className="dashboard-bottom-grid">
         {/* Teams Panel */}
@@ -218,7 +286,7 @@ const EventDashboard = () => {
                 <tbody>
                   {teams.slice(0, 5).map((team, i) => (
                     <tr key={team.id}>
-                      <td><div className="rank-badge" style={{ background: i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : 'var(--bg-active)', color: 'white' }}>{i + 1}</div></td>
+                      <td><div style={{ color: 'var(--text-secondary)', fontWeight: '600', fontSize: '14px', textAlign: 'center', width: '24px' }}>{i + 1}</div></td>
                       <td><strong>{team.name}</strong><br/><small>{team.inviteCode}</small></td>
                       <td>{team.memberCount || 0} / 5</td>
                       <td><span className="status-tag status-success">Active</span></td>
@@ -243,8 +311,8 @@ const EventDashboard = () => {
                   <div className="timeline-content">
                     <h4>{round.name}</h4>
                     <p>
-                      {round.start && round.end ? `${round.start} → ${round.end}` : 'Dates TBD'}
-                      {round.criteria && round.criteria.length > 0 ? ` · ${round.criteria.length} criteria` : ''}
+                      {round.start && round.durationHours ? `${formatDate(round.start)} — (${round.durationHours} hours)` : 'Dates TBD'}
+                      {round.criteria && round.criteria.length > 0 ? ` • ${round.criteria.length} criteria` : ''}
                     </p>
                   </div>
                 </div>
@@ -291,7 +359,7 @@ const EventDashboard = () => {
                   <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '12px', color: 'var(--text-primary)' }}>
                     {round.name}
                     <span style={{ fontSize: '12px', fontWeight: '400', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                      ({round.start} → {round.end})
+                      ({formatDate(round.start)} → {round.durationHours ? `+${round.durationHours}h` : 'TBD'})
                     </span>
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
@@ -303,16 +371,37 @@ const EventDashboard = () => {
                             <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
                           </div>
                           <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                            <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
+                            <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }}></div>
                           </div>
                         </div>
-                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{c.weight}%</span>
+                        <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary)', marginLeft: '12px' }}>{Math.round((c.weight || 0) * 100)}%</span>
                       </div>
                     ))}
                   </div>
                 </div>
               )
             ))}
+          </div>
+        </div>
+      )}
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setConfirmAction(null)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '100%', maxWidth: '400px', background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(245,158,11,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: 'var(--warning)' }}>
+              <AlertTriangle size={24} />
+            </div>
+            <h3 style={{ fontSize: '18px', marginBottom: '8px', color: 'var(--text-primary)' }}>{confirmAction.label}</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px', lineHeight: '1.5' }}>
+              Are you sure you want to proceed with this action? This will update the current phase of the event for all users.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button style={{ flex: 1, padding: '10px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setConfirmAction(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={executeConfirmAction}>
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}

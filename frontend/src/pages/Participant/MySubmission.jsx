@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send } from 'lucide-react';
-import { submissionService, criterionService } from '../../api/scoreService';
+import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle, AlertTriangle } from 'lucide-react';
+import { submissionService, criterionService, standingsService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 
@@ -28,24 +28,61 @@ const MySubmission = () => {
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [showAllRounds, setShowAllRounds] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
         const tId = localStorage.getItem('p_teamId') || localStorage.getItem('userId');
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-
         // Load event from real API
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes?.data?.[0] || null;
+        const eventIdStr = localStorage.getItem('p_eventId') || '1';
+        const eventRes = await eventService.getEventDetails(eventIdStr);
+        const evt = eventRes?.data || null;
         setEvent(evt);
 
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+
+        const round = evt?.rounds?.[activeRoundIdx] || null;
+        
+        if (round) {
+          if (round.startTime && round.durationHours && !round.end) {
+            const start = new Date(round.startTime);
+            start.setMinutes(start.getMinutes() + (round.durationHours * 60));
+            round.end = start.toISOString();
+          }
+          try {
+            const critRes = await criterionService.getCriteria(round.id);
+            if (critRes?.data) round.criteria = critRes.data;
+          } catch (e) {}
+        }
         setCurrentRound(round);
+
+        let currentTeam = null;
+        if (tId) {
+          try {
+            const teamRes = await teamService.getTeamDetails(tId);
+            currentTeam = teamRes?.data || null;
+            setTeamData(currentTeam);
+          } catch (e) {
+            console.error('Failed to load team details:', e);
+          }
+        }
 
         // Load existing submission
         if (tId && round?.id) {
+          let hasCurrentSub = false;
+          let existingSubHasData = false;
           try {
             const subRes = await submissionService.getSubmission(round.id, tId);
             if (subRes?.data) {
@@ -62,9 +99,56 @@ const MySubmission = () => {
                 contactEmail: '',
               });
               setIsSubmitted(true);
+              hasCurrentSub = true;
+              if (sub.submissionName && sub.submissionName.trim().length > 0) {
+                existingSubHasData = true;
+              }
             }
           } catch {
-            // No submission yet
+            // No submission yet for current round
+          }
+          
+          // If no submission in current round, or if it is missing the project name, try fetching from the previous round to pre-fill
+          if ((!hasCurrentSub || !existingSubHasData) && activeRoundIdx > 0) {
+            try {
+              const prevRoundId = evt.rounds[activeRoundIdx - 1].id;
+              const prevSubRes = await submissionService.getSubmission(prevRoundId, tId);
+              if (prevSubRes?.data) {
+                const pSub = prevSubRes.data;
+                setFormData({
+                  projectName: pSub.submissionName || '',
+                  description: pSub.description || '',
+                  techStack: pSub.techStackName || '',
+                  repoUrl: pSub.githubUrl || '',
+                  demoUrl: pSub.demoUrl || '',
+                  slidesUrl: pSub.slideUrl || '',
+                  videoUrl: '',
+                  contactEmail: '',
+                });
+                // We do NOT set existingSubmission or isSubmitted because it's a new round.
+              }
+            } catch {
+              // Ignore if previous round has no submission either
+            }
+          }
+        }
+        
+        // Check if team is eliminated (using backend standings, not localStorage)
+        if (tId && activeRoundIdx > 0) {
+          try {
+            const prevRoundId = evt.rounds[activeRoundIdx - 1]?.id;
+            if (prevRoundId) {
+              const standingsRes = await standingsService.getStandings(prevRoundId);
+              const standings = standingsRes?.data || [];
+              const myStanding = standings.find(s => String(s.teamId) === String(tId));
+              // If team exists in standings and was NOT promoted, they are eliminated
+              if (myStanding && myStanding.promoted === false) {
+                setExistingSubmission({ eliminated: true });
+              }
+              // If team not found in standings at all, don't mark eliminated (scores may not be computed yet)
+            }
+          } catch (e) {
+            console.error('Failed to check elimination status:', e);
           }
         }
       } catch (e) {
@@ -77,6 +161,8 @@ const MySubmission = () => {
   }, []);
 
   const validate = () => {
+    const tId = localStorage.getItem('p_teamId');
+    if (!tId || tId === 'undefined') return 'You must join or create a team before submitting.';
     if (!formData.projectName.trim()) return 'Project name is required.';
     if (!formData.repoUrl.trim()) return 'GitHub repository URL is required.';
     if (formData.repoUrl.toLowerCase().includes('drive.google.com')) return 'Google Drive links are not accepted. Please use GitHub.';
@@ -93,6 +179,17 @@ const MySubmission = () => {
       setTimeout(() => setShaking(false), 500);
       return;
     }
+    
+    if (existingSubmission) {
+      setShowConfirmModal(true);
+      return;
+    }
+    
+    executeSubmit();
+  };
+
+  const executeSubmit = async () => {
+    setShowConfirmModal(false);
     setError('');
     setIsSubmitting(true);
     try {
@@ -126,7 +223,7 @@ const MySubmission = () => {
     setError('');
   };
 
-  const isLocked = currentRound?.status === 'locked' || currentRound?.status === 'completed';
+  const isLocked = currentRound?.status !== 'ACTIVE';
 
   if (loading) {
     return (
@@ -143,6 +240,28 @@ const MySubmission = () => {
         <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.4 }} />
         <h2 style={{ marginBottom: '8px' }}>No Active Round</h2>
         <p>There is no active round for submission right now. Please wait for the Admin to start a round.</p>
+      </div>
+    );
+  }
+
+  if (teamData?.isDisqualified) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>
+        <AlertCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.7 }} />
+        <h2 style={{ marginBottom: '8px' }}>Team Disqualified</h2>
+        <p>You are no longer eligible to participate in the hackathon. Please contact the event organizers if you believe this was a mistake.</p>
+      </div>
+    );
+  }
+
+  if (existingSubmission?.eliminated) {
+    return (
+      <div className="animate-fade-in" style={{ padding: '60px', textAlign: 'center', color: 'var(--danger)' }}>
+        <XCircle size={48} style={{ margin: '0 auto 16px', opacity: 0.7 }} />
+        <h2 style={{ marginBottom: '8px', color: 'var(--danger)', fontWeight: '800' }}>Team Eliminated</h2>
+        <p style={{ color: 'var(--text-secondary)', maxWidth: '400px', margin: '0 auto' }}>
+          We're sorry, but your team did not advance to {currentRound.name}. Thank you for your participation and hard work!
+        </p>
       </div>
     );
   }
@@ -212,13 +331,12 @@ const MySubmission = () => {
 
               <div style={{ display: 'grid', gap: '16px' }}>
                 {[
-                  { label: 'Project Name', value: existingSubmission.projectName },
+                  { label: 'Project Name', value: existingSubmission.submissionName },
                   { label: 'Description', value: existingSubmission.description },
-                  { label: 'Tech Stack', value: existingSubmission.techStack },
-                  { label: 'Repository URL', value: existingSubmission.repoUrl, isLink: true },
+                  { label: 'Tech Stack', value: existingSubmission.techStackName },
+                  { label: 'Repository URL', value: existingSubmission.githubUrl, isLink: true },
                   existingSubmission.demoUrl && { label: 'Demo URL', value: existingSubmission.demoUrl, isLink: true },
-                  existingSubmission.slidesUrl && { label: 'Slides', value: existingSubmission.slidesUrl, isLink: true },
-                  existingSubmission.videoUrl && { label: 'Video', value: existingSubmission.videoUrl, isLink: true },
+                  existingSubmission.slideUrl && { label: 'Slides', value: existingSubmission.slideUrl, isLink: true },
                 ].filter(Boolean).map((item, i) => (
                   <div key={i} style={{ padding: '14px 16px', background: 'var(--bg-subtle)', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>{item.label}</div>
@@ -240,9 +358,11 @@ const MySubmission = () => {
           ) : (
             /* ── Form State ── */
             <div className="glass-panel" style={{ padding: '32px' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
-                {isLocked ? '🔒 Round Locked — View Only' : 'Submit Your Project'}
-              </h2>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '24px' }}>
+                  {isLocked 
+                    ? (currentRound?.status === 'CREATED' ? '🔒 Submission Closed (Round Not Started)' : '🔒 Round Locked – View Only') 
+                    : 'Submit Your Project'}
+                </h2>
 
               {error && (
                 <div className={shaking ? 'shake' : ''} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', marginBottom: '20px', color: '#ef4444', fontSize: '13px' }}>
@@ -355,10 +475,10 @@ const MySubmission = () => {
                   <div key={i} style={{ padding: '12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '13px', fontWeight: '500' }}>{c.name}</span>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)' }}>{c.weight}%</span>
+                      <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)' }}>{Math.round((c.weight || 0) * 100)}%</span>
                     </div>
                     <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden' }}>
-                      <div style={{ width: `${c.weight}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }} />
+                      <div style={{ width: `${Math.round((c.weight || 0) * 100)}%`, height: '100%', background: 'var(--primary)', borderRadius: '2px' }} />
                     </div>
                   </div>
                 ))}
@@ -369,20 +489,58 @@ const MySubmission = () => {
           </div>
 
           {/* Deadline */}
-          <div className="glass-panel" style={{ padding: '20px', background: isLocked ? 'rgba(239,68,68,0.05)' : 'rgba(59,130,246,0.05)', border: `1px solid ${isLocked ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)'}` }}>
+          <div style={{ padding: '16px', background: isLocked ? 'rgba(239,68,68,0.05)' : 'rgba(59,130,246,0.05)', border: '1px solid', borderColor: isLocked ? 'rgba(239,68,68,0.2)' : 'rgba(59,130,246,0.2)', borderRadius: '12px', marginTop: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               {isLocked ? <Lock size={16} color="var(--danger)" /> : <Clock size={16} color="var(--primary)" />}
               <span style={{ fontSize: '13px', fontWeight: '600', color: isLocked ? 'var(--danger)' : 'var(--primary)' }}>
-                {isLocked ? 'Submission Closed' : 'Deadline'}
+                {isLocked 
+                  ? (currentRound?.status === 'CREATED' ? 'Round Not Started' : 'Submission Closed') 
+                  : 'Deadline'}
               </span>
             </div>
             <div style={{ fontSize: '16px', fontWeight: '700' }}>
-              {currentRound.end ? (currentRound.end.includes('T') ? new Date(currentRound.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : currentRound.end) : 'TBD'}
+              {isLocked 
+                ? (currentRound?.status === 'SCORING' ? 'Judges are currently scoring this round.' : 
+                   currentRound?.status === 'UNDER_REVIEW' ? 'This round is currently under review.' : 
+                   currentRound?.status === 'COMPLETED' ? 'This round has concluded.' : 
+                   currentRound?.status === 'CREATED' ? 'This round has not started yet.' : 'Submissions are locked.')
+                : (currentRound.end ? (currentRound.end.includes('T') ? new Date(currentRound.end).toLocaleString([], {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : currentRound.end) : 'TBD')}
             </div>
             {!isLocked && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>You can edit your submission until the round is locked.</div>}
           </div>
         </div>
       </div>
+
+      {/* Overwrite Confirmation Modal */}
+      {showConfirmModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'fadeIn 0.2s' }}>
+          <div style={{ background: '#fff', borderRadius: '16px', width: '90%', maxWidth: '420px', padding: '32px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', animation: 'slideUp 0.3s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ background: 'rgba(245,158,11,0.1)', padding: '12px', borderRadius: '50%' }}>
+                <AlertTriangle size={28} color="var(--warning)" />
+              </div>
+              <h2 style={{ fontSize: '20px', margin: 0 }}>Overwrite Submission?</h2>
+            </div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', marginBottom: '24px' }}>
+              Your team has already submitted a project. Are you sure you want to change and overwrite the current submission? This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button 
+                onClick={() => setShowConfirmModal(false)}
+                className="btn btn-secondary" 
+                style={{ padding: '10px 20px' }}>
+                Cancel
+              </button>
+              <button 
+                onClick={executeSubmit}
+                className="btn btn-primary" 
+                style={{ background: 'var(--warning)', borderColor: 'var(--warning)', padding: '10px 20px' }}>
+                Yes, Overwrite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes shake {

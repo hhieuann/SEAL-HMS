@@ -26,13 +26,18 @@ public class AccountController {
         return ApiResponse.ok(authentication.getName());
     }
 
+    /** Upload avatar for current user. */
+    @PostMapping("/me/avatar")
+    public ApiResponse<String> uploadAvatar(Authentication authentication, @RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        String avatarUrl = accountService.uploadAvatar(authentication.getName(), file);
+        return ApiResponse.ok("Avatar uploaded", avatarUrl);
+    }
+
     /** List accounts, optionally filtered by status (e.g. ?status=PENDING). Coordinator only. */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
-    public ApiResponse<List<AccountResponse>> list(@RequestParam(required = false) AccountStatus status) {
-        List<AccountResponse> result = accountService.list(status).stream()
-                .map(AccountResponse::from)
-                .toList();
+    public ApiResponse<List<com.fpt.seal.hms.account.dto.AccountProfileResponse>> list(@RequestParam(required = false) AccountStatus status) {
+        List<com.fpt.seal.hms.account.dto.AccountProfileResponse> result = accountService.getAccountProfiles(status);
         return ApiResponse.ok(result);
     }
 
@@ -66,5 +71,13 @@ public class AccountController {
                                                    @Valid @RequestBody UpdateRoleRequest request) {
         return ApiResponse.ok("Role updated",
                 AccountResponse.from(accountService.updateRole(id, request.role())));
+    }
+
+    /** Delete an account and its profile completely (e.g. Reject a pending student). */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<Void> deleteAccount(@PathVariable Long id) {
+        accountService.deleteAccount(id);
+        return ApiResponse.ok("Account deleted successfully", null);
     }
 }

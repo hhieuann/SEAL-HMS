@@ -1,0 +1,1 @@
+ALTER TABLE round ALTER COLUMN duration_hours TYPE NUMERIC(5,2);

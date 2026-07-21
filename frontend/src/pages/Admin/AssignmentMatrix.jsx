@@ -1,160 +1,361 @@
-import React, { useState } from 'react';
-import { Check, Info, Shield, BookOpen, ChevronDown } from 'lucide-react';
-
-const events = ['SEAL Hackathon Spring 2026', 'Summer DevFest 2026', 'Winter Codefest 2025'];
-const tracks = ['Track A - AI Agent', 'Track B - Medical RAG', 'Track C - EduTech'];
-const people = [
-  { id: 1, name: 'Alan Turing', avatar: 'https://ui-avatars.com/api/?name=Alan+Turing&background=f59e0b&color=fff' },
-  { id: 2, name: 'Ada Lovelace', avatar: 'https://ui-avatars.com/api/?name=Ada+Lovelace&background=ec4899&color=fff' },
-  { id: 3, name: 'Sarah Nguyen', avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=14b8a6&color=fff' },
-  { id: 4, name: 'David Kim', avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
-  { id: 5, name: 'Dr. Pham Hung', avatar: 'https://ui-avatars.com/api/?name=Pham+Hung&background=3b82f6&color=fff' },
-];
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { Plus, X, GraduationCap, UserCheck, Loader2 } from 'lucide-react';
 
 const AssignmentMatrix = () => {
-  const [selectedEvent, setSelectedEvent] = useState(events[0]);
-  
-  const [judgeAssignments, setJudgeAssignments] = useState({
-    1: { 'Track A - AI Agent': true },
-    2: { 'Track C - EduTech': true },
-    3: { 'Track B - Medical RAG': true } 
-  });
+  const { eventId } = useParams();
+  const [tracks, setTracks] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [lecturers, setLecturers] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [assignLoading, setAssignLoading] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showMentorModal, setShowMentorModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [assignForm, setAssignForm] = useState({ trackId: '', lecturerId: '', role: 'JUDGE' });
+  const [assignError, setAssignError] = useState('');
 
-  const [mentorAssignments, setMentorAssignments] = useState({
-    3: { 'Track B - Medical RAG': true },
-    4: { 'Track B - Medical RAG': true }
-  });
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { eventService } = await import('../../api/eventService.js');
+        const { trackService } = await import('../../api/trackService.js');
+        const { adminApi } = await import('../../api/adminApi.js');
+        const { teamService } = await import('../../api/teamService.js');
 
-  const toggleJudge = (pid, track) => {
-    setJudgeAssignments(prev => ({
-      ...prev,
-      [pid]: { ...prev[pid], [track]: !(prev[pid] && prev[pid][track]) }
-    }));
+        let parsedId = eventId && eventId !== 'seal-sp26' ? parseInt(eventId) : null;
+        if (!parsedId) {
+          const eventsRes = await eventService.getEvents();
+          if (eventsRes.data && eventsRes.data.length > 0) {
+            parsedId = eventsRes.data[0].id;
+          }
+        }
+        if (!parsedId) return;
+
+        const eventRes = await eventService.getEventDetails(parsedId);
+        const activeEvent = eventRes.data;
+        if (!activeEvent) return;
+
+        if (activeEvent.status === 'CREATED' || activeEvent.status === 'UPCOMING') {
+          setIsLocked(true);
+        } else {
+          setIsLocked(false);
+        }
+
+        const tracksRes = await trackService.getTracksByEvent(parsedId);
+        let realTracks = tracksRes.data || [];
+        
+        try {
+          const topicsRes = await trackService.getTopicsByEvent(parsedId);
+          const topics = topicsRes.data || [];
+          realTracks = realTracks.map(t => {
+            const trackTopic = topics.find(tp => tp.trackId === t.id);
+            return { ...t, topic: trackTopic };
+          });
+        } catch (e) { console.error(e); }
+        
+        setTracks(realTracks);
+
+        try {
+          const teamsRes = await teamService.getTeamsByEvent(parsedId);
+          setTeams(teamsRes.data || teamsRes || []);
+        } catch (e) { console.error(e); }
+
+        adminApi.getEventAssignments(parsedId).then(a => setAssignments(a)).catch(() => {});
+        adminApi.getLecturers().then(l => setLecturers(l)).catch(() => {});
+
+      } catch (err) {
+        console.error("Failed to load assignment data", err);
+      }
+    };
+    fetchData();
+  }, [eventId]);
+
+  const handleAssign = async (e) => {
+    e.preventDefault();
+    if (!assignForm.trackId || !assignForm.lecturerId) return;
+    setAssignError('');
+    setAssignLoading(true);
+    try {
+      const { adminApi } = await import('../../api/adminApi.js');
+      const newAssignment = await adminApi.assignLecturerToTrack(
+        Number(assignForm.trackId), Number(assignForm.lecturerId), assignForm.role
+      );
+      setAssignments(prev => [...prev, newAssignment]);
+      setShowAssignModal(false);
+      setAssignForm({ trackId: '', lecturerId: '', role: 'JUDGE' });
+    } catch (err) {
+      setAssignError(err.response?.data?.message || 'Failed to assign lecturer');
+    } finally {
+      setAssignLoading(false);
+    }
   };
 
-  const toggleMentor = (pid, track) => {
-    setMentorAssignments(prev => ({
-      ...prev,
-      [pid]: { ...prev[pid], [track]: !(prev[pid] && prev[pid][track]) }
-    }));
+  const handleRemoveAssignment = async (assignmentId) => {
+    try {
+      const { adminApi } = await import('../../api/adminApi.js');
+      await adminApi.removeAssignment(assignmentId);
+      setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+    } catch (err) {
+      console.error('Failed to remove assignment', err);
+    }
+  };
+
+  const handleAssignMentor = async (e) => {
+    e.preventDefault();
+    if (!selectedTeam || !assignForm.lecturerId) return;
+    setAssignError('');
+    setAssignLoading(true);
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      const updatedTeamRes = await teamService.assignMentor(selectedTeam.id, Number(assignForm.lecturerId));
+      
+      setTeams(prev => prev.map(t => t.id === selectedTeam.id ? updatedTeamRes.data : t));
+      setShowMentorModal(false);
+      setSelectedTeam(null);
+      setAssignForm({ trackId: '', lecturerId: '', role: 'JUDGE' });
+    } catch (err) {
+      setAssignError(err.response?.data?.message || err.message || 'Failed to assign mentor');
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const handleRemoveMentor = async (teamId) => {
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      const updatedTeamRes = await teamService.assignMentor(teamId, null);
+      setTeams(prev => prev.map(t => t.id === teamId ? updatedTeamRes.data : t));
+    } catch (err) {
+      console.error('Failed to remove mentor', err);
+    }
   };
 
   return (
-    <div className="animate-fade-in" style={{ paddingBottom: '40px' }}>
-      <div className="page-header" style={{ marginBottom: '24px' }}>
+    <div className="animate-fade-in">
+      <div className="page-header">
         <div>
-          <h1>Mentors & Judges Assignment</h1>
-          <p className="subtitle">Assign experts to specific tracks for the selected event.</p>
-        </div>
-        <div style={{ position: 'relative' }}>
-          <select 
-            value={selectedEvent}
-            onChange={(e) => setSelectedEvent(e.target.value)}
-            className="btn btn-secondary" 
-            style={{ appearance: 'none', paddingRight: '36px', width: '320px', textAlign: 'left', fontWeight: '600' }}
-          >
-            {events.map(ev => <option key={ev} value={ev}>{ev}</option>)}
-          </select>
-          <ChevronDown size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--text-secondary)' }} />
+          <h1>Judge Assignments</h1>
+          <p className="subtitle">Assign judges to specific tracks in this event.</p>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '32px', padding: '14px 20px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px' }}>
-        <Info size={18} color="var(--primary)" style={{ flexShrink: 0, marginTop: '1px' }} />
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
-          You are configuring assignments for <strong style={{ color: 'white' }}>{selectedEvent}</strong>. 
-          We have separated the tables to make dual-roles clear. If a person is assigned in the <strong style={{ color: '#f59e0b' }}>Judge Panel</strong>, they will have scoring access. If they are in the <strong style={{ color: '#14b8a6' }}>Mentor Panel</strong>, they will receive support tickets. A person can be both.
-        </p>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-        {/* JUDGES TABLE */}
-        <div>
-          <h2 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#f59e0b' }}>
-            <Shield size={20} /> Judge Assignments
-          </h2>
-          <div className="glass-panel" style={{ overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(245,158,11,0.05)' }}>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600', width: '240px' }}>Expert Name</th>
-                  {tracks.map(t => (
-                    <th key={t} style={{ padding: '16px 20px', textAlign: 'center', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {people.map((person) => (
-                  <tr key={person.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'var(--transition)' }}>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <img src={person.avatar} alt={person.name} style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{person.name}</div>
-                      </div>
-                    </td>
-                    {tracks.map(t => {
-                      const isAssigned = judgeAssignments[person.id]?.[t];
-                      return (
-                        <td key={t} style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          <div onClick={() => toggleJudge(person.id, t)} style={{ width: '28px', height: '28px', borderRadius: '8px', border: `2px solid ${isAssigned ? '#f59e0b' : 'var(--border-color)'}`, background: isAssigned ? 'rgba(245,158,11,0.2)' : 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'var(--transition)' }}>
-                            {isAssigned && <Check size={16} color="#f59e0b" />}
+      {isLocked ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', borderRadius: '8px', marginBottom: '24px', border: '1px solid rgba(245,158,11,0.2)' }}>
+          <UserCheck size={18} />
+          <span style={{ fontSize: '13px', fontWeight: '500' }}>
+            <strong>Action Locked:</strong> Event is still in the Registration phase. Assignments are disabled until registration ends.
+          </span>
+        </div>
+      ) : (
+        <>
+          {/* ===== JUDGE ASSIGNMENTS SECTION ===== */}
+          {tracks.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+              <p>No tracks configured for this event yet.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {tracks.map(track => {
+                const trackAssignments = assignments.filter(a => a.trackId === track.id);
+                const judges = trackAssignments.filter(a => a.role === 'JUDGE');
+                return (
+                  <div key={track.id} className="glass-panel" style={{ padding: '20px 24px' }}>
+                    <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)', display: 'inline-block' }}></span>
+                          {track.name || `Unnamed Track (ID: ${track.id})`}
+                        </div>
+                        {track.topic && (
+                          <div style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>Topic: {track.topic.name}</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{track.topic.description}</span>
                           </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setAssignForm(p => ({ ...p, trackId: track.id, role: 'JUDGE' }));
+                          setAssignError('');
+                          setShowAssignModal(true);
+                        }}
+                        className="btn"
+                        style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
+                      >
+                        <Plus size={14} /> Add Judge
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                      {[{ label: 'Judges', list: judges, color: 'var(--warning)', role: 'JUDGE' }].map(col => (
+                        <div key={col.role}>
+                          <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px', color: col.color, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <UserCheck size={14} /> {col.label} ({col.list.length})
+                          </div>
+                          {col.list.length === 0 ? (
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>None assigned</div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {col.list.map(a => (
+                                <div key={a.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                                  <div>
+                                    <div style={{ fontSize: '13px', fontWeight: '600' }}>{a.lecturerFullName || a.lecturerEmail}</div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{a.department || a.lecturerEmail}</div>
+                                  </div>
+                                  <button 
+                                    onClick={() => handleRemoveAssignment(a.id)} 
+                                    style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
+                                    title="Remove"
+                                  >
+                                    <X size={13} />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ===== TEAM MENTORS SECTION ===== */}
+          <div className="page-header" style={{ marginTop: '40px' }}>
+            <div>
+              <h1>Team Mentors</h1>
+              <p className="subtitle">Assign mentors directly to participating teams.</p>
+            </div>
+          </div>
+          
+          {tracks.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <GraduationCap size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+              <p>No tracks configured for this event yet.</p>
+            </div>
+          ) : teams.length === 0 ? (
+            <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              <p>No teams found for this event.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+              {teams.map(team => (
+                <div key={team.id} className="glass-panel" style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div>
+                      <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '4px' }}>{team.name}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Track: {tracks.find(t => t.id === team.trackId)?.name || 'Not Assigned'}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setSelectedTeam(team);
+                        setAssignError('');
+                        setAssignForm(p => ({ ...p, lecturerId: '' }));
+                        setShowMentorModal(true);
+                      }}
+                      className="btn"
+                      style={{ padding: '6px 12px', fontSize: '12px', background: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.2)' }}
+                    >
+                      <Plus size={14} /> {team.mentor ? 'Change Mentor' : 'Add Mentor'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {!team.mentor ? (
+                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '10px', background: 'var(--bg-subtle)', borderRadius: '8px', textAlign: 'center' }}>No mentor assigned</div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-subtle)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--accent-3)' }}>🎓 {team.mentor.name}</div>
+                          {team.mentor.email && <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{team.mentor.email}</div>}
+                        </div>
+                        <button 
+                          onClick={() => handleRemoveMentor(team.id)}
+                          style={{ padding: '4px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: 'var(--danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ===== JUDGE ASSIGNMENT MODAL ===== */}
+      {showAssignModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setShowAssignModal(false)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '460px', background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <button onClick={() => setShowAssignModal(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex' }}><X size={16} /></button>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '6px' }}>Assign Judge</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Assign a judge to <strong>{tracks.find(t => t.id === assignForm.trackId)?.name || 'this track'}</strong>.
+            </p>
+            {assignError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: 'var(--danger)', fontSize: '13px', marginBottom: '16px' }}>{assignError}</div>
+            )}
+            <form onSubmit={handleAssign} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Lecturer *</label>
+                <select required value={assignForm.lecturerId} onChange={e => setAssignForm(p => ({...p, lecturerId: e.target.value}))} style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
+                  <option value="">Select a lecturer</option>
+                  {lecturers.map(l => <option key={l.id} value={l.id}>{l.fullName || l.email}{l.department ? ` (${l.department})` : ''}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowAssignModal(false)} style={{ flex: 1, padding: '11px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={assignLoading}>
+                  {assignLoading ? <Loader2 size={16} className="spin" /> : <UserCheck size={16} />} Assign Judge
+                </button>
+              </div>
+            </form>
           </div>
         </div>
+      )}
 
-        {/* MENTORS TABLE */}
-        <div>
-          <h2 style={{ fontSize: '18px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#14b8a6' }}>
-            <BookOpen size={20} /> Mentor Assignments
-          </h2>
-          <div className="glass-panel" style={{ overflow: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(20,184,166,0.05)' }}>
-                  <th style={{ padding: '16px 20px', textAlign: 'left', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600', width: '240px' }}>Expert Name</th>
-                  {tracks.map(t => (
-                    <th key={t} style={{ padding: '16px 20px', textAlign: 'center', fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{t}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {people.map((person) => (
-                  <tr key={person.id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'var(--transition)' }}>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <img src={person.avatar} alt={person.name} style={{ width: '32px', height: '32px', borderRadius: '50%' }} />
-                        <div style={{ fontWeight: '600', fontSize: '14px' }}>{person.name}</div>
-                      </div>
-                    </td>
-                    {tracks.map(t => {
-                      const isAssigned = mentorAssignments[person.id]?.[t];
-                      return (
-                        <td key={t} style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          <div onClick={() => toggleMentor(person.id, t)} style={{ width: '28px', height: '28px', borderRadius: '8px', border: `2px solid ${isAssigned ? '#14b8a6' : 'var(--border-color)'}`, background: isAssigned ? 'rgba(20,184,166,0.2)' : 'transparent', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'var(--transition)' }}>
-                            {isAssigned && <Check size={16} color="#14b8a6" />}
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ===== MENTOR ASSIGNMENT MODAL ===== */}
+      {showMentorModal && selectedTeam && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)' }} onClick={() => setShowMentorModal(false)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '460px', background: 'white', borderRadius: '20px', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <button onClick={() => setShowMentorModal(false)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px', cursor: 'pointer', display: 'flex' }}><X size={16} /></button>
+            <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '6px' }}>{selectedTeam.mentor ? 'Change Mentor' : 'Assign Mentor'}</h3>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              {selectedTeam.mentor 
+                ? <>Change mentor for <strong>{selectedTeam.name}</strong>. Current: <strong>{selectedTeam.mentor.name}</strong></>
+                : <>Assign a mentor to <strong>{selectedTeam.name}</strong>.</>
+              }
+            </p>
+            {assignError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', color: 'var(--danger)', fontSize: '13px', marginBottom: '16px' }}>{assignError}</div>
+            )}
+            <form onSubmit={handleAssignMentor} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '6px' }}>Lecturer *</label>
+                <select required value={assignForm.lecturerId} onChange={e => setAssignForm(p => ({...p, lecturerId: e.target.value}))} style={{ width: '100%', padding: '10px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', appearance: 'none', cursor: 'pointer', boxSizing: 'border-box' }}>
+                  <option value="">Select a lecturer</option>
+                  {lecturers.map(l => <option key={l.id} value={l.id}>{l.fullName || l.email}{l.department ? ` (${l.department})` : ''}</option>)}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setShowMentorModal(false)} style={{ flex: 1, padding: '11px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={assignLoading}>
+                  {assignLoading ? <Loader2 size={16} className="spin" /> : <UserCheck size={16} />} {selectedTeam.mentor ? 'Change Mentor' : 'Assign Mentor'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
-
-      <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-        <button className="btn btn-secondary">Discard Changes</button>
-        <button className="btn btn-primary">Save Assignments</button>
-      </div>
+      )}
     </div>
   );
 };

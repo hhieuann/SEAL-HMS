@@ -5,12 +5,20 @@ const PARTICIPANT_KEYS = ['p_hasJoinedEvent', 'p_hasTeam', 'p_teamInviteCode', '
 export const authApi = {
   login: async (email, password) => {
     try {
+      // Clear old state before login to prevent cross-account bleeding
+      localStorage.removeItem('currentUser');
+      PARTICIPANT_KEYS.forEach(key => localStorage.removeItem(key));
+      
       const response = await apiClient.post('/api/v1/auth/login', { email, password });
-      const { token, role, accountId, email: returnedEmail } = response.data.data;
+      const { token, role, accountId, email: returnedEmail, name: returnedName, avatarUrl } = response.data.data;
       
       localStorage.setItem('token', token);
       localStorage.setItem('userRole', role);
       localStorage.setItem('userEmail', returnedEmail || email);
+      if (returnedName) localStorage.setItem('userName', returnedName);
+      if (avatarUrl) {
+        localStorage.setItem('avatarUrl', avatarUrl);
+      }
       
       if (accountId) {
         localStorage.setItem('accountId', accountId);
@@ -64,9 +72,23 @@ export const authApi = {
     }
   },
 
-  register: async (email, password, role = 'STUDENT') => {
+  register: async (email, password, role = 'STUDENT', studentCode, firstName, lastName, campus, proofFile) => {
     try {
-      const response = await apiClient.post('/api/v1/auth/register', { email, password, role });
+      const formData = new FormData();
+      formData.append('email', email);
+      formData.append('password', password);
+      formData.append('role', role);
+      if (studentCode) formData.append('studentCode', studentCode);
+      if (firstName) formData.append('firstName', firstName);
+      if (lastName) formData.append('lastName', lastName);
+      if (campus) formData.append('campus', campus);
+      if (proofFile) formData.append('proofFile', proofFile);
+      
+      const response = await apiClient.post('/api/v1/auth/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       // The register API returns the ID (unlike the login API). Store it immediately so new accounts work!
       const data = response.data?.data || {};
       if (data.id) {
@@ -79,10 +101,21 @@ export const authApi = {
     }
   },
 
+  changePassword: async (oldPassword, newPassword) => {
+    try {
+      const response = await apiClient.put('/api/v1/auth/change-password', { oldPassword, newPassword });
+      return response.data;
+    } catch (err) {
+      throw err;
+    }
+  },
+
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userEmail');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('avatarUrl');
     localStorage.removeItem('accountId');
     localStorage.removeItem('currentUser');
     

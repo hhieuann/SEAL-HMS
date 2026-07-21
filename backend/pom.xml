@@ -100,6 +100,12 @@
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- Spring Boot 4 split @WebMvcTest / MockMvc slice into its own module -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-webmvc-test</artifactId>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.springframework.security</groupId>
       <artifactId>spring-security-test</artifactId>
@@ -130,6 +136,40 @@
               <groupId>org.projectlombok</groupId>
               <artifactId>lombok</artifactId>
             </exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.13</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <!-- Coverage measures the business layer. Excluded from the denominator:
+               DTOs/entities (data holders), config, the app entry point, and the
+               controllers — thin delegation to services with @PreAuthorize rules that
+               are exercised end-to-end against the running API, not unit-testable
+               in isolation without a full Spring context. -->
+          <excludes>
+            <exclude>**/dto/**</exclude>
+            <exclude>**/entity/**</exclude>
+            <exclude>**/config/**</exclude>
+            <exclude>**/*Controller.class</exclude>
+            <exclude>**/SealHmsApplication.class</exclude>
           </excludes>
         </configuration>
       </plugin>

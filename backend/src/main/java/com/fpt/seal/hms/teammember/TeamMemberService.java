@@ -27,6 +27,7 @@ public class TeamMemberService {
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRepository teamRepository;
     private final AccountRepository accountRepository;
+    private final com.fpt.seal.hms.account.AccountService accountService;
 
     @Transactional(readOnly = true)
     public List<TeamMemberResponse> getMembersByTeamId(Long teamId) {
@@ -44,6 +45,14 @@ public class TeamMemberService {
             throw new BusinessException("Cannot invite members. Team is already registered or processed.");
         }
 
+        java.time.LocalDate today = java.time.LocalDate.now();
+        if (team.getEvent().getRegistrationStartDate() != null && today.isBefore(team.getEvent().getRegistrationStartDate())) {
+            throw new BusinessException("Registration for this event has not started yet.");
+        }
+        if (team.getEvent().getRegistrationEndDate() != null && today.isAfter(team.getEvent().getRegistrationEndDate())) {
+            throw new BusinessException("Registration for this event has closed.");
+        }
+
         long activeMembers = teamMemberRepository.countByTeamIdAndStatusNot(teamId, MemberStatus.DECLINED);
         // Assuming WITHDRAWN/DECLINED members don't count towards the 5-member limit.
         if (activeMembers >= 5) {
@@ -56,6 +65,12 @@ public class TeamMemberService {
         Optional<TeamMember> existingOpt = teamMemberRepository.findByTeamIdAndAccountId(teamId, account.getId());
         if (existingOpt.isPresent()) {
             throw new BusinessException("User is already in the team or has been invited.");
+        }
+
+        List<TeamMember> existingInEvent = teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(
+                account.getId(), team.getEvent().getId(), MemberStatus.DECLINED);
+        if (!existingInEvent.isEmpty()) {
+            throw new BusinessException("This user is already a member of another team in this event.");
         }
 
         TeamMember member = new TeamMember();
@@ -85,7 +100,8 @@ public class TeamMemberService {
         response.setId(member.getId());
         response.setTeamId(member.getTeam().getId());
         response.setAccountId(member.getAccount().getId());
-        response.setAccountName(member.getAccount().getEmail());
+        response.setAccountName(accountService.getFullName(member.getAccount()));
+        response.setEmail(member.getAccount().getEmail());
         response.setRole(member.getRole());
         response.setStatus(member.getStatus());
         return response;

@@ -1,0 +1,1 @@
+ALTER TABLE account ADD COLUMN avatar_url VARCHAR(500);

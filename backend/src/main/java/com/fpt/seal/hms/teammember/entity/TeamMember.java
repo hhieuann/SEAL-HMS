@@ -1,7 +1,7 @@
 package com.fpt.seal.hms.teammember.entity;
 
 import com.fpt.seal.hms.account.Account;
-import com.fpt.seal.hms.common.entity.BaseEntity;
+
 import com.fpt.seal.hms.common.enums.MemberRole;
 import com.fpt.seal.hms.common.enums.MemberStatus;
 import com.fpt.seal.hms.team.entity.Team;

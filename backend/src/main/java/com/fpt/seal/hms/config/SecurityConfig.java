@@ -35,10 +35,18 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/v1/auth/**",
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/register",
+                                "/api/v1/events/debug/**",
                                 "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/uploads/**",
+                                "/error"
                         ).permitAll()
+                        // Contest info is public so visitors can browse events before signing up
+                        // (read-only: writes stay behind @PreAuthorize ADMIN/STAFF on the methods).
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,
+                                "/api/v1/events", "/api/v1/events/*").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

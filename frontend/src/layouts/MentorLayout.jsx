@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Code, LogOut, Bell, Ticket, ArrowLeft } from 'lucide-react';
+import { Code, LogOut, Bell, Ticket, ArrowLeft, User } from 'lucide-react';
 import { authApi } from '../api/auth';
 import './MentorLayout.css';
 
@@ -11,14 +11,15 @@ const MentorLayout = () => {
     authApi.logout();
   };
 
+  // Fall back to neutral values only — never a fake identity or event name.
   const [activeContext] = React.useState(() => {
     const saved = localStorage.getItem('expertContext');
-    return saved ? JSON.parse(saved) : { event: 'SEAL Hackathon Spring 2026', role: 'Mentor', track: 'Technical' };
+    return saved ? JSON.parse(saved) : { event: '', role: 'Mentor', track: '' };
   });
 
   const [currentUser] = React.useState(() => {
     const saved = localStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : { name: 'Sarah Nguyen', avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=0ea5e9&color=fff' };
+    return saved ? JSON.parse(saved) : { name: 'Mentor', avatar: 'https://ui-avatars.com/api/?name=Mentor&background=1F4E79&color=fff' };
   });
 
   return (
@@ -31,7 +32,9 @@ const MentorLayout = () => {
               <span className="logo-text" style={{ fontSize: '18px', lineHeight: '1', color: 'white' }}>SEAL<span className="highlight" style={{ color: 'white' }}>.</span></span>
               <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Hackathon</span>
             </div>
-            <div style={{ paddingLeft: '16px', marginLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.9)', fontSize: '14px' }}>
+            <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.3)', margin: '0 8px' }}></div>
+            <img src="/src/assets/FptLogo.png" alt="FPT" style={{ height: '90px', objectFit: 'contain' }} />
+            <div style={{ paddingLeft: '16px', marginLeft: '8px', borderLeft: '1px solid rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.9)', fontSize: '14px' }}>
               Mentor Portal
             </div>
           </div>
@@ -63,13 +66,15 @@ const MentorLayout = () => {
           </NavLink>
           <NavLink to="/mentor/announcements" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements
-            <span style={{ background: 'var(--danger)', color: 'white', fontSize: '10px', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>2</span>
+          </NavLink>
+          <NavLink to="/mentor/settings" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
+            <User size={18} /> Settings
           </NavLink>
         </nav>
 
         <div className="mentor-actions">
           <div className="mentor-profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.15)', padding: '6px 16px', borderRadius: '24px', color: 'white' }}>
-            <img src={currentUser.avatar} alt="Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
+            <img src={currentUser.avatar?.startsWith('http') ? currentUser.avatar : `${import.meta.env.VITE_API_BASE_URL || ''}${currentUser.avatar}`} alt="Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none' }} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: '13px', fontWeight: '600' }}>{currentUser.name}</div>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.8)' }}>Expert Mentor</div>

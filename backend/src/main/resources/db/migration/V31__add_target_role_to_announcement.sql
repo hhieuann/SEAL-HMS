@@ -1,0 +1,1 @@
+ALTER TABLE announcement ADD COLUMN target_role VARCHAR(50) DEFAULT 'ALL';

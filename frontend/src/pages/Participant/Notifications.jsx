@@ -1,83 +1,165 @@
-import React from 'react';
-import { Bell, Calendar, MessageSquare, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, Info, Loader2, AlertTriangle, RefreshCw, Globe } from 'lucide-react';
 import './Workspace.css';
+import { useParams } from 'react-router-dom';
+import apiClient from '../../api/apiClient';
+
+const formatTime = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return dateStr; }
+};
 
 const Notifications = () => {
+  const { eventId: paramEventId } = useParams();
+  const [announcements, setAnnouncements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [eventName, setEventName] = useState('');
+
+  const fetchAnnouncements = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Get eventId from URL params first, then localStorage
+      const eventId = paramEventId || localStorage.getItem('currentEventId') || localStorage.getItem('p_selectedEventId') || localStorage.getItem('p_eventId');
+      const params = {};
+      if (eventId) {
+        params.eventId = eventId;
+        try {
+          const { eventService } = await import('../../api/eventService');
+          const evt = await eventService.getEventDetails(eventId);
+          if (evt?.data?.title) setEventName(evt.data.title);
+          else if (evt?.data?.name) setEventName(evt.data.name);
+        } catch(e) {}
+      }
+
+      const res = await apiClient.get('/api/v1/announcements', { params });
+      let raw = res.data?.data || res.data || [];
+      if (Array.isArray(raw)) {
+        const userRole = localStorage.getItem('userRole');
+        if (userRole === 'STAFF' || userRole === 'ADMIN') {
+          raw = raw.filter(a => !a.targetRole || a.targetRole === 'ALL' || a.targetRole === userRole);
+        }
+        setAnnouncements(raw);
+      } else {
+        setAnnouncements([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch announcements', err);
+      setError('Could not load announcements. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
   return (
     <div className="animate-fade-in" style={{ padding: '0 20px', maxWidth: '800px', margin: '0 auto' }}>
       <div className="page-header" style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Notifications</h1>
-          <p className="subtitle">Stay updated with important announcements and alerts.</p>
+          <p className="subtitle">
+            {eventName ? `Stay updated with important announcements and alerts for [${eventName}]` : 'Stay updated with important announcements and alerts.'}
+          </p>
         </div>
-        <button className="btn btn-text" style={{ color: 'var(--text-secondary)' }}>Mark all as read</button>
+        <button
+          className="btn btn-secondary"
+          onClick={fetchAnnouncements}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Unread Notification: Alert/Important */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', gap: '20px', borderLeft: '4px solid var(--danger)', background: 'rgba(239, 68, 68, 0.05)' }}>
-          <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '50%', height: 'fit-content' }}>
-            <AlertTriangle size={24} color="var(--danger)" />
+        {/* Loading */}
+        {loading && (
+          <div style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <Loader2 size={32} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite' }} />
+            <p>Loading announcements...</p>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Deadline Extension & System Maintenance</h3>
-              <span style={{ fontSize: '12px', color: 'var(--danger)', fontWeight: '600' }}>New • 2 hours ago</span>
-            </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Due to technical difficulties on the main server yesterday, the project submission deadline has been extended by <strong>24 hours</strong>. Please note that the platform will undergo a brief 30-minute maintenance tonight at 2:00 AM.
-            </p>
-          </div>
-        </div>
+        )}
 
-        {/* Unread Notification: Event Update */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', gap: '20px', borderLeft: '4px solid var(--primary)', background: 'rgba(59, 130, 246, 0.05)' }}>
-          <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '12px', borderRadius: '50%', height: 'fit-content' }}>
-            <Calendar size={24} color="var(--primary)" />
+        {/* Error */}
+        {!loading && error && (
+          <div style={{ padding: '40px', textAlign: 'center', color: 'var(--danger)' }}>
+            <AlertTriangle size={32} style={{ margin: '0 auto 12px', display: 'block' }} />
+            <p>{error}</p>
+            <button className="btn btn-secondary" onClick={fetchAnnouncements} style={{ marginTop: '12px' }}>
+              Try again
+            </button>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Upcoming Workshop: Mastering AI APIs</h3>
-              <span style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '600' }}>New • 5 hours ago</span>
-            </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Join our exclusive workshop with Google Cloud engineers on integrating advanced AI APIs into your hackathon projects. The session starts tomorrow at 10:00 AM on Zoom. Link has been added to your Workspace resources.
-            </p>
-          </div>
-        </div>
+        )}
 
-        {/* Read Notification: Mentor Message */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', gap: '20px', borderLeft: '4px solid transparent', opacity: 0.8 }}>
-          <div style={{ background: 'var(--bg-hover)', padding: '12px', borderRadius: '50%', height: 'fit-content' }}>
-            <MessageSquare size={24} color="var(--text-secondary)" />
+        {/* Empty */}
+        {!loading && !error && announcements.length === 0 && (
+          <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+            <Bell size={48} style={{ margin: '0 auto 16px', display: 'block', opacity: 0.3 }} />
+            <h3 style={{ marginBottom: '8px' }}>No announcements yet</h3>
+            <p style={{ fontSize: '14px' }}>You'll be notified here when your coordinator posts updates.</p>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>New message from Mentor Sarah</h3>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>1 day ago</span>
-            </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              "Hi NullPointerException team! I've reviewed your initial Figma designs and left some comments regarding the user flow. Let's sync up this afternoon if you have time."
-            </p>
-          </div>
-        </div>
+        )}
 
-        {/* Read Notification: System Status */}
-        <div className="glass-panel" style={{ padding: '24px', display: 'flex', gap: '20px', borderLeft: '4px solid transparent', opacity: 0.8 }}>
-          <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '12px', borderRadius: '50%', height: 'fit-content' }}>
-            <CheckCircle size={24} color="var(--success)" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>Team Registration Approved</h3>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>3 days ago</span>
+        {/* Announcement list */}
+        {!loading && !error && announcements.map((item) => (
+          <div
+            key={item.id}
+            className="glass-panel"
+            style={{
+              padding: '24px',
+              display: 'flex',
+              gap: '20px',
+              borderLeft: '4px solid var(--primary)',
+              background: 'rgba(59, 130, 246, 0.04)',
+            }}
+          >
+            <div style={{ background: 'rgba(59, 130, 246, 0.12)', padding: '12px', borderRadius: '50%', height: 'fit-content', flexShrink: 0 }}>
+              {item.eventId ? <Bell size={24} color="var(--primary)" /> : <Globe size={24} color="var(--primary)" />}
             </div>
-            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
-              Congratulations! Your team <strong>NullPointerException</strong> has been officially approved for the Spring Innovation Hackathon 2026. You can now access your Team Workspace.
-            </p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', gap: '12px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>{item.title}</h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  {formatTime(item.createdAt)}
+                </span>
+              </div>
+              <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>{item.content}</p>
+              <div style={{ marginTop: '10px', fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Info size={11} />
+                  Posted by {item.createdByEmail || 'Coordinator'}
+                </span>
+                {!item.eventId ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--accent-1)' }}>
+                    <Globe size={11} /> Global
+                  </span>
+                ) : (
+                  item.eventName && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)' }}>
+                      <Globe size={11} /> {item.eventName}
+                    </span>
+                  )
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-
+        ))}
       </div>
     </div>
   );

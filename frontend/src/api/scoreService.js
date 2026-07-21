@@ -50,6 +50,12 @@ export const criterionService = {
     return response.data;
   },
 
+  // Update a criterion
+  updateCriterion: async (criterionId, data) => {
+    const response = await apiClient.put(`/api/v1/criteria/${criterionId}`, data);
+    return response.data;
+  },
+
   // Delete a criterion
   deleteCriterion: async (criterionId) => {
     const response = await apiClient.delete(`/api/v1/criteria/${criterionId}`);
@@ -61,6 +67,11 @@ export const standingsService = {
   // Get real standings for a round from DB
   getStandings: async (roundId) => {
     const response = await apiClient.get(`/api/v1/rounds/${roundId}/standings`);
+    return response.data;
+  },
+  // Compute and persist round ranking (sets promoted flags)
+  computeRoundRanking: async (roundId, promotedTeamIds = []) => {
+    const response = await apiClient.post(`/api/v1/rounds/${roundId}/ranking/compute`, promotedTeamIds);
     return response.data;
   },
 };

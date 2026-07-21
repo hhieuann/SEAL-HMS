@@ -15,10 +15,16 @@ public class EventResponse {
     private String type;
     private LocalDate startDate;
     private LocalDate endDate;
+    private LocalDate registrationStartDate;
+    private LocalDate registrationEndDate;
+    private Integer maxTeams;
+    private Integer minTeams;
     private EventStatus status;
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Integer currentTeams;
+    private Boolean registrationOpen;
 
     private java.util.List<com.fpt.seal.hms.round.dto.RoundResponse> rounds;
     private java.util.List<com.fpt.seal.hms.track.dto.TrackResponse> tracks;

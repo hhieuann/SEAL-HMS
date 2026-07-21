@@ -1,44 +1,57 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { authApi } from '../../api/auth';
 
 const Login = () => {
   const navigate = useNavigate();
-  const [accountId, setAccountId] = useState('sarah');
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const accounts = {
-    admin: { name: 'System Admin', type: 'admin' },
-    participant: { name: 'Participant (Team Null)', type: 'participant' },
-    sarah: { name: 'Sarah Nguyen', type: 'expert', roles: ['Judge', 'Mentor'], avatar: 'https://ui-avatars.com/api/?name=Sarah+Nguyen&background=14b8a6&color=fff' },
-    alan: { name: 'Alan Turing', type: 'expert', roles: ['Judge'], avatar: 'https://ui-avatars.com/api/?name=Alan+Turing&background=10b981&color=fff' },
-    david: { name: 'David Kim', type: 'expert', roles: ['Mentor'], avatar: 'https://ui-avatars.com/api/?name=David+Kim&background=8b5cf6&color=fff' },
-  };
+  // Clear stale session data from previous login (any role)
+  useEffect(() => {
+    const keysToRemove = [
+      'token', 'role', 'accountId', 'userId', 'currentUser',
+      'p_eventId', 'p_selectedEventId', 'p_hasJoinedEvent',
+      'p_hasTeam', 'p_isLeader', 'p_teamId', 'p_teamInviteCode',
+      'myTeamName', 'currentEventId', 'userName', 'userEmail', 'avatarUrl'
+    ];
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+  }, []);
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     
-    const email = e.target[0].value;
-    const password = e.target[1].value;
+    // Đọc trực tiếp từ DOM (chống lỗi Autofill không kích hoạt onChange của React)
+    // Và trim() khoảng trắng thừa (rất hay gặp khi lưu nhầm pass có dấu cách ở đuôi vào trình duyệt)
+    const form = e.target;
+    const cleanEmail = form.email?.value?.trim() || email.trim();
+    const cleanPassword = form.password?.value?.trim() || password.trim();
 
     setIsSubmitting(true);
 
     try {
       // Call real backend API
-      const { role } = await authApi.login(email, password);
+      const { role, name: backendName, avatarUrl: backendAvatarUrl } = await authApi.login(cleanEmail, cleanPassword);
       
-      // Giả lập lưu currentUser để tương thích giao diện cũ
-      const user = accounts[accountId] || accounts['participant'];
-      localStorage.setItem('currentUser', JSON.stringify(user));
+      // Build currentUser from real data only — no mock identities.
+      const type = (role === 'ADMIN' || role === 'STAFF') ? 'admin'
+        : (role === 'STUDENT') ? 'participant' : 'expert';
+      const name = backendName || localStorage.getItem('userName') || cleanEmail;
+      const avatarUrl = backendAvatarUrl || localStorage.getItem('avatarUrl')
+        || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1F4E79&color=fff`;
+      localStorage.setItem('currentUser', JSON.stringify({ name, type, avatarUrl, avatar: avatarUrl }));
 
       // Navigate based on actual role returned from Spring Boot
       if (role === 'ADMIN') navigate('/admin/dashboard');
-      else if (role === 'JUDGE' || role === 'MENTOR') navigate('/expert/dashboard');
-      else navigate('/participant');
+      else if (role === 'STAFF' || role === 'JUDGE' || role === 'MENTOR' || role === 'GUEST_JUDGE' || role === 'LECTURER') navigate('/expert/dashboard');
+      else if (role === 'STUDENT') navigate('/participant/events');
+      else navigate('/');
       
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email or password.');
@@ -72,11 +85,28 @@ const Login = () => {
       
       <form onSubmit={handleLogin} className="auth-form">
         <div className="form-floating">
-          <input type="email" id="email" placeholder=" " style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} />
+          <input 
+            type="email" 
+            id="email" 
+            name="email" 
+            autoComplete="username" 
+            placeholder=" " 
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={error ? { borderColor: 'rgba(239,68,68,0.5)' } : {}} 
+          />
           <label htmlFor="email">Email Address</label>
         </div>
         <div className="form-floating">
-          <input type="password" id="password" placeholder=" " />
+          <input 
+            type="password" 
+            id="password" 
+            name="password" 
+            autoComplete="current-password" 
+            placeholder=" " 
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
           <label htmlFor="password">Password</label>
         </div>
         <button type="submit" className="btn btn-primary full-width mt-4" disabled={isSubmitting}>

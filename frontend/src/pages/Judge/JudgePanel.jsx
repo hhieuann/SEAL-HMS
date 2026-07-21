@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
+import { trackService } from '../../api/trackService';
+import ConfirmModal from '../../components/ConfirmModal';
 import './JudgePanel.css';
 
 const JudgePanel = () => {
@@ -21,48 +23,116 @@ const JudgePanel = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitToast, setSubmitToast] = useState('');
   const [submitError, setSubmitError] = useState('');
+  const [completeScoringModal, setCompleteScoringModal] = useState(false);
+  const [completeScoringErrorModal, setCompleteScoringErrorModal] = useState(false);
+  const [scoringCompleted, setScoringCompleted] = useState(false);
+  const [judgeTrackId, setJudgeTrackId] = useState(null);
 
   const judgeAccountId = parseInt(localStorage.getItem('userId') || '1');
 
   useEffect(() => {
     const load = async () => {
       try {
-        const eventsRes = await eventService.getEvents();
-        const evt = eventsRes?.data?.[0] || null;
+        let evt = null;
+        const ctxStr = localStorage.getItem('expertContext');
+        let ctx = ctxStr ? JSON.parse(ctxStr) : null;
+
+        if (ctx && ctx.eventId) {
+          const eventDetails = await eventService.getEventDetails(ctx.eventId);
+          evt = eventDetails?.data || eventDetails || null;
+        } else {
+          const eventsRes = await eventService.getAssignedEvents();
+          evt = eventsRes?.data?.[0] || null;
+        }
+        
         if (evt) {
           const roundsRes = await eventService.getEventRounds(evt.id);
           evt.rounds = roundsRes.data || [];
         }
         setEvent(evt);
 
-        const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-        setCurrentRoundIndex(roundIdx);
-        const round = evt?.rounds?.[roundIdx] || null;
+        let activeRoundIdx = 0;
+        if (evt?.rounds && evt.rounds.length > 0) {
+          let lastStartedIdx = -1;
+          for (let i = evt.rounds.length - 1; i >= 0; i--) {
+            if (evt.rounds[i].status !== 'CREATED' && evt.rounds[i].status?.toLowerCase() !== 'planned') {
+              lastStartedIdx = i;
+              break;
+            }
+          }
+          activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+        }
+        setCurrentRoundIndex(activeRoundIdx);
+        const round = evt?.rounds?.[activeRoundIdx] || null;
         setCurrentRound(round);
 
         if (!evt || !round) return;
 
         // Load real teams from backend
-        const teamsData = await teamService.getTeamsByEvent(1);
+        const teamsData = await teamService.getTeamsByEvent(evt.id);
         const teamsList = teamsData?.data || teamsData || [];
-        const approvedTeams = teamsList.filter(t =>
-          ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)
-        );
-        setTeams(approvedTeams);
+        let approvedTeams = teamsList.filter(t => {
+          const isStatusValid = ['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status);
+          const isTrackValid = (ctx && ctx.trackId) ? t.trackId === ctx.trackId : true;
+          return isStatusValid && isTrackValid;
+        });
+
+        // For rounds after Round 1, only show teams that advanced
+        if (activeRoundIdx > 0) {
+          const trackDrawStr = localStorage.getItem(`trackDraw_${evt.id}`);
+          if (trackDrawStr) {
+            const advancedDraw = JSON.parse(trackDrawStr);
+            const advancedTeamNames = new Set();
+            advancedDraw.forEach(track => {
+              (track.teams || []).forEach(t => {
+                const name = typeof t === 'object' ? t.name : t;
+                if (name) advancedTeamNames.add(name);
+              });
+            });
+            if (advancedTeamNames.size > 0) {
+              approvedTeams = approvedTeams.filter(t => advancedTeamNames.has(t.name));
+            }
+          }
+        }
+
+        // Check if this judge has already completed scoring for this track
+        try {
+          const myAssignments = await trackService.getMyAssignments();
+          // Find assignment matching ctx.trackId, or just the first JUDGE assignment for this event
+          const targetTrackId = ctx?.trackId;
+          const evtTrackIds = evt.rounds?.[0]?.tracks?.map(t => t.id) || [];
+          
+          let myJudgeAssignment = null;
+          if (targetTrackId) {
+            myJudgeAssignment = myAssignments.find(a => a.role === 'JUDGE' && a.trackId === targetTrackId);
+          }
+          if (!myJudgeAssignment) {
+             myJudgeAssignment = myAssignments.find(a => 
+               a.role === 'JUDGE' && (!evtTrackIds.length || evtTrackIds.includes(a.trackId))
+             );
+          }
+          
+          if (myJudgeAssignment) {
+            setJudgeTrackId(myJudgeAssignment.trackId);
+            if (myJudgeAssignment.scoringCompleted) {
+              setScoringCompleted(true);
+            }
+          }
+        } catch (e) {
+          console.warn('Could not check scoring completion status', e);
+        }
 
         if (approvedTeams.length > 0) {
-          setActiveTeamId(approvedTeams[0].id);
-
           // Load criteria for this round
           try {
             const criteriaRes = await criterionService.getCriteria(round.id);
             const criteriaList = criteriaRes?.data || [];
             setCriteria(criteriaList);
-          } catch {
-            setCriteria([]);
+          } catch (e) {
+            console.error(e);
           }
 
-          // Load submissions & existing scores for all teams
+          // Load submissions & existing scores for all approved teams
           const subMap = {};
           const scoresMap = {};
           await Promise.all(approvedTeams.map(async (team) => {
@@ -76,14 +146,21 @@ const JudgePanel = () => {
                 if (scoresRes?.data?.length) scoresMap[team.id] = scoresRes.data;
               }
             } catch {
-              // Team hasn't submitted yet — that's fine
+              // Team hasn't submitted yet for this round — exclude from list
             }
           }));
           setSubmissions(subMap);
           setExistingScores(scoresMap);
 
-          // Init scores for first team
-          initScores(approvedTeams[0].id, scoresMap);
+          // Only show teams that have a submission for THIS round (eliminates old round carry-overs)
+          const teamsWithSubmission = approvedTeams.filter(t => !!subMap[t.id]);
+          setTeams(teamsWithSubmission);
+
+          // Set first team with a submission as active
+          if (teamsWithSubmission.length > 0) {
+            setActiveTeamId(teamsWithSubmission[0].id);
+            initScores(teamsWithSubmission[0].id, scoresMap);
+          }
         }
       } catch (e) {
         console.error('JudgePanel load error:', e);
@@ -114,7 +191,27 @@ const JudgePanel = () => {
   };
 
   const computeTotal = () => {
-    return Object.values(scores).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+    let weightedTotal = 0;
+    criteria.forEach(c => {
+      const val = parseFloat(scores[c.id]) || 0;
+      const max = parseFloat(c.maxScore) || 1;
+      const weight = (parseFloat(c.weight) || 0) * 100; // BE stores 0–1, display as %
+      weightedTotal += (val / max) * weight;
+    });
+    return weightedTotal;
+  };
+
+  const computeExistingTotal = (myScores) => {
+    if (!myScores || !myScores.length) return 0;
+    let weightedTotal = 0;
+    myScores.forEach(s => {
+      const c = criteria.find(cr => cr.id === s.criterionId);
+      const val = parseFloat(s.score) || 0;
+      const max = parseFloat(s.maxScore) || 1;
+      const weight = (c ? (parseFloat(c.weight) || 0) : 0) * 100; // BE stores 0–1
+      weightedTotal += (val / max) * weight;
+    });
+    return weightedTotal;
   };
 
   const handleSubmitScore = async () => {
@@ -135,9 +232,11 @@ const JudgePanel = () => {
       }));
 
       const result = await scoreService.gradeSubmission(submission.id, judgeAccountId, scoreItems);
-      const newScores = result?.data || [];
+      const allNewScores = result?.data || [];
+      // Filter to only keep current judge's scores (avoid doubling with other judges' scores)
+      const myNewScores = allNewScores.filter(s => s.judgeAccountId === judgeAccountId);
 
-      setExistingScores(prev => ({ ...prev, [activeTeamId]: newScores }));
+      setExistingScores(prev => ({ ...prev, [activeTeamId]: myNewScores }));
       setSubmitToast(`✓ Score submitted: ${total.toFixed(1)} pts for ${activeTeam?.name}`);
       setTimeout(() => setSubmitToast(''), 3500);
     } catch (e) {
@@ -151,7 +250,50 @@ const JudgePanel = () => {
   const activeSubmission = submissions[activeTeamId];
   const myScoresForActiveTeam = existingScores[activeTeamId];
   const total = computeTotal();
-  const maxTotal = criteria.reduce((s, c) => s + (parseFloat(c.maxScore) || 0), 0) || 100;
+  const maxTotal = 100;
+
+  const isDeadlinePassed = () => {
+    if (!currentRound || !currentRound.startTime || !currentRound.durationHours) return false;
+    const start = new Date(currentRound.startTime).getTime();
+    const durationMs = currentRound.durationHours * 60 * 60 * 1000;
+    return new Date().getTime() >= (start + durationMs);
+  };
+
+  const isScoringAllowed = !scoringCompleted && (currentRound?.status === 'SCORING' || 
+                           (currentRound?.status === 'ACTIVE' && isDeadlinePassed()));
+
+  // Check if all teams have been scored by this judge
+  const allTeamsScored = teams.length > 0 && teams.every(t => (existingScores[t.id]?.length || 0) > 0);
+
+  const handleCompleteScoring = async () => {
+    if (!judgeTrackId) {
+      // fallback: try from expert context
+      const ctxStr = localStorage.getItem('expertContext');
+      const ctx = ctxStr ? JSON.parse(ctxStr) : null;
+      if (ctx?.trackId) {
+        setJudgeTrackId(ctx.trackId);
+        try {
+          await trackService.completeScoring(ctx.trackId);
+          setScoringCompleted(true);
+          setSubmitToast('✓ Scoring session completed successfully!');
+          setTimeout(() => setSubmitToast(''), 3500);
+        } catch (e) {
+          const errorMsg = e.response?.data?.message || e.response?.data?.error || (e.response?.status === 403 ? "Permission denied. Please ensure you are authorized as a Judge for this track." : e.message);
+          setSubmitError('Failed to complete scoring: ' + errorMsg);
+        }
+      }
+      return;
+    }
+    try {
+      await trackService.completeScoring(judgeTrackId);
+      setScoringCompleted(true);
+      setSubmitToast('✓ Scoring session completed successfully!');
+      setTimeout(() => setSubmitToast(''), 3500);
+    } catch (e) {
+      const errorMsg = e.response?.data?.message || e.response?.data?.error || (e.response?.status === 403 ? "Permission denied. Please ensure you are authorized as a Judge for this track." : e.message);
+      setSubmitError('Failed to complete scoring: ' + errorMsg);
+    }
+  };
 
   if (loading) {
     return (
@@ -182,9 +324,15 @@ const JudgePanel = () => {
             {currentRoundIndex > 0 && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: 'var(--warning)', borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>🏆 FINALS</span>}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
-          <Star size={15} /> Scoring Open
-        </div>
+        {isScoringAllowed ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontSize: '13px', fontWeight: '600' }}>
+            <Star size={15} /> Scoring Open
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', color: 'var(--danger)', fontSize: '13px', fontWeight: '600' }}>
+            <Lock size={15} /> {scoringCompleted ? 'Scoring Completed' : 'Waiting for Deadline'}
+          </div>
+        )}
       </div>
 
       {criteria.length === 0 && (
@@ -194,7 +342,7 @@ const JudgePanel = () => {
         </div>
       )}
 
-      <div className="judge-layout" style={{ display: 'grid', gridTemplateColumns: '260px 1fr 320px', gap: '20px', alignItems: 'start' }}>
+      <div className="judge-layout" style={{ display: 'grid', gridTemplateColumns: activeTeamId ? '260px 1fr 320px' : '260px 1fr', gap: '20px', alignItems: 'start' }}>
         {/* Column 1: Team List */}
         <div className="glass-panel" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', background: 'var(--bg-subtle)' }}>
@@ -301,12 +449,12 @@ const JudgePanel = () => {
 
               {myScoresForActiveTeam && myScoresForActiveTeam.length > 0 && (
                 <div style={{ marginTop: '20px', padding: '14px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '10px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <CheckCircle size={16} color="var(--success)" />
-                    <span style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '600' }}>
-                      You already scored this team: <strong>{myScoresForActiveTeam.reduce((s, x) => s + parseFloat(x.score || 0), 0).toFixed(1)} pts total</strong>
-                    </span>
-                  </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <CheckCircle size={16} color="var(--success)" />
+                      <span style={{ fontSize: '13px', color: 'var(--success)', fontWeight: '600' }}>
+                        You already scored this team: <strong>{computeExistingTotal(myScoresForActiveTeam).toFixed(1)} pts total</strong>
+                      </span>
+                    </div>
                   <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {myScoresForActiveTeam.map((s, i) => (
                       <span key={i} style={{ fontSize: '11px', padding: '2px 8px', background: 'var(--bg-subtle)', borderRadius: '6px', color: 'var(--text-secondary)' }}>
@@ -321,97 +469,149 @@ const JudgePanel = () => {
         </div>
 
         {/* Column 3: Scoring Rubric */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div className="glass-panel" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Target size={18} color="var(--primary)" /> Scoring Rubric
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{currentRound.name}</p>
+        {activeTeamId && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="glass-panel" style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Target size={18} color="var(--primary)" /> Scoring Rubric
+              </h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{currentRound.name}</p>
 
-            {criteria.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                {criteria.map((c) => {
-                  const val = scores[c.id] ?? 0;
-                  const max = parseFloat(c.maxScore) || 10;
-                  return (
-                    <div key={c.id}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: '600' }}>{c.name}</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input
-                            type="number" min="0" max={max} step="0.5" value={val}
-                            onChange={e => {
-                              const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
-                              setScores(p => ({ ...p, [c.id]: v }));
-                            }}
-                            style={{ width: '56px', padding: '4px 8px', textAlign: 'center', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', outline: 'none' }}
-                          />
-                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ {max}</span>
+              {criteria.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {criteria.map((c) => {
+                    const val = scores[c.id] ?? 0;
+                    const max = parseFloat(c.maxScore) || 10;
+                    return (
+                      <div key={c.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <label style={{ fontSize: '13px', fontWeight: '600' }}>{c.name}</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <input
+                              type="number" min="0" max={max} step="0.5" value={val}
+                              disabled={!isScoringAllowed || scoringCompleted}
+                              onChange={e => {
+                                const v = Math.max(0, Math.min(max, parseFloat(e.target.value) || 0));
+                                setScores(p => ({ ...p, [c.id]: v }));
+                              }}
+                              style={{ width: '56px', padding: '4px 8px', textAlign: 'center', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '6px', color: 'var(--text-primary)', fontWeight: '700', fontSize: '14px', outline: 'none' }}
+                            />
+                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>/ {max}</span>
+                          </div>
+                        </div>
+                        <input
+                          type="range" min="0" max={max} step="0.5" value={val}
+                          disabled={!isScoringAllowed}
+                          onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: 'var(--primary)', opacity: isScoringAllowed ? 1 : 0.5 }}
+                        />
+                        <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
+                          <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
                         </div>
                       </div>
-                      <input
-                        type="range" min="0" max={max} step="0.5" value={val}
-                        onChange={e => setScores(p => ({ ...p, [c.id]: parseFloat(e.target.value) }))}
-                        style={{ width: '100%', accentColor: 'var(--primary)' }}
-                      />
-                      <div style={{ height: '4px', background: 'var(--bg-active)', borderRadius: '2px', overflow: 'hidden', marginTop: '4px' }}>
-                        <div style={{ width: `${(val / max) * 100}%`, height: '100%', background: val / max > 0.8 ? 'var(--success)' : val / max > 0.5 ? 'var(--primary)' : 'var(--warning)', borderRadius: '2px', transition: 'width 0.2s' }} />
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              ) : (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
+                  No criteria configured for this round.<br />
+                  <span style={{ fontSize: '12px' }}>Ask an admin to add criteria.</span>
+                </p>
+              )}
+
+              <div style={{ marginTop: '24px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>Feedback (Optional)</label>
+                <textarea
+                  value={feedback}
+                  onChange={e => setFeedback(e.target.value)}
+                  disabled={!isScoringAllowed}
+                  placeholder={isScoringAllowed ? "Write your constructive feedback here..." : "Scoring is currently locked."}
+                  rows={3}
+                  style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
+                />
               </div>
-            ) : (
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
-                No criteria configured for this round.<br />
-                <span style={{ fontSize: '12px' }}>Ask an admin to add criteria.</span>
-              </p>
-            )}
-
-            <div style={{ marginTop: '24px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', display: 'block' }}>Feedback (Optional)</label>
-              <textarea
-                value={feedback}
-                onChange={e => setFeedback(e.target.value)}
-                placeholder="Write your constructive feedback here..."
-                rows={3}
-                style={{ width: '100%', padding: '12px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', resize: 'vertical', fontSize: '13px', boxSizing: 'border-box' }}
-              />
-            </div>
-          </div>
-
-          {/* Total + Submit */}
-          <div className="glass-panel" style={{ padding: '20px', border: `1px solid ${total >= maxTotal * 0.8 ? 'rgba(16,185,129,0.3)' : total >= maxTotal * 0.5 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.2)'}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>Total Score</span>
-              <span style={{ fontSize: '32px', fontWeight: '900', color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--primary)' : 'var(--warning)' }}>
-                {total.toFixed(1)}
-                <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: '400' }}>/{maxTotal}</span>
-              </span>
             </div>
 
-            {submitError && (
-              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '13px', color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <AlertCircle size={14} /> {submitError}
+            {/* Total + Submit */}
+            <div className="glass-panel" style={{ padding: '20px', border: `1px solid ${total >= maxTotal * 0.8 ? 'rgba(16,185,129,0.3)' : total >= maxTotal * 0.5 ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.2)'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-secondary)' }}>Total Score</span>
+                <span style={{ fontSize: '32px', fontWeight: '900', color: total >= maxTotal * 0.8 ? 'var(--success)' : total >= maxTotal * 0.5 ? 'var(--primary)' : 'var(--warning)' }}>
+                  {total.toFixed(1)}
+                  <span style={{ fontSize: '16px', color: 'var(--text-secondary)', fontWeight: '400' }}>/{maxTotal}</span>
+                </span>
               </div>
-            )}
 
-            <button
-              onClick={handleSubmitScore}
-              disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission}
-              className="btn btn-primary"
-              style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
-            >
-              {isSubmitting
-                ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
-                : myScoresForActiveTeam?.length
-                  ? <><CheckCircle size={16} /> Update Score</>
-                  : <><Star size={16} /> Submit Score</>
-              }
-            </button>
+              {submitError && (
+                <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '13px', color: '#ef4444', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={14} /> {submitError}
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmitScore}
+                disabled={isSubmitting || !activeTeamId || !criteria.length || !activeSubmission || !isScoringAllowed || scoringCompleted}
+                className="btn btn-primary"
+                style={{ width: '100%', justifyContent: 'center', padding: '14px', fontSize: '15px', gap: '8px' }}
+              >
+                {isSubmitting
+                  ? <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>
+                  : myScoresForActiveTeam?.length
+                    ? <><CheckCircle size={16} /> Update Score</>
+                    : <><Star size={16} /> Submit Score</>
+                }
+              </button>
+            </div>
+
+            {/* Complete Scoring Panel */}
+            <div className="glass-panel" style={{ padding: '20px', marginTop: '16px' }}>
+              {!scoringCompleted ? (
+                <button
+                  onClick={() => {
+                    if (!allTeamsScored) {
+                      setCompleteScoringErrorModal(true);
+                    } else {
+                      setCompleteScoringModal(true);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  className="btn btn-success"
+                  style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '14px' }}
+                >
+                  Complete Scoring
+                </button>
+              ) : (
+                <div style={{ padding: '8px', background: 'rgba(16,185,129,0.1)', borderRadius: '8px', color: 'var(--success)', fontWeight: '600', textAlign: 'center' }}>
+                  Scoring completed for this track.
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {completeScoringModal && (
+        <ConfirmModal
+          isOpen={completeScoringModal}
+          onClose={() => setCompleteScoringModal(false)}
+          onConfirm={() => { setCompleteScoringModal(false); handleCompleteScoring(); }}
+          title="Confirm Completion"
+          message="Are you sure you have finished scoring all teams for this track? This will lock scoring for the track."
+          confirmText="Yes, Complete"
+          cancelText="Cancel"
+          type="warning"
+        />
+      )}
+
+      {completeScoringErrorModal && (
+        <ConfirmModal
+          isOpen={completeScoringErrorModal}
+          onClose={() => setCompleteScoringErrorModal(false)}
+          title="Incomplete Scoring"
+          message="You cannot complete scoring yet. Please ensure you have submitted scores for all teams that have submitted their work."
+          type="warning"
+        />
+      )}
 
       {submitToast && (
         <div className="animate-fade-in" style={{ position: 'fixed', bottom: '24px', right: '24px', background: 'rgba(15,23,42,0.95)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 999 }}>

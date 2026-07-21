@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useParams } from 'react-router-dom';
 import { Search, Filter, Users, Star, TrendingUp, Code, Zap, Globe, Shield, ChevronRight, X, ExternalLink, Monitor, Trophy } from 'lucide-react';
 
@@ -19,15 +20,34 @@ const PerformingTeams = () => {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentRound, setCurrentRound] = useState(null);
+
+  // Penalty Modal State
+  const [showPenaltyModal, setShowPenaltyModal] = useState(false);
+  const [penaltyTeamId, setPenaltyTeamId] = useState(null);
+  const [penaltyAction, setPenaltyAction] = useState('deduct'); // 'deduct', 'disqualify', 'requalify'
+  const [penaltyPoints, setPenaltyPoints] = useState('');
+  const [penaltyReason, setPenaltyReason] = useState('');
+  const [disqualificationReason, setDisqualificationReason] = useState('');
+  const [confirmStep, setConfirmStep] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
-    // Build team list from real teams + track draw results
-    import('../../api/teamService.js').then(({ teamService }) => {
-      const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
-      teamService.getTeamsByEvent(parsedEventId).then(rawTeams => {
-        const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
+    const load = async () => {
+      try {
+        const { teamService } = await import('../../api/teamService.js');
+        const { eventService } = await import('../../api/eventService.js');
+        const { submissionService } = await import('../../api/scoreService.js');
+        const apiClient = (await import('../../api/apiClient.js')).default;
 
-        // Build a map: teamName -> { trackName, trackColor }
+        const parsedEventId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
+
+        const trackDrawStr = localStorage.getItem(`trackDraw_${parsedEventId}`);
         const teamTrackMap = {};
         if (trackDrawStr) {
           const drawn = JSON.parse(trackDrawStr);
@@ -42,35 +62,84 @@ const PerformingTeams = () => {
           });
         }
 
-        const teamsList = rawTeams.data || rawTeams;
+        const rawTeams = await teamService.getTeamsByEvent(parsedEventId);
+        const teamsList = rawTeams.data || rawTeams || [];
         const mappedTeams = Array.isArray(teamsList) ? teamsList : [];
 
-        const enriched = mappedTeams.map((team, i) => {
+        // Fetch active round
+        let activeRound = null;
+        try {
+          const roundsRes = await eventService.getEventRounds(parsedEventId);
+          const rounds = roundsRes.data || [];
+          activeRound = rounds[0]; // fallback
+          for (let i = rounds.length - 1; i >= 0; i--) {
+            if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+              activeRound = rounds[i];
+              break;
+            }
+          }
+          setCurrentRound(activeRound);
+        } catch (e) {}
+
+        // Fetch round standings to get scores and penalties
+        let standingsMap = {};
+        if (activeRound) {
+          try {
+            const standingsRes = await apiClient.get(`/api/v1/rounds/${activeRound.id}/standings`);
+            const sList = standingsRes.data?.data || [];
+            sList.forEach(st => {
+              standingsMap[st.teamId] = { score: st.score, penaltyPoints: st.penaltyPoints, penaltyReason: st.penaltyReason };
+            });
+          } catch(e) {}
+        }
+
+        const enriched = await Promise.all(mappedTeams.map(async (team, i) => {
           const trackInfo = teamTrackMap[team.name];
+
+          let subStatus = '(No submission yet)';
+          let desc = null;
+          let repo = null;
+
+          if (activeRound) {
+            try {
+              const subRes = await submissionService.getSubmission(activeRound.id, team.id);
+              if (subRes?.data?.id) {
+                subStatus = subRes.data.submissionName || 'Submitted';
+                desc = subRes.data.description;
+                repo = subRes.data.githubUrl;
+              }
+            } catch (e) {}
+          }
 
           return {
             id: team.id,
             name: team.name,
-            project: team.project || '(No submission yet)',
+            project: subStatus,
+            description: desc,
+            repo: repo,
             track: trackInfo ? trackInfo.trackName : 'Not assigned',
             trackColor: trackInfo ? trackInfo.trackColor : 'var(--text-secondary)',
             status: team.status || 'Active',
-            score: team.score ?? null,
+            score: standingsMap[team.id]?.score !== undefined ? standingsMap[team.id].score : null,
+            penaltyPoints: standingsMap[team.id]?.penaltyPoints || 0,
+            penaltyReason: standingsMap[team.id]?.penaltyReason || '',
             members: team.memberCount || 0,
             membersList: [],
             icon: ICONS[i % ICONS.length],
             inviteCode: team.inviteCode || 'N/A',
+            currentRound: activeRound ? activeRound.name : 'N/A',
           };
-        });
+        }));
 
         setTeams(enriched);
         setLoading(false);
-      }).catch(err => {
+      } catch (err) {
         console.error("Failed to load real teams", err);
         setLoading(false);
-      });
-    });
-  }, []);
+      }
+    };
+    load();
+  }, [eventId]);
 
   const handleStatusChange = async (teamId, newStatus) => {
     try {
@@ -79,7 +148,7 @@ const PerformingTeams = () => {
       setTeams(prev => prev.map(t => t.id === teamId ? { ...t, status: newStatus } : t));
     } catch (err) {
       console.error("Failed to update team status via real API", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      showToast('Error: ' + (err.response?.data?.message || err.message), 'error');
     }
   };
 
@@ -108,10 +177,97 @@ const PerformingTeams = () => {
         }));
       }
       
-      alert("Team successfully assigned to a random track & topic!");
+      showToast('Team successfully assigned to a random track & topic!', 'success');
     } catch (err) {
       console.error("Failed to assign random track", err);
-      alert("Error: " + (err.response?.data?.message || err.message));
+      showToast('Error: ' + (err.response?.data?.message || err.message), 'error');
+    }
+  };
+
+  const handleDisqualify = async (teamId, currentStatus) => {
+    openPenaltyModal(teamId, currentStatus ? 'requalify' : 'disqualify');
+  };
+
+  const openPenaltyModal = (teamId, action = 'deduct') => {
+    const t = teams.find(team => team.id === teamId);
+    setPenaltyTeamId(teamId);
+    setPenaltyAction(action);
+    setPenaltyPoints(t?.penaltyPoints || '');
+    setPenaltyReason(t?.penaltyReason || '');
+    setDisqualificationReason('');
+    setConfirmStep(false);
+    setShowPenaltyModal(true);
+  };
+
+  const handleConfirmClick = () => {
+    if (penaltyAction === 'deduct' && !penaltyReason.trim()) {
+      showToast("Please provide a reason.", "error");
+      return;
+    }
+    if (penaltyAction === 'disqualify' && !disqualificationReason.trim()) {
+      showToast("Please provide a disqualification reason.", "error");
+      return;
+    }
+    if (penaltyAction === 'deduct' && (penaltyPoints === '' || parseFloat(penaltyPoints) < 0)) {
+      showToast("Please enter valid penalty points (0 to revert).", "error");
+      return;
+    }
+    setConfirmStep(true);
+  };
+
+  const executePenalty = async () => {
+    if (!currentRound || !penaltyTeamId) return;
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      
+      if (penaltyAction === 'disqualify') {
+        await teamService.disqualifyTeam(penaltyTeamId, true, disqualificationReason);
+        setTeams(prev => prev.map(t => t.id === penaltyTeamId ? { ...t, isDisqualified: true } : t));
+        if (selectedTeam && selectedTeam.id === penaltyTeamId) {
+          setSelectedTeam(prev => ({ ...prev, isDisqualified: true }));
+        }
+        showToast("Team disqualified successfully!");
+      } else if (penaltyAction === 'requalify') {
+        await teamService.disqualifyTeam(penaltyTeamId, false, '');
+        setTeams(prev => prev.map(t => t.id === penaltyTeamId ? { ...t, isDisqualified: false } : t));
+        if (selectedTeam && selectedTeam.id === penaltyTeamId) {
+          setSelectedTeam(prev => ({ ...prev, isDisqualified: false }));
+        }
+        showToast("Team re-qualified successfully!");
+      } else {
+        const parsedPoints = parseFloat(penaltyPoints) || 0;
+        await teamService.applyPenalty(penaltyTeamId, currentRound.id, { 
+          penaltyPoints: parsedPoints, 
+          penaltyReason 
+        });
+        
+        setTeams(prev => prev.map(t => {
+           if (t.id === penaltyTeamId) {
+             const oldPenalty = t.penaltyPoints || 0;
+             const baseScore = t.score ? (parseFloat(t.score) + oldPenalty) : 0;
+             const newScore = baseScore - parsedPoints;
+             return { ...t, score: newScore.toFixed(2), penaltyPoints: parsedPoints, penaltyReason };
+           }
+           return t;
+        }));
+
+        if (selectedTeam && selectedTeam.id === penaltyTeamId) {
+           setSelectedTeam(prev => {
+             const oldPenalty = prev.penaltyPoints || 0;
+             const baseScore = prev.score ? (parseFloat(prev.score) + oldPenalty) : 0;
+             const newScore = baseScore - parsedPoints;
+             return { ...prev, score: newScore.toFixed(2), penaltyPoints: parsedPoints, penaltyReason };
+           });
+        }
+        showToast(parsedPoints === 0 ? "Penalty reverted successfully!" : "Penalty applied successfully!");
+      }
+      
+      setShowPenaltyModal(false);
+      setPenaltyTeamId(null);
+      setConfirmStep(false);
+      setDisqualificationReason('');
+    } catch (err) {
+      showToast("Error applying action: " + (err.response?.data?.message || err.message), "error");
     }
   };
 
@@ -119,7 +275,10 @@ const PerformingTeams = () => {
     const matchesSearch =
       team.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (team.project || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === 'All' || team.status === filterStatus;
+    const matchesStatus = filterStatus === 'All' || 
+      (filterStatus === 'Pending' && team.status === 'CREATED') ||
+      (filterStatus === 'Active' && ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status)) ||
+      (filterStatus === 'Eliminated' && ['ELIMINATED', 'DISQUALIFIED', 'REJECTED', 'WITHDRAWN'].includes(team.status));
     return matchesSearch && matchesStatus;
   });
 
@@ -131,9 +290,6 @@ const PerformingTeams = () => {
           <p className="page-subtitle">Monitor and manage all participating teams ({teams.length} total)</p>
         </div>
         <div className="header-actions">
-          <button className="btn btn-secondary">
-            <Filter size={18} /> Export Data
-          </button>
         </div>
       </div>
 
@@ -170,7 +326,7 @@ const PerformingTeams = () => {
         <div className="teams-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
           {filteredTeams.map(team => (
             <div key={team.id} className="team-card glass-panel" style={{ padding: '24px', borderRadius: '16px', transition: 'transform 0.2s ease, box-shadow 0.2s ease', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: team.status === 'Active' ? 'var(--primary)' : 'var(--text-secondary)' }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? 'var(--primary)' : 'var(--text-secondary)' }} />
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -185,8 +341,8 @@ const PerformingTeams = () => {
                   </div>
                 </div>
                 <div style={{ 
-                  background: ['REGISTERED', 'APPROVED'].includes(team.status) ? 'rgba(16,185,129,0.1)' : team.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
-                  color: ['REGISTERED', 'APPROVED'].includes(team.status) ? '#10b981' : team.status === 'CREATED' ? '#f59e0b' : '#ef4444', 
+                  background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? 'rgba(16,185,129,0.1)' : team.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', 
+                  color: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(team.status) ? '#10b981' : team.status === 'CREATED' ? '#f59e0b' : '#ef4444', 
                   padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' 
                 }}>
                   {team.status}
@@ -194,7 +350,7 @@ const PerformingTeams = () => {
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project</div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Project ({team.currentRound})</div>
                 <div style={{ fontSize: '15px', fontWeight: '500' }}>{team.project}</div>
               </div>
 
@@ -253,12 +409,17 @@ const PerformingTeams = () => {
                   <span style={{ fontSize: '13px', padding: '4px 12px', background: 'rgba(59,130,246,0.1)', color: selectedTeam.trackColor, borderRadius: '20px', fontWeight: '600' }}>
                     {selectedTeam.track}
                   </span>
-                  <span style={{ fontSize: '13px', padding: '4px 12px', background: ['REGISTERED', 'APPROVED'].includes(selectedTeam.status) ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: ['REGISTERED', 'APPROVED'].includes(selectedTeam.status) ? 'var(--success)' : 'var(--danger)', borderRadius: '20px', fontWeight: '600' }}>
+                  <span style={{ fontSize: '13px', padding: '4px 12px', background: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) ? 'rgba(16,185,129,0.1)' : selectedTeam.status === 'CREATED' ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)', color: ['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) ? 'var(--success)' : selectedTeam.status === 'CREATED' ? '#f59e0b' : 'var(--danger)', borderRadius: '20px', fontWeight: '600' }}>
                     {selectedTeam.status}
                   </span>
+                  {selectedTeam.isDisqualified && (
+                    <span style={{ fontSize: '13px', padding: '4px 12px', background: 'rgba(239,68,68,0.1)', color: 'var(--danger)', borderRadius: '20px', fontWeight: '800' }}>
+                      DISQUALIFIED
+                    </span>
+                  )}
                   <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Invite: <code>{selectedTeam.inviteCode}</code></span>
                   
-                  {['REGISTERED', 'APPROVED'].includes(selectedTeam.status) && (!selectedTeam.track || selectedTeam.track === 'Not assigned') && (
+                  {['REGISTERED', 'APPROVED', 'IN_PROGRESS', 'CONFIRMED'].includes(selectedTeam.status) && (!selectedTeam.track || selectedTeam.track === 'Not assigned') && (
                     <button 
                       onClick={() => handleRandomAssign(selectedTeam.id)}
                       className="btn btn-primary btn-sm" 
@@ -319,12 +480,149 @@ const PerformingTeams = () => {
                       {selectedTeam.score ?? '—'}
                     </div>
                   </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {selectedTeam.isDisqualified ? (
+                       <button onClick={() => handleDisqualify(selectedTeam.id, true)} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '600', width: '100%', color: 'var(--text-secondary)' }}>
+                         Re-qualify Team
+                       </button>
+                    ) : (
+                       <button onClick={() => openPenaltyModal(selectedTeam.id, 'deduct')} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px', fontWeight: '600', width: '100%', color: 'var(--danger)', borderColor: 'rgba(239,68,68,0.3)' }}>
+                         Manage Penalty
+                       </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Penalty Modal */}
+      {showPenaltyModal && (
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div className="modal-content animate-fade-in" style={{ background: 'white', borderRadius: '16px', maxWidth: '450px', width: '90%', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '20px', color: 'var(--text-primary)' }}>
+              {penaltyAction === 'requalify' ? 'Re-qualify Team' : 'Apply Penalty or Disqualify'}
+            </h2>
+            
+            {confirmStep ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '12px', color: 'var(--danger)' }}>Are you sure?</h3>
+                <p style={{ color: 'var(--text-secondary)', marginBottom: '24px', fontSize: '15px' }}>
+                  {penaltyAction === 'deduct' 
+                    ? `You are about to deduct ${penaltyPoints} points from this team.`
+                    : penaltyAction === 'disqualify' 
+                      ? 'You are about to DISQUALIFY this team. They will not be able to proceed.'
+                      : 'You are about to RE-QUALIFY this team.'}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                  <button className="btn btn-secondary" onClick={() => setConfirmStep(false)} style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600' }}>Back</button>
+                  <button className="btn btn-primary" onClick={executePenalty} style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600', background: 'var(--danger)', border: 'none' }}>Yes, proceed</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {penaltyAction !== 'requalify' && (
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', background: 'var(--bg-subtle)', padding: '6px', borderRadius: '12px' }}>
+                    <button
+                      className={`btn ${penaltyAction === 'deduct' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', border: 'none', background: penaltyAction === 'deduct' ? 'var(--primary)' : 'transparent', color: penaltyAction === 'deduct' ? 'white' : 'var(--text-secondary)', fontWeight: '600' }}
+                      onClick={() => setPenaltyAction('deduct')}
+                    >
+                      Deduct Points
+                    </button>
+                    <button
+                      className={`btn ${penaltyAction === 'disqualify' ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ flex: 1, padding: '10px', fontSize: '14px', borderRadius: '8px', border: 'none', background: penaltyAction === 'disqualify' ? 'var(--danger)' : 'transparent', color: penaltyAction === 'disqualify' ? 'white' : 'var(--text-secondary)', fontWeight: '600' }}
+                      onClick={() => setPenaltyAction('disqualify')}
+                    >
+                      Disqualify
+                    </button>
+                  </div>
+                )}
+
+                {penaltyAction === 'deduct' && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-secondary)' }}>Penalty Points</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '15px' }}
+                      value={penaltyPoints}
+                      onChange={(e) => setPenaltyPoints(e.target.value)}
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                )}
+
+                {penaltyAction === 'deduct' && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--text-secondary)' }}>Reason for Penalty</label>
+                    <textarea
+                      className="form-input"
+                      rows="3"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', fontSize: '15px', resize: 'none' }}
+                      value={penaltyReason}
+                      onChange={(e) => setPenaltyReason(e.target.value)}
+                      placeholder="Reason for penalty..."
+                    />
+                  </div>
+                )}
+
+                {penaltyAction === 'disqualify' && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', marginBottom: '8px', color: 'var(--danger)' }}>Disqualification Reason</label>
+                    <textarea
+                      className="form-input"
+                      rows="3"
+                      style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid rgba(239,68,68,0.5)', fontSize: '15px', resize: 'none' }}
+                      value={disqualificationReason}
+                      onChange={(e) => setDisqualificationReason(e.target.value)}
+                      placeholder="Explain why this team is being disqualified..."
+                    />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600' }}
+                    onClick={() => {
+                      setShowPenaltyModal(false);
+                      setPenaltyTeamId(null);
+                      setPenaltyPoints('');
+                      setPenaltyReason('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: '10px 20px', borderRadius: '10px', fontWeight: '600', background: penaltyAction === 'disqualify' ? 'var(--danger)' : undefined, border: 'none' }}
+                    onClick={handleConfirmClick}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: '24px', right: '24px', zIndex: 99999,
+          background: toast.type === 'error' ? 'var(--danger)' : '#10b981',
+          color: 'white', padding: '12px 24px', borderRadius: '8px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.2)', fontWeight: '600',
+          animation: 'fade-in 0.3s ease-out'
+        }}>
+          {toast.message}
+        </div>
+      )}
+
     </div>
   );
 };

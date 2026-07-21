@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target } from 'lucide-react';
+import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target, AlertCircle } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import './Workspace.css';
 
@@ -13,6 +13,7 @@ const Workspace = () => {
   const [teamData, setTeamData] = useState(null);
   const [eventData, setEventData] = useState(null);
   const [currentRoundName, setCurrentRoundName] = useState('Main Event');
+  const [hasRoundStarted, setHasRoundStarted] = useState(false);
   const [problemStatement, setProblemStatement] = useState({
     title: 'Main Event Problem Statement',
     body: 'Build a specialized AI RAG (Retrieval-Augmented Generation) system based on a domain-specific dataset. The system must have mechanisms to detect and prevent hallucination, support multi-hop reasoning, and feature a user-friendly interface.',
@@ -26,7 +27,8 @@ const Workspace = () => {
     releasedAt: 'TBD',
     deadline: 'TBD',
     remainingHours: '0h 0m',
-    durationStr: '0h'
+    durationStr: '0h',
+    promotionTopN: '--'
   });
 
   const [showNotification, setShowNotification] = useState(false);
@@ -83,7 +85,7 @@ const Workspace = () => {
     if (trackDrawStr) {
       try {
         const parsedDraw = JSON.parse(trackDrawStr);
-        const myTeamName = localStorage.getItem('myTeamName') || 'NullPointerException';
+        const myTeamName = localStorage.getItem('myTeamName') || 'My Team';
         
         // Find if my team is in any of the drawn tracks
         const myTrack = parsedDraw.find(t => t.teams && t.teams.some(teamObj => (typeof teamObj === 'string' ? teamObj : teamObj.name) === myTeamName));
@@ -159,21 +161,44 @@ const Workspace = () => {
             eventService.getEventRounds(evt.id).then(roundRes => {
               const rounds = roundRes.data || [];
               if (rounds.length > 0) {
-                const roundIdx = parseInt(localStorage.getItem('currentRoundIndex') || '0');
-                const round = rounds[roundIdx] || rounds[0];
+                let activeRoundIdx = 0;
+                let lastStartedIdx = -1;
+                for (let i = rounds.length - 1; i >= 0; i--) {
+                  if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                    lastStartedIdx = i;
+                    break;
+                  }
+                }
+                
+                if (lastStartedIdx !== -1) {
+                  setHasRoundStarted(true);
+                } else {
+                  setHasRoundStarted(false);
+                }
+                
+                activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+                
+                const round = rounds[activeRoundIdx] || rounds[0];
                 const rName = round.name || 'Main Event';
                 setCurrentRoundName(rName);
 
                 let durationStr = '0h';
-                let diffMins = 0;
-                if (round.startTime && round.endTime) {
+                let actualRemaining = '0h 0m';
+                let calculatedEnd = null;
+                if (round.startTime && round.durationHours) {
                   const startD = new Date(round.startTime);
-                  const endD = new Date(round.endTime);
-                  diffMins = Math.floor((endD - startD) / (1000 * 60));
-                  if (diffMins > 0) {
-                    const h = Math.floor(diffMins / 60);
-                    const m = diffMins % 60;
-                    durationStr = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  calculatedEnd = new Date(startD.getTime() + round.durationHours * 3600000);
+                  const now = new Date();
+                  
+                  durationStr = `${round.durationHours}h`;
+                  
+                  const remainMins = Math.floor((calculatedEnd - now) / (1000 * 60));
+                  if (remainMins > 0) {
+                    const h = Math.floor(remainMins / 60);
+                    const m = remainMins % 60;
+                    actualRemaining = m > 0 ? `${h}h ${m}m` : `${h}h`;
+                  } else {
+                    actualRemaining = 'Ended';
                   }
                 }
 
@@ -183,9 +208,11 @@ const Workspace = () => {
                     ...prev,
                     title: `${rName} - ${trackPart}`,
                     releasedAt: round.startTime ? new Date(round.startTime).toLocaleString() : 'TBD',
-                    deadline: round.endTime ? new Date(round.endTime).toLocaleString() : 'TBD',
-                    remainingHours: durationStr,
-                    durationStr: durationStr
+                    deadline: calculatedEnd ? calculatedEnd.toLocaleString() : 'TBD',
+                    remainingHours: actualRemaining,
+                    durationStr: durationStr,
+                    rawEndTime: calculatedEnd,
+                    promotionTopN: round.promotionTopN
                   };
                 });
               }
@@ -207,17 +234,65 @@ const Workspace = () => {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
-
+  useEffect(() => {
+    const updateRemaining = () => {
+      setProblemStatement(prev => {
+        if (!prev.rawEndTime) return prev;
+        
+        const endD = new Date(prev.rawEndTime);
+        const now = new Date();
+        const diffMs = endD - now;
+        
+        let newRemaining = '0h0m0s';
+        if (diffMs > 0) {
+          const h = Math.floor(diffMs / (1000 * 60 * 60));
+          const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diffMs % (1000 * 60)) / 1000);
+          newRemaining = `${h}h${m}m${s}s`;
+        } else {
+          newRemaining = 'Ended';
+        }
+        
+        if (prev.remainingHours !== newRemaining) {
+          return { ...prev, remainingHours: newRemaining };
+        }
+        return prev;
+      });
+    };
+    
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+    return () => clearInterval(interval);
+  }, []);
   const [tasks, setTasks] = useState(() => {
     return JSON.parse(localStorage.getItem(`ws_tasks_${tId}`) || '[]');
   });
   const [newTask, setNewTask] = useState('');
   const [showFullProblem, setShowFullProblem] = useState(false);
 
-  const [chatMessages, setChatMessages] = useState(() => {
-    return JSON.parse(localStorage.getItem(`ws_chat_${tId}`) || '[]');
-  });
+  const [chatMessages, setChatMessages] = useState([]);
   const [newChat, setNewChat] = useState('');
+
+  const fetchChatMessages = async () => {
+    if (tId && tId !== 'temp' && teamData?.mentor) {
+      try {
+        const res = await teamService.getMentorMessages(tId);
+        if (res && res.data) {
+          setChatMessages(res.data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch chat messages:", e);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (teamData?.mentor) {
+      fetchChatMessages();
+      const interval = setInterval(fetchChatMessages, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [teamData?.mentor, tId]);
 
   const handleAddTask = (e) => {
     if (e.key === 'Enter' && newTask.trim()) {
@@ -239,24 +314,33 @@ const Workspace = () => {
   };
   const completedCount = tasks.filter(t => t.completed).length;
 
-  const handleSendChat = () => {
-    if (newChat.trim()) {
-      const msg = {
-        id: Date.now(),
-        sender: currentUserEmail.split('@')[0],
-        text: newChat.trim(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        isMine: true
-      };
-      const newMsgs = [...chatMessages, msg];
-      setChatMessages(newMsgs);
-      localStorage.setItem(`ws_chat_${tId}`, JSON.stringify(newMsgs));
-      setNewChat('');
+  const handleSendChat = async () => {
+    if (newChat.trim() && teamData?.mentor) {
+      try {
+        await teamService.sendMentorMessage(tId, { message: newChat.trim() });
+        setNewChat('');
+        fetchChatMessages();
+      } catch (e) {
+        console.error("Failed to send message", e);
+      }
     }
   };
 
   return (
     <div className="workspace-container animate-fade-in">
+      {teamData?.isDisqualified && (
+        <div style={{ padding: '16px 24px', marginBottom: '24px', background: 'rgba(239,68,68,0.1)', borderBottom: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', gap: '16px', color: 'var(--danger)' }}>
+          <AlertCircle size={24} />
+          <div>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '800' }}>Your Team is Disqualified</h3>
+            <p style={{ margin: '4px 0 0', fontSize: '14px', opacity: 0.9 }}>
+              {teamData?.disqualificationReason
+                ? `Reason: ${teamData.disqualificationReason}`
+                : 'You are no longer eligible to participate. Please contact the event administrator.'}
+            </p>
+          </div>
+        </div>
+      )}
       <header className="workspace-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
@@ -301,7 +385,7 @@ const Workspace = () => {
               <BookOpen size={14} /> {teamTrack.topic}
             </div>
           </div>
-          <h1>Team: {localStorage.getItem('myTeamName') || 'NullPointerException'}</h1>
+          <h1>Team: {localStorage.getItem('myTeamName') || 'My Team'}</h1>
           <p className="subtitle">{eventData?.name || 'SEAL Hackathon'} — {eventData?.startDate || 'TBD'}</p>
         </div>
         <div className="workspace-actions">
@@ -332,7 +416,7 @@ const Workspace = () => {
         <div className="ws-col-left">
 
           {/* 🔴 Problem Statement Widget */}
-          {PROBLEM_RELEASED && teamTrack.name !== 'Awaiting Draw...' && (
+          {PROBLEM_RELEASED && (teamTrack.name !== 'Awaiting Draw...' || hasRoundStarted) && (
             <div className="glass-panel ws-panel" style={{ background: '#FFFFFF', border: '1px solid rgba(245,158,11,0.35)', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg, var(--warning), var(--danger))' }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
@@ -363,7 +447,7 @@ const Workspace = () => {
                   ))}
                   <div style={{ marginTop: '12px', padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', fontSize: '12px', color: 'var(--danger)', display: 'flex', gap: '8px' }}>
                     <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
-                    Submission Deadline: <strong>{PROBLEM_STATEMENT.deadline}</strong>
+                    Submission Deadline: <strong>{problemStatement.deadline}</strong>
                   </div>
                 </div>
               )}
@@ -386,12 +470,8 @@ const Workspace = () => {
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Teams / Track</div>
                 </div>
                 <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>2</div>
+                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--success)' }}>{problemStatement.promotionTopN || '--'}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>To Final Round</div>
-                </div>
-                <div style={{ flex: 1, padding: '10px', background: 'var(--bg-hover)', borderRadius: '8px', border: '1px solid var(--border-color)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '20px', fontWeight: '800', color: 'var(--warning)' }}>{problemStatement.durationStr || '7h'}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Code</div>
                 </div>
               </div>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
@@ -399,10 +479,16 @@ const Workspace = () => {
               </p>
             </div>
           ) : (
-            <div className="glass-panel ws-panel" style={{ background: 'rgba(139,92,246,0.05)', border: '1px dashed rgba(139,92,246,0.3)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
-              <Clock size={32} color="var(--accent-1)" style={{ marginBottom: '12px', opacity: 0.7 }} />
-              <h3 style={{ fontSize: '15px', color: 'var(--accent-1)', marginBottom: '8px' }}>Waiting for Track Draw</h3>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>Your Problem Statement and Leaderboard will appear here once the Admin conducts the track draw.</p>
+            <div className="glass-panel ws-panel" style={{ background: hasRoundStarted ? 'rgba(16,185,129,0.05)' : 'rgba(139,92,246,0.05)', border: `1px dashed ${hasRoundStarted ? 'rgba(16,185,129,0.3)' : 'rgba(139,92,246,0.3)'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', textAlign: 'center' }}>
+              <Clock size={32} color={hasRoundStarted ? 'var(--success)' : 'var(--accent-1)'} style={{ marginBottom: '12px', opacity: 0.7 }} />
+              <h3 style={{ fontSize: '15px', color: hasRoundStarted ? 'var(--success)' : 'var(--accent-1)', marginBottom: '8px' }}>
+                {hasRoundStarted ? 'Round In Progress — Awaiting Track Draw' : 'Waiting for Track Draw'}
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+                {hasRoundStarted 
+                  ? 'The round is live! Your track assignment and leaderboard will appear here once the Admin conducts the track draw.' 
+                  : 'Your Problem Statement and Leaderboard will appear here once the Admin conducts the track draw.'}
+              </p>
             </div>
           )}
 
@@ -428,7 +514,7 @@ const Workspace = () => {
                     {(m.name || m.accountName) ? (m.name || m.accountName).charAt(0).toUpperCase() : '?'}
                   </div>
                   <div className="member-info">
-                    <span className="member-name">{m.name || m.accountName || 'Unknown'} {(m.name || m.accountName) === localStorage.getItem('userEmail') ? '(You)' : ''}</span>
+                    <span className="member-name">{m.name || m.accountName || 'Unknown'} {m.email === localStorage.getItem('userEmail') ? '(You)' : ''}</span>
                     <span className="member-role">{m.role || 'Member'}</span>
                   </div>
                 </div>
@@ -498,22 +584,38 @@ const Workspace = () => {
         <div className="ws-col-right">
           <div className="glass-panel ws-panel chat-panel">
             <div className="panel-header">
-              <h3 className="panel-title"><MessageSquare size={18} /> Team Chat</h3>
+              <h3 className="panel-title"><MessageSquare size={18} /> Mentor Chat</h3>
             </div>
-            <div className="chat-messages" style={{ overflowY: 'auto' }}>
-              {chatMessages.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No messages yet. Start chatting!</p>}
-              {chatMessages.map(msg => (
-                <div key={msg.id} className={`chat-bubble ${msg.isMine ? 'sent' : 'received'}`}>
-                  {!msg.isMine && <span className="chat-sender">{msg.sender}</span>}
-                  <p>{msg.text}</p>
-                  <span className="chat-time">{msg.time}</span>
+            {!teamData?.mentor ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <MessageSquare size={32} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                <p style={{ fontSize: '14px', lineHeight: '1.5' }}>Your team hasn't been assigned a Mentor yet.</p>
+                <p style={{ fontSize: '13px', opacity: 0.8, marginTop: '8px' }}>Once assigned, you can chat with them here.</p>
+              </div>
+            ) : (
+              <>
+                <div style={{ padding: '8px 16px', background: 'rgba(20,184,166,0.1)', borderBottom: '1px solid rgba(20,184,166,0.2)', fontSize: '13px', color: 'var(--accent-3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <UserPlus size={14} /> Assigned Mentor: <strong>{teamData.mentor.name || teamData.mentor.email}</strong>
                 </div>
-              ))}
-            </div>
-            <div className="chat-input-area">
-              <input type="text" placeholder="Type a message..." className="chat-input" value={newChat} onChange={e => setNewChat(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChat()} />
-              <button className="btn-send" onClick={handleSendChat}><Send size={16} /></button>
-            </div>
+                <div className="chat-messages" style={{ overflowY: 'auto' }}>
+                  {chatMessages.length === 0 && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '16px', textAlign: 'center' }}>No messages yet. Say hi to your mentor!</p>}
+                  {chatMessages.map(msg => {
+                    const isMine = msg.senderId === parseInt(localStorage.getItem('userId') || '0');
+                    return (
+                      <div key={msg.id} className={`chat-bubble ${isMine ? 'sent' : 'received'}`}>
+                        {!isMine && <span className="chat-sender" style={{ color: msg.senderRole === 'STUDENT' ? 'var(--primary)' : 'var(--accent-3)' }}>{msg.senderName} ({msg.senderRole === 'STUDENT' ? 'Student' : 'Lecturer'})</span>}
+                        <p>{msg.message}</p>
+                        <span className="chat-time">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="chat-input-area">
+                  <input type="text" placeholder="Type a message to your mentor..." className="chat-input" value={newChat} onChange={e => setNewChat(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendChat()} />
+                  <button className="btn-send" onClick={handleSendChat}><Send size={16} /></button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
 import './Workspace.css';
+import apiClient from '../../api/apiClient';
 
 const TeamFormation = () => {
   const navigate = useNavigate();
@@ -13,6 +14,21 @@ const TeamFormation = () => {
   const [shaking, setShaking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [trackName, setTrackName] = useState('');
+
+  useEffect(() => {
+    const eventId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
+    if (!eventId) return;
+    apiClient.get(`/api/v1/events/${eventId}/tracks`)
+      .then(res => {
+        const tracks = res.data?.data || res.data || [];
+        if (Array.isArray(tracks) && tracks.length > 0) {
+          // Use the first track or the one matching the participant's registered track
+          setTrackName(tracks[0].name || '');
+        }
+      })
+      .catch(() => {}); // Fail silently — subtitle just won't show track name
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(localStorage.getItem('p_teamInviteCode') || '');
@@ -46,9 +62,11 @@ const TeamFormation = () => {
       localStorage.setItem('p_hasTeam', 'true');
       localStorage.setItem('p_isLeader', 'true');
       
+      window.dispatchEvent(new Event('participant_state_updated'));
+      
       setActiveTab('success_create');
     } catch (err) {
-      setError(err.message || 'Failed to create team');
+      setError(err.response?.data?.message || err.message || 'Failed to create team');
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
     } finally {
@@ -94,7 +112,12 @@ const TeamFormation = () => {
       <div className="page-header" style={{ marginBottom: '40px', textAlign: 'center' }}>
         <div>
           <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Team Formation</h1>
-          <p className="subtitle">You have selected the <strong>AI & Machine Learning</strong> track. Now, let's get your team ready.</p>
+          <p className="subtitle">
+            {trackName
+              ? <>You have selected the <strong>{trackName}</strong> track. Now, let's get your team ready.</>
+              : "Let's get your team ready for the event."
+            }
+          </p>
         </div>
       </div>
 
@@ -183,9 +206,9 @@ const TeamFormation = () => {
           </div>
 
           <form onSubmit={handleCreateTeam} style={{ display: activeTab === 'create' ? 'block' : 'none' }}>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px' }}>Team Name</label>
-              <input type="text" className="task-input" placeholder="e.g., NullPointerException" defaultValue="ByteStrike" required />
+            <div className="form-floating" style={{ marginBottom: '20px' }}>
+              <input type="text" id="teamName" className="task-input" placeholder=" " required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
+              <label htmlFor="teamName">Team Name</label>
             </div>
             
             <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', marginBottom: '20px' }}>
@@ -241,9 +264,9 @@ const TeamFormation = () => {
           </div>
 
           <form onSubmit={handleJoinTeam} style={{ display: activeTab === 'join' ? 'block' : 'none' }}>
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px' }}>Invite Code</label>
-              <input type="text" className="task-input" placeholder="Enter 6-digit code or paste link" defaultValue={initialInviteCode || ''} required />
+            <div className="form-floating" style={{ marginBottom: '20px' }}>
+              <input type="text" id="inviteCode" className="task-input" placeholder=" " defaultValue={initialInviteCode || ''} required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
+              <label htmlFor="inviteCode">Invite Code</label>
             </div>
             <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '8px', marginBottom: '20px', color: 'var(--warning)', fontSize: '13px' }}>
               Note: Joining a team is subject to approval by the Team Leader or System if capacity is full.

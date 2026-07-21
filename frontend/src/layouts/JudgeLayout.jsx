@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Code, LogOut, Bell, Shield, BookOpen, ArrowLeft } from 'lucide-react';
+import { Code, LogOut, Bell, Shield, ArrowLeft } from 'lucide-react';
 import { authApi } from '../api/auth';
 import './JudgeLayout.css';
 
@@ -31,7 +31,9 @@ const JudgeLayout = () => {
               <span className="logo-text" style={{ fontSize: '18px', lineHeight: '1', color: 'white' }}>SEAL<span className="highlight" style={{ color: 'white' }}>.</span></span>
               <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)' }}>Hackathon</span>
             </div>
-            <div style={{ paddingLeft: '16px', marginLeft: '16px', borderLeft: '1px solid rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.9)', fontSize: '14px' }}>
+            <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.3)', margin: '0 8px' }}></div>
+            <img src="/src/assets/FptLogo.png" alt="FPT" style={{ height: '90px', objectFit: 'contain' }} />
+            <div style={{ paddingLeft: '16px', marginLeft: '8px', borderLeft: '1px solid rgba(255,255,255,0.3)', color: 'rgba(255,255,255,0.9)', fontSize: '14px' }}>
               Judge Panel
             </div>
           </div>
@@ -60,9 +62,6 @@ const JudgeLayout = () => {
         <nav className="judge-nav">
           <NavLink to="/judge/panel" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`} end>
             <Shield size={18} /> Evaluation
-          </NavLink>
-          <NavLink to="/judge/history" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`}>
-            <BookOpen size={18} /> Scoring History
           </NavLink>
           <NavLink to="/judge/announcements" className={({ isActive }) => `judge-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements
