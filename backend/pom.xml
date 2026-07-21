@@ -133,6 +133,36 @@
           </excludes>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.13</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <!-- Exclude non-testable code from the coverage denominator: DTOs, entities,
+               config, the app entry point, and generated boilerplate. -->
+          <excludes>
+            <exclude>**/dto/**</exclude>
+            <exclude>**/entity/**</exclude>
+            <exclude>**/config/**</exclude>
+            <exclude>**/SealHmsApplication.class</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 </project>

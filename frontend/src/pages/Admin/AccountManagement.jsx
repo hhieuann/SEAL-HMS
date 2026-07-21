@@ -21,6 +21,8 @@ const AccountManagement = () => {
   const [processingId, setProcessingId] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null); // Lưu ID của account cần reject
   const [showProofUrl, setShowProofUrl] = useState(null);
+  const [profileAccount, setProfileAccount] = useState(null); // account being viewed in the profile modal
+  const [suspendAccount, setSuspendAccount] = useState(null); // account pending suspend confirmation
 
   const loadData = async () => {
     setIsLoading(true);
@@ -69,6 +71,28 @@ const AccountManagement = () => {
       loadData(); // Tải lại danh sách
     } catch (err) {
       console.error(err);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // Opens the admin's mail client addressed to the user — no server-side mail needed.
+  const handleSendEmail = (u) => {
+    const subject = encodeURIComponent('[SEAL Hackathon] Notification');
+    window.location.href = `mailto:${u.email}?subject=${subject}`;
+  };
+
+  const confirmSuspend = async () => {
+    if (!suspendAccount) return;
+    const acc = suspendAccount;
+    setSuspendAccount(null);
+    setProcessingId(acc.id);
+    try {
+      await adminApi.updateAccountStatus(acc.id, 'DISABLED');
+      loadData();
+    } catch (err) {
+      console.error('Failed to suspend account', err);
+      alert('Error: ' + (err.response?.data?.message || err.message));
     } finally {
       setProcessingId(null);
     }
@@ -307,9 +331,9 @@ const AccountManagement = () => {
                 </td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <button style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="View Profile"><Eye size={14} /></button>
-                    <button style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="Send Email"><Mail size={14} /></button>
-                    <button style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer' }} title="Suspend Account"><UserX size={14} /></button>
+                    <button onClick={() => setProfileAccount(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="View Profile"><Eye size={14} /></button>
+                    <button onClick={() => handleSendEmail(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="Send Email"><Mail size={14} /></button>
+                    <button onClick={() => setSuspendAccount(u)} disabled={processingId === u.id} style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer' }} title="Suspend Account"><UserX size={14} /></button>
                   </div>
                 </td>
               </tr>
@@ -484,6 +508,64 @@ const AccountManagement = () => {
             
             <div style={{ background: 'var(--bg-subtle)', borderRadius: '12px', padding: '12px', minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <img src={showProofUrl} alt="Verification Proof" style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Profile Modal */}
+      {profileAccount && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }} onClick={() => setProfileAccount(null)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '460px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '28px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)' }}>
+            <button style={{ position: 'absolute', top: '20px', right: '20px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }} onClick={() => setProfileAccount(null)}><X size={20} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+              <img
+                src={profileAccount.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${profileAccount.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(profileAccount.name)}&background=8b5cf6&color=fff`}
+                alt={profileAccount.name}
+                style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover' }}
+              />
+              <div>
+                <h3 style={{ fontSize: '20px', color: 'var(--text-primary)', marginBottom: '4px' }}>{profileAccount.name}</h3>
+                <span style={{ padding: '3px 10px', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: roleColor[profileAccount.role] || '#64748b', background: `${roleColor[profileAccount.role] || '#64748b'}15`, border: `1px solid ${roleColor[profileAccount.role] || '#64748b'}30` }}>{profileAccount.role}</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {[
+                ['Email', profileAccount.email],
+                ['Status', profileAccount.status],
+                ['Student Code', profileAccount.studentCode],
+                ['Campus', profileAccount.campus],
+                ['Department', profileAccount.department],
+                ['Phone', profileAccount.phone],
+              ].filter(([, v]) => v).map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border-color)', fontSize: '14px' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: '500', textTransform: label === 'Status' ? 'capitalize' : 'none' }}>{value}</span>
+                </div>
+              ))}
+            </div>
+            {profileAccount.proofUrl && (
+              <button onClick={() => { const url = profileAccount.proofUrl; setProfileAccount(null); setShowProofUrl(url); }} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: '20px' }}>View Verification Proof</button>
+            )}
+            <button onClick={() => handleSendEmail(profileAccount)} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}><Mail size={16} /> Send Email</button>
+          </div>
+        </div>
+      )}
+
+      {/* Suspend Confirmation Modal */}
+      {suspendAccount && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} onClick={() => setSuspendAccount(null)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '90%', maxWidth: '420px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '20px', padding: '28px', boxShadow: '0 24px 60px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}><UserX size={24} color="var(--danger)" /></div>
+            <h3 style={{ fontSize: '18px', color: 'var(--text-primary)', marginBottom: '8px' }}>Suspend account?</h3>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
+              <strong>{suspendAccount.name}</strong> ({suspendAccount.email}) will be disabled and can no longer log in until re-activated.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button style={{ flex: 1, padding: '10px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setSuspendAccount(null)}>Cancel</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--danger)', borderColor: 'var(--danger)', padding: '10px' }} onClick={confirmSuspend}>Yes, Suspend</button>
             </div>
           </div>
         </div>
