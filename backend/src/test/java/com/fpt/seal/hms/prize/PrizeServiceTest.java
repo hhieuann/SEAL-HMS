@@ -159,4 +159,32 @@ class PrizeServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(prizeRepository, never()).deleteById(any());
     }
+
+    @Test
+    void deletePrize_deletes_whenExists() {
+        when(prizeRepository.existsById(11L)).thenReturn(true);
+
+        prizeService.deletePrize(11L);
+
+        verify(prizeRepository).deleteById(11L);
+    }
+
+    @Test
+    void getPrizesByEvent_mapsPrizesOrderedByRank() {
+        Event e = event(1L);
+        when(prizeRepository.findByEventIdOrderByRankAsc(1L)).thenReturn(List.of(
+                prize(11L, e, "Champion", 1), prize(12L, e, "Runner-up", 2)));
+
+        List<PrizeResponse> out = prizeService.getPrizesByEvent(1L);
+
+        assertThat(out).extracting(PrizeResponse::name).containsExactly("Champion", "Runner-up");
+        assertThat(out.get(0).eventId()).isEqualTo(1L);
+    }
+
+    @Test
+    void getPrizesByEvent_emptyEvent_returnsEmpty() {
+        when(prizeRepository.findByEventIdOrderByRankAsc(9L)).thenReturn(List.of());
+
+        assertThat(prizeService.getPrizesByEvent(9L)).isEmpty();
+    }
 }

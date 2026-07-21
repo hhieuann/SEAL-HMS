@@ -194,4 +194,32 @@ class RankingServiceTest {
 
         assertThat(out).extracting(RoundStandingDto::teamName).containsExactly("A", "B");
     }
+
+    @Test
+    void getEventStandings_ordersByEventRank_nullsLast_andDedupesTeams() {
+        Team a = team(1L, "A");
+        a.setEventRank(2);
+        a.setEventScore(new BigDecimal("80"));
+        Team b = team(2L, "B");
+        b.setEventRank(1);
+        b.setEventScore(new BigDecimal("90"));
+        Team c = team(3L, "C"); // eventRank null -> last
+        Round r1 = round(1L, null), r2 = round(2L, null);
+        // team A appears in two rounds -> must be de-duplicated
+        when(roundRankingRepository.findByRound_Event_Id(5L)).thenReturn(List.of(
+                rr(11L, a, r1, "40"), rr(12L, b, r1, "50"),
+                rr(13L, a, r2, "40"), rr(14L, c, r2, "0")));
+
+        List<EventStandingDto> out = rankingService.getEventStandings(5L);
+
+        assertThat(out).extracting(EventStandingDto::teamName).containsExactly("B", "A", "C");
+        assertThat(out).hasSize(3); // A not duplicated
+    }
+
+    @Test
+    void getEventStandings_emptyEvent_returnsEmpty() {
+        when(roundRankingRepository.findByRound_Event_Id(9L)).thenReturn(List.of());
+
+        assertThat(rankingService.getEventStandings(9L)).isEmpty();
+    }
 }
