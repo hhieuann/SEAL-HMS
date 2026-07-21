@@ -118,4 +118,53 @@ class TopicServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(topicRepository, never()).delete(any());
     }
+
+    @Test
+    void deleteTopic_deletes_whenFound() {
+        Topic topic = new Topic();
+        topic.setId(7L);
+        when(topicRepository.findById(7L)).thenReturn(Optional.of(topic));
+
+        topicService.deleteTopic(7L);
+
+        verify(topicRepository).delete(topic);
+    }
+
+    @Test
+    void getTopicsByTrackId_andByEventId_mapAll() {
+        Topic t = new Topic();
+        t.setId(7L);
+        when(topicRepository.findByTrackId(3L)).thenReturn(java.util.List.of(t));
+        when(topicRepository.findByEventId(1L)).thenReturn(java.util.List.of(t, t));
+
+        assertThat(topicService.getTopicsByTrackId(3L)).hasSize(1);
+        assertThat(topicService.getTopicsByEventId(1L)).hasSize(2);
+    }
+
+    @Test
+    void getTopicById_ok_andThrowsWhenMissing() {
+        Topic t = new Topic();
+        t.setId(7L);
+        t.setName("RAG");
+        when(topicRepository.findById(7L)).thenReturn(Optional.of(t));
+        assertThat(topicService.getTopicById(7L).getName()).isEqualTo("RAG");
+
+        when(topicRepository.findById(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> topicService.getTopicById(9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void assignTrack_throws_whenTopicOrTrackMissing() {
+        when(topicRepository.findById(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> topicService.assignTrack(9L, 3L))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        Topic topic = new Topic();
+        topic.setId(7L);
+        when(topicRepository.findById(7L)).thenReturn(Optional.of(topic));
+        when(trackRepository.findById(9L)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> topicService.assignTrack(7L, 9L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
 }

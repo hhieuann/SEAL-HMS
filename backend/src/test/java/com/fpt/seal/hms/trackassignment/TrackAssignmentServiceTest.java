@@ -138,4 +138,47 @@ class TrackAssignmentServiceTest {
         assertThat(a.getScoringCompleted()).isTrue();
         verify(assignmentRepository).save(a);
     }
+
+    @Test
+    void completeScoring_throws_whenNoJudgeAssignment() {
+        when(assignmentRepository.findByTrack_IdAndLecturer_Account_EmailAndRole(3L, "x@y.z", AssignmentRole.JUDGE))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.completeScoring(3L, "x@y.z"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void assign_throws_whenLecturerMissing() {
+        when(trackRepository.findById(3L)).thenReturn(Optional.of(track(3L)));
+        when(lecturerRepository.findById(5L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.assign(3L, req(AssignmentRole.JUDGE)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void remove_deletes_whenFound() {
+        when(assignmentRepository.existsById(9L)).thenReturn(true);
+
+        service.remove(9L);
+
+        verify(assignmentRepository).deleteById(9L);
+    }
+
+    @Test
+    void readMethods_mapAssignments() {
+        TrackAssignment a = new TrackAssignment();
+        a.setId(9L);
+        a.setTrack(track(3L));
+        a.setLecturer(lecturer(5L));
+        a.setRole(AssignmentRole.JUDGE);
+        when(assignmentRepository.findByTrack_Id(3L)).thenReturn(java.util.List.of(a));
+        when(assignmentRepository.findByEventId(1L)).thenReturn(java.util.List.of(a));
+        when(assignmentRepository.findByLecturer_Account_Email("judge@fpt.edu.vn")).thenReturn(java.util.List.of(a));
+
+        assertThat(service.getByTrack(3L)).hasSize(1);
+        assertThat(service.getByEvent(1L)).hasSize(1);
+        assertThat(service.getByLecturerEmail("judge@fpt.edu.vn")).hasSize(1);
+    }
 }

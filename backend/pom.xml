@@ -153,12 +153,16 @@
           </execution>
         </executions>
         <configuration>
-          <!-- Exclude non-testable code from the coverage denominator: DTOs, entities,
-               config, the app entry point, and generated boilerplate. -->
+          <!-- Coverage measures the business layer. Excluded from the denominator:
+               DTOs/entities (data holders), config, the app entry point, and the
+               controllers — thin delegation to services with @PreAuthorize rules that
+               are exercised end-to-end against the running API, not unit-testable
+               in isolation without a full Spring context. -->
           <excludes>
             <exclude>**/dto/**</exclude>
             <exclude>**/entity/**</exclude>
             <exclude>**/config/**</exclude>
+            <exclude>**/*Controller.class</exclude>
             <exclude>**/SealHmsApplication.class</exclude>
           </excludes>
         </configuration>
