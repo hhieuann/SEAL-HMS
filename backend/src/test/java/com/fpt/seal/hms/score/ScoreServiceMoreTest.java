@@ -251,4 +251,88 @@ class ScoreServiceMoreTest {
         assertThat(scoreService.getScoresByJudge(1L, 7L)).isEmpty();
         verify(scoreRepository).findBySubmissionIdAndJudgeAccountId(1L, 7L);
     }
+
+    @Test
+    void recalc_earlyReturn_whenNoScoresExist() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account j = judge(7L);
+        Criterion c = criterion(1L, "10", "1.0");
+        RoundRanking rr = new RoundRanking();
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
+        when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of()); // no scores back -> early return
+
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+
+        verify(roundRankingRepository, never()).save(any()); // nothing to recalc
+    }
+
+    @Test
+    void recalc_nullScoreValue_countsAsZero() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account j = judge(7L);
+        Criterion c = criterion(1L, "10", "1.0");
+        RoundRanking rr = new RoundRanking();
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
+        Score nullScore = persisted(sub, j, c, "0");
+        nullScore.setScore(null); // score null -> ZERO branch in recalc
+        when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(nullScore));
+
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+
+        ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
+        verify(roundRankingRepository).save(cap.capture());
+        assertThat(cap.getValue().getScore()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void recalc_nullWeight_countsAsZero() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account j = judge(7L);
+        Criterion c = new Criterion();
+        c.setId(1L);
+        c.setMaxScore(new BigDecimal("10"));
+        c.setWeight(null); // weight null -> ZERO branch
+        RoundRanking rr = new RoundRanking();
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
+        when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "8")));
+
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+
+        ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
+        verify(roundRankingRepository).save(cap.capture());
+        assertThat(cap.getValue().getScore()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void grade_scoreNotClamped_whenMaxScoreNull() {
+        // criterion maxScore null -> the clamp branch (value > max) is skipped
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account j = judge(7L);
+        Criterion c = criterion(1L, null, "1.0");
+        RoundRanking rr = new RoundRanking();
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
+        when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "999")));
+
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "999"));
+
+        ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);
+        verify(scoreRepository).save(cap.capture());
+        assertThat(cap.getValue().getScore()).isEqualByComparingTo("999"); // not clamped
+    }
 }

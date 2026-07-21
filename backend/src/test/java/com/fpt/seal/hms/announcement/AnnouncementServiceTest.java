@@ -199,6 +199,58 @@ class AnnouncementServiceTest {
     }
 
     @Test
+    void list_asGuestJudge_seesJudgeTargeted() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "For judges", "JUDGE"),
+                announcement(2L, "Students only", "STUDENT"),
+                announcement(3L, "Everyone", "ALL")));
+
+        List<AnnouncementResponse> res = service.list(null, authWith("gj@fpt.edu.vn", "ROLE_GUEST_JUDGE"));
+
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For judges", "Everyone");
+    }
+
+    @Test
+    void list_nullTargetRole_treatedAsAll() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "No target", null)));
+
+        List<AnnouncementResponse> res = service.list(null, authWith("sv@fpt.edu.vn", "ROLE_STUDENT"));
+
+        assertThat(res).hasSize(1); // null targetRole visible to everyone
+    }
+
+    @Test
+    void list_asLecturer_withoutEventId_doesNotMatchMentorJudgeTargeted() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "Mentor notice", "MENTOR")));
+
+        // eventId null -> lecturer assignment check is skipped -> MENTOR-targeted filtered out
+        List<AnnouncementResponse> res = service.list(null, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
+
+        assertThat(res).isEmpty();
+    }
+
+    @Test
+    void list_asLecturerJudge_seesJudgeTargeted_forAssignedEvent() {
+        when(announcementRepository.findByEventIdOrEventIsNullOrderByCreatedAtDesc(5L)).thenReturn(List.of(
+                announcement(1L, "For judges", "JUDGE")));
+        var track = new com.fpt.seal.hms.track.entity.Track();
+        var event = new com.fpt.seal.hms.event.entity.Event();
+        event.setId(5L);
+        track.setEvent(event);
+        var assignment = new com.fpt.seal.hms.trackassignment.TrackAssignment();
+        assignment.setTrack(track);
+        assignment.setRole(com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE);
+        when(trackAssignmentRepository.findByLecturer_Account_Email("lect@fpt.edu.vn"))
+                .thenReturn(List.of(assignment));
+
+        List<AnnouncementResponse> res = service.list(5L, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
+
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For judges");
+    }
+
+    @Test
     void create_withEventId_bindsEvent_orThrowsWhenMissing() {
         var event = new com.fpt.seal.hms.event.entity.Event();
         event.setId(5L);

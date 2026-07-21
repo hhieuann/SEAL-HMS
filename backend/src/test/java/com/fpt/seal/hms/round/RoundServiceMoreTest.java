@@ -205,6 +205,63 @@ class RoundServiceMoreTest {
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void activeToScoring_skipsTeamWithoutTrack_andTeamWithSubmission() {
+        Round r = round(9L, RoundStatus.ACTIVE);
+        // team A: REGISTERED, no track -> skipped (track null branch)
+        Team noTrack = new Team();
+        noTrack.setId(51L);
+        noTrack.setStatus(TeamStatus.REGISTERED);
+        noTrack.setTrack(null);
+        // team B: IN_PROGRESS, has track + a submission -> not eliminated
+        Track track = new Track();
+        track.setId(3L);
+        Team submitted = teamOnTrack(52L, track);
+        submitted.setStatus(TeamStatus.CONFIRMED);
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(r));
+        when(teamRepository.findByEventId(1L)).thenReturn(List.of(noTrack, submitted));
+        when(roundRankingRepository.findByRoundIdAndTeamId(9L, 52L)).thenReturn(Optional.of(new RoundRanking()));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.SCORING);
+
+        assertThat(noTrack.getStatus()).isEqualTo(TeamStatus.REGISTERED);   // untouched (no track)
+        assertThat(submitted.getStatus()).isEqualTo(TeamStatus.CONFIRMED);  // untouched (submitted)
+        verify(teamRepository, never()).save(any());
+    }
+
+    @Test
+    void underReviewToCompleted_skipsAlreadyEliminatedTeams() {
+        Round r = round(9L, RoundStatus.UNDER_REVIEW);
+        Team already = teamOnTrack(6L, null);
+        already.setStatus(TeamStatus.DISQUALIFIED); // already out -> not touched again
+        RoundRanking rr = rr(2L, already);
+        rr.setIsPromoted(false);
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(r));
+        when(roundRankingRepository.findByRoundId(9L)).thenReturn(List.of(rr));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.COMPLETED);
+
+        assertThat(already.getStatus()).isEqualTo(TeamStatus.DISQUALIFIED);
+        verify(teamRepository, never()).save(already);
+    }
+
+    @Test
+    void underReviewToCompleted_promotedNullTreatedAsNotPromoted() {
+        Round r = round(9L, RoundStatus.UNDER_REVIEW);
+        Team t = teamOnTrack(6L, null);
+        RoundRanking rr = rr(2L, t);
+        rr.setIsPromoted(null); // null -> eliminated
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(r));
+        when(roundRankingRepository.findByRoundId(9L)).thenReturn(List.of(rr));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.COMPLETED);
+
+        assertThat(t.getStatus()).isEqualTo(TeamStatus.ELIMINATED);
+    }
+
     // ---------- UNDER_REVIEW -> COMPLETED: elimination ----------
 
     @Test

@@ -261,4 +261,113 @@ class EventServiceBranchTest {
 
         verify(eventRepository, never()).save(any());
     }
+
+    // ---------- validateStatusTransition: every switch branch ----------
+
+    private Event eventWithStatus(long id, EventStatus status) {
+        Event e = new Event();
+        e.setId(id);
+        e.setStatus(status);
+        return e;
+    }
+
+    @Test
+    void transition_upcomingBackToPlanned_isAllowed() {
+        Event e = eventWithStatus(1L, EventStatus.UPCOMING);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        assertThat(eventService.updateEventStatus(1L, EventStatus.PLANNED).getStatus())
+                .isEqualTo(EventStatus.PLANNED);
+    }
+
+    @Test
+    void transition_plannedToCompleted_rejected() {
+        Event e = eventWithStatus(1L, EventStatus.PLANNED);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        assertThatThrownBy(() -> eventService.updateEventStatus(1L, EventStatus.COMPLETED))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void transition_ongoingToUpcoming_rejected() {
+        Event e = eventWithStatus(1L, EventStatus.ONGOING);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        assertThatThrownBy(() -> eventService.updateEventStatus(1L, EventStatus.UPCOMING))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void transition_outOfCompletedOrCancelled_rejected() {
+        Event completed = eventWithStatus(1L, EventStatus.COMPLETED);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(completed));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        assertThatThrownBy(() -> eventService.updateEventStatus(1L, EventStatus.UPCOMING))
+                .isInstanceOf(BusinessException.class);
+
+        Event cancelled = eventWithStatus(2L, EventStatus.CANCELLED);
+        when(eventRepository.findById(2L)).thenReturn(Optional.of(cancelled));
+        when(teamRepository.countByEventId(2L)).thenReturn(0L);
+        assertThatThrownBy(() -> eventService.updateEventStatus(2L, EventStatus.ONGOING))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    // ---------- updateEvent ONGOING guards: regEnd + all-null-skip ----------
+
+    @Test
+    void updateEvent_ongoing_blocksRegistrationEndDateChange() {
+        Event e = new Event();
+        e.setId(1L);
+        e.setStatus(EventStatus.ONGOING);
+        e.setRegistrationStartDate(LocalDate.of(2026, 7, 1));
+        e.setRegistrationEndDate(LocalDate.of(2026, 7, 10));
+        e.setStartDate(LocalDate.of(2026, 7, 20));
+        e.setEndDate(LocalDate.of(2026, 7, 30));
+        e.setMaxTeams(10);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+
+        EventRequest req = new EventRequest();
+        req.setRegistrationEndDate(LocalDate.of(2026, 7, 12)); // changed
+
+        assertThatThrownBy(() -> eventService.updateEvent(1L, req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("registration end date");
+    }
+
+    @Test
+    void updateEvent_ongoing_allNullRequestFields_skipAllGuards() {
+        Event e = new Event();
+        e.setId(1L);
+        e.setStatus(EventStatus.ONGOING);
+        e.setStartDate(LocalDate.of(2026, 7, 20));
+        e.setEndDate(LocalDate.of(2026, 7, 30));
+        e.setMaxTeams(10);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        EventRequest req = new EventRequest();
+        req.setName("Renamed only"); // every guarded field null -> guards skip
+
+        assertThatCode(() -> eventService.updateEvent(1L, req)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void updateEvent_throws_whenMaxTeamsBelowTwo() {
+        Event e = new Event();
+        e.setId(1L);
+        e.setStatus(EventStatus.PLANNED);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+
+        EventRequest req = new EventRequest();
+        req.setMaxTeams(1);
+
+        assertThatThrownBy(() -> eventService.updateEvent(1L, req))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

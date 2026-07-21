@@ -287,6 +287,69 @@ class AccountServiceMoreTest {
         assertThat(out.get(0).fullName()).isNull();
     }
 
+    @Test
+    void getAccountProfiles_studentFirstNameOnly_composesName() {
+        Account sv = account(1L, "sv@fpt.edu.vn", Role.STUDENT);
+        when(accountRepository.findAll()).thenReturn(List.of(sv));
+        Student s = new Student();
+        s.setAccount(sv);
+        s.setFirstName("An");
+        s.setLastName(null); // only first name
+        when(studentRepository.findAll()).thenReturn(List.of(s));
+        when(lecturerRepository.findAll()).thenReturn(List.of());
+        when(staffRepository.findAll()).thenReturn(List.of());
+
+        assertThat(accountService.getAccountProfiles(null).get(0).fullName()).isEqualTo("An");
+    }
+
+    @Test
+    void getAccountProfiles_studentBothNamesNull_fullNameIsNull() {
+        Account sv = account(1L, "sv@fpt.edu.vn", Role.STUDENT);
+        when(accountRepository.findAll()).thenReturn(List.of(sv));
+        Student s = new Student();
+        s.setAccount(sv); // firstName + lastName both null -> composed name blank -> null
+        when(studentRepository.findAll()).thenReturn(List.of(s));
+        when(lecturerRepository.findAll()).thenReturn(List.of());
+        when(staffRepository.findAll()).thenReturn(List.of());
+
+        assertThat(accountService.getAccountProfiles(null).get(0).fullName()).isNull();
+    }
+
+    @Test
+    void getAccountProfiles_filtersByStatus_whenProvided() {
+        Account sv = account(1L, "sv@fpt.edu.vn", Role.STUDENT);
+        when(accountRepository.findByStatus(com.fpt.seal.hms.common.enums.AccountStatus.ACTIVE))
+                .thenReturn(List.of(sv));
+        when(studentRepository.findAll()).thenReturn(List.of());
+        when(lecturerRepository.findAll()).thenReturn(List.of());
+        when(staffRepository.findAll()).thenReturn(List.of());
+
+        var out = accountService.getAccountProfiles(com.fpt.seal.hms.common.enums.AccountStatus.ACTIVE);
+
+        assertThat(out).hasSize(1);
+        verify(accountRepository).findByStatus(com.fpt.seal.hms.common.enums.AccountStatus.ACTIVE);
+    }
+
+    @Test
+    void register_guestJudgeRole_rejected() {
+        when(accountRepository.existsByEmail(anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> accountService.register("g@b.c", "pw", Role.GUEST_JUDGE,
+                null, null, null, null, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void register_nullRole_defaultsToStudent_andRequiresCode() {
+        when(accountRepository.existsByEmail(anyString())).thenReturn(false);
+
+        // null role -> STUDENT -> needs a code; none given -> throw
+        assertThatThrownBy(() -> accountService.register("s@b.c", "pw", null,
+                null, "A", "B", "HCM", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Student code is required");
+    }
+
     // ---------- delete + names ----------
 
     @Test
