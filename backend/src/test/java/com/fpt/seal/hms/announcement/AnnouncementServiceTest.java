@@ -164,4 +164,52 @@ class AnnouncementServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(announcementRepository, never()).deleteById(any());
     }
+
+    @Test
+    void list_asLecturerMentor_seesMentorTargeted_forAssignedEvent() {
+        when(announcementRepository.findByEventIdOrEventIsNullOrderByCreatedAtDesc(5L)).thenReturn(List.of(
+                announcement(1L, "For mentors", "MENTOR"),
+                announcement(2L, "For judges", "JUDGE")));
+
+        var track = new com.fpt.seal.hms.track.entity.Track();
+        var event = new com.fpt.seal.hms.event.entity.Event();
+        event.setId(5L);
+        track.setEvent(event);
+        var assignment = new com.fpt.seal.hms.trackassignment.TrackAssignment();
+        assignment.setTrack(track);
+        assignment.setRole(com.fpt.seal.hms.common.enums.AssignmentRole.MENTOR);
+        when(trackAssignmentRepository.findByLecturer_Account_Email("lect@fpt.edu.vn"))
+                .thenReturn(List.of(assignment));
+
+        List<AnnouncementResponse> res = service.list(5L, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
+
+        // Mentor of this event sees MENTOR-targeted but not JUDGE-targeted
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For mentors");
+    }
+
+    @Test
+    void list_asLecturer_seesLecturerTargeted_regardlessOfAssignments() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "For lecturers", "LECTURER"),
+                announcement(2L, "Students only", "STUDENT")));
+
+        List<AnnouncementResponse> res = service.list(null, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
+
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For lecturers");
+    }
+
+    @Test
+    void create_withEventId_bindsEvent_orThrowsWhenMissing() {
+        var event = new com.fpt.seal.hms.event.entity.Event();
+        event.setId(5L);
+        when(eventRepository.findById(5L)).thenReturn(java.util.Optional.of(event));
+        when(announcementRepository.save(any(Announcement.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AnnouncementResponse res = service.create("a@b.c", new AnnouncementRequest("T", "B", 5L, null));
+        assertThat(res.eventId()).isEqualTo(5L);
+
+        when(eventRepository.findById(9L)).thenReturn(java.util.Optional.empty());
+        assertThatThrownBy(() -> service.create("a@b.c", new AnnouncementRequest("T", "B", 9L, null)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
 }
