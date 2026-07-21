@@ -77,6 +77,30 @@ const AccountManagement = () => {
   const handleCreateAccount = async (e) => {
     e.preventDefault();
     setError('');
+
+    if (!newAccount.fullName.trim() || !newAccount.email.trim() || !newAccount.phone.trim()) {
+      setError('Full Name, Email Address, and Phone are required.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newAccount.email.trim())) {
+      setError('Please enter a valid email address.');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
+    const phoneRegex = /^\+?[0-9\s\-]{10,20}$/;
+    if (!phoneRegex.test(newAccount.phone.trim())) {
+      setError('Phone number must contain only 10-20 digits (spaces/hyphens allowed).');
+      setShaking(true);
+      setTimeout(() => setShaking(false), 500);
+      return;
+    }
+
     setIsCreating(true);
     try {
       let result;
@@ -394,8 +418,8 @@ const AccountManagement = () => {
                     </div>
                   </div>
                   <div>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Phone</label>
-                    <input type="tel" placeholder="e.g. 0912345678" value={newAccount.phone} onChange={e => setNewAccount({...newAccount, phone: e.target.value})} style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
+                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>Phone *</label>
+                    <input type="tel" placeholder="e.g. 0912345678" value={newAccount.phone} onChange={e => setNewAccount({...newAccount, phone: e.target.value})} required style={{ width: '100%', padding: '11px 14px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }} />
                   </div>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                     <button type="button" style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={handleCloseModal}>Cancel</button>
