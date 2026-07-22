@@ -126,6 +126,10 @@ public class TeamService {
         }
 
         team.setStatus(status);
+        if (status == TeamStatus.REJECTED) {
+            team.setEvent(null);
+            team.setTrack(null);
+        }
         return mapToResponse(teamRepository.save(team));
     }
 
