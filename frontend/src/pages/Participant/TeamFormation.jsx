@@ -15,6 +15,8 @@ const TeamFormation = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [trackName, setTrackName] = useState('');
+  const [chapters, setChapters] = useState([]);
+  const [chapterId, setChapterId] = useState(''); // '' = không theo chapter nào
 
   useEffect(() => {
     const eventId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
@@ -28,6 +30,13 @@ const TeamFormation = () => {
         }
       })
       .catch(() => {}); // Fail silently — subtitle just won't show track name
+  }, []);
+
+  // Load chapters for the optional "join a chapter" dropdown.
+  useEffect(() => {
+    apiClient.get('/api/v1/chapters')
+      .then(res => setChapters(res.data?.data || res.data || []))
+      .catch(() => {}); // no chapters configured -> dropdown just shows the "no chapter" option
   }, []);
 
   const copyToClipboard = () => {
@@ -46,9 +55,10 @@ const TeamFormation = () => {
       const { teamService } = await import('../../api/teamService.js');
       const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
       const leaderAccountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
-      const response = await teamService.createTeam(eventId, { 
-        name: teamName, 
+      const response = await teamService.createTeam(eventId, {
+        name: teamName,
         leaderAccountId,
+        chapterId: chapterId ? parseInt(chapterId) : null, // null = không theo chapter nào
       });
       
       // The API returns { success: true, data: { id, name, ... } }
@@ -210,7 +220,27 @@ const TeamFormation = () => {
               <input type="text" id="teamName" className="task-input" placeholder=" " required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
               <label htmlFor="teamName">Team Name</label>
             </div>
-            
+
+            <div style={{ marginBottom: '20px' }}>
+              <label htmlFor="chapterSelect" style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600' }}>
+                Chapter <span style={{ fontWeight: '400' }}>(tuỳ chọn)</span>
+              </label>
+              <select
+                id="chapterSelect"
+                value={chapterId}
+                onChange={(e) => setChapterId(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }}
+              >
+                <option value="">Không theo chapter nào (chỉ xếp hạng trong event)</option>
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: '1.5' }}>
+                Chọn chapter để đóng góp điểm vào <strong>Bảng xếp hạng Chapter</strong> xuyên suốt năm. Bỏ trống nếu chỉ thi trong event này.
+              </p>
+            </div>
+
             <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600' }}>Team Size Constraint</label>
               <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px' }}>

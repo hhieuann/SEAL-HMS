@@ -33,6 +33,7 @@ import MySubmission from './pages/Participant/MySubmission';
 import Scores from './pages/Participant/Scores';
 import Notifications from './pages/Participant/Notifications';
 import ContactMentor from './pages/Participant/ContactMentor';
+import ChapterLeaderboard from './pages/Participant/ChapterLeaderboard';
 import FAQ from './pages/Participant/FAQ';
 import EventArchive from './pages/Participant/EventArchive';
 
@@ -77,6 +78,7 @@ function App() {
           <Route path="submission" element={<MySubmission />} />
           <Route path="scores" element={<Scores />} />
           <Route path="mentor" element={<ContactMentor />} />
+          <Route path="chapter-leaderboard" element={<ChapterLeaderboard />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="archive/:eventId" element={<EventArchive />} />
           <Route path="settings" element={<Settings />} />

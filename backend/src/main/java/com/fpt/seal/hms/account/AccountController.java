@@ -1,5 +1,6 @@
 package com.fpt.seal.hms.account;
 
+import com.fpt.seal.hms.account.dto.AccountProfileResponse;
 import com.fpt.seal.hms.account.dto.AccountResponse;
 import com.fpt.seal.hms.account.dto.UpdateRoleRequest;
 import com.fpt.seal.hms.account.dto.UpdateStatusRequest;
@@ -37,7 +38,7 @@ public class AccountController {
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ApiResponse<List<com.fpt.seal.hms.account.dto.AccountProfileResponse>> list(@RequestParam(required = false) AccountStatus status) {
-        List<com.fpt.seal.hms.account.dto.AccountProfileResponse> result = accountService.getAccountProfiles(status);
+        List<AccountProfileResponse> result = accountService.getAccountProfiles(status);
         return ApiResponse.ok(result);
     }
 

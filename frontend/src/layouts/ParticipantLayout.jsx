@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X, User } from 'lucide-react';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X, User, Award } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
 import { eventService } from '../api/eventService';
@@ -213,6 +213,12 @@ const ParticipantLayout = () => {
             <NavLink to="/participant/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Bell size={20} />
               <span>Announcements</span>
+            </NavLink>
+
+            {/* Chapter Leaderboard — visible to every student, no team required */}
+            <NavLink to="/participant/chapter-leaderboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Award size={20} />
+              <span>Chapter Leaderboard</span>
             </NavLink>
 
             {isReady ? (
