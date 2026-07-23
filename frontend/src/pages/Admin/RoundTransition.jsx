@@ -131,9 +131,9 @@ const RoundTransition = () => {
           }
 
           if (!errorMsg) {
-             // Check if every team has a mentor
+             // Check if every participating team has a mentor
              for (const team of teamsList) {
-               if (!team.mentor) {
+               if (team.status !== 'REJECTED' && team.status !== 'WITHDRAWN' && !team.mentor) {
                  errorMsg = `Cannot start round: Team "${team.name}" is missing a mentor. Please assign a mentor to every participating team.`;
                  break;
                }
