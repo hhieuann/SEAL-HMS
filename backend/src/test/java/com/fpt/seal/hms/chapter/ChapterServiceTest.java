@@ -46,6 +46,14 @@ class ChapterServiceTest {
         return t;
     }
 
+    private Team teamInYear(Chapter c, Integer eventRank, int year) {
+        Team t = team(c, eventRank);
+        com.fpt.seal.hms.event.entity.Event e = new com.fpt.seal.hms.event.entity.Event();
+        e.setEndDate(java.time.LocalDate.of(year, 6, 15));
+        t.setEvent(e);
+        return t;
+    }
+
     // ---------- placement bonus rule ----------
 
     @Test
@@ -118,6 +126,47 @@ class ChapterServiceTest {
         assertThat(board).hasSize(1);
         assertThat(board.get(0).totalPoints()).isZero();
         assertThat(board.get(0).teamCount()).isZero(); // null rank not counted as participated
+    }
+
+    @Test
+    void leaderboard_countsOnlyCurrentYearEvents() {
+        int thisYear = java.time.Year.now().getValue();
+        Chapter a = chapter(1L, "A", 0);
+        when(chapterRepository.findAll()).thenReturn(List.of(a));
+        // champion this year (+20) counts; champion last year (+20) must NOT carry over
+        when(teamRepository.findByChapterIsNotNull()).thenReturn(List.of(
+                teamInYear(a, 1, thisYear), teamInYear(a, 1, thisYear - 1)));
+
+        List<ChapterLeaderboardEntry> board = chapterService.getLeaderboard();
+
+        assertThat(board.get(0).totalPoints()).isEqualTo(20); // only this year's champion
+        assertThat(board.get(0).teamCount()).isEqualTo(1);
+    }
+
+    @Test
+    void isFromYear_usesEndDate_fallsBackToStart_andIncludesWhenUnknown() {
+        int y = 2026;
+        Chapter c = chapter(1L, "C", 0);
+
+        Team withEnd = team(c, 1);
+        com.fpt.seal.hms.event.entity.Event e1 = new com.fpt.seal.hms.event.entity.Event();
+        e1.setEndDate(java.time.LocalDate.of(y, 3, 1));
+        withEnd.setEvent(e1);
+        assertThat(ChapterService.isFromYear(withEnd, y)).isTrue();
+        assertThat(ChapterService.isFromYear(withEnd, y + 1)).isFalse();
+
+        Team startOnly = team(c, 1);
+        com.fpt.seal.hms.event.entity.Event e2 = new com.fpt.seal.hms.event.entity.Event();
+        e2.setStartDate(java.time.LocalDate.of(y, 1, 1)); // no end date -> use start
+        startOnly.setEvent(e2);
+        assertThat(ChapterService.isFromYear(startOnly, y)).isTrue();
+
+        Team noDates = team(c, 1);
+        noDates.setEvent(new com.fpt.seal.hms.event.entity.Event()); // unknown -> included
+        assertThat(ChapterService.isFromYear(noDates, y)).isTrue();
+
+        Team noEvent = team(c, 1); // no event at all -> included
+        assertThat(ChapterService.isFromYear(noEvent, y)).isTrue();
     }
 
     @Test

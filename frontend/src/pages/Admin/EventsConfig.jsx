@@ -46,9 +46,9 @@ const EventsConfig = () => {
               }
             }));
 
-            const sortedEvents = enrichedEvents.reverse();
-            setEvents(sortedEvents);
-            setExpandedEvent(sortedEvents[0].id);
+            // Backend already returns events newest-first (ORDER BY createdAt DESC).
+            setEvents(enrichedEvents);
+            setExpandedEvent(enrichedEvents[0].id);
           }
         }).catch(err => console.error("Failed to load real events:", err));
       });

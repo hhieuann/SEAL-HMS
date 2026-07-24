@@ -36,6 +36,18 @@ public class ChapterService {
     private final ChapterRepository chapterRepository;
     private final TeamRepository teamRepository;
 
+    /**
+     * Whether a team's event belongs to the given year. Uses the event end date (when
+     * results are finalised), falling back to the start date. If neither is known the team
+     * is included (we cannot prove it is from another year).
+     */
+    static boolean isFromYear(Team team, int year) {
+        if (team.getEvent() == null) return true;
+        java.time.LocalDate date = team.getEvent().getEndDate() != null
+                ? team.getEvent().getEndDate() : team.getEvent().getStartDate();
+        return date == null || date.getYear() == year;
+    }
+
     /** Placement bonus for a team's final rank in its event. */
     static int placementBonus(Integer eventRank) {
         if (eventRank == null) return 0;
@@ -90,10 +102,13 @@ public class ChapterService {
             teamCounts.put(c.getId(), 0);
         }
 
-        // Accumulate placement bonuses from each chapter-affiliated team's event result.
+        // Accumulate placement bonuses from each chapter-affiliated team's event result,
+        // counting only events of the CURRENT year so points do not carry over between years.
+        int currentYear = java.time.Year.now().getValue();
         for (Team team : teamRepository.findByChapterIsNotNull()) {
             Long cid = team.getChapter().getId();
             if (!totals.containsKey(cid)) continue; // defensive: chapter deleted
+            if (!isFromYear(team, currentYear)) continue; // different year -> not counted
             int bonus = placementBonus(team.getEventRank());
             totals.merge(cid, bonus, Integer::sum);
             if (team.getEventRank() != null) {

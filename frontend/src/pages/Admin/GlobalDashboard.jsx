@@ -102,7 +102,7 @@ const GlobalDashboard = () => {
                 <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)', background: 'var(--bg-subtle)', borderRadius: '12px', border: '1px dashed var(--border-color)' }}>
                   No active events right now. Click "Create New Event" to get started!
                 </div>
-              ) : [...events].reverse().map((evt) => (
+              ) : events.map((evt) => (
                 <div 
                   key={evt.id} 
                   onClick={() => navigate(`/admin/event/${evt.id}/dashboard`)}

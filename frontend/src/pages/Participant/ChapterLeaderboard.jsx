@@ -31,8 +31,6 @@ const ChapterLeaderboard = () => {
 
   useEffect(() => { load(); }, []);
 
-  const maxPoints = Math.max(1, ...board.map(c => c.totalPoints || 0));
-
   return (
     <div className="animate-fade-in" style={{ padding: '0 20px', maxWidth: '900px', margin: '0 auto' }}>
       {/* Header */}
@@ -43,7 +41,7 @@ const ChapterLeaderboard = () => {
           </div>
           <div>
             <h1 style={{ fontSize: '30px', marginBottom: '4px' }}>Chapter Leaderboard</h1>
-            <p className="subtitle" style={{ margin: 0 }}>Year-long standings — points accumulate from every hackathon.</p>
+            <p className="subtitle" style={{ margin: 0 }}>This year's standings — points accumulate from every hackathon in the current year.</p>
           </div>
         </div>
         <button className="btn btn-secondary" onClick={load} title="Refresh"><RefreshCw size={16} /> Refresh</button>

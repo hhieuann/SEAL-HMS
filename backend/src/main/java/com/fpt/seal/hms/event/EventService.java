@@ -36,7 +36,9 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
-        return eventRepository.findAll().stream()
+        // Newest first with an explicit ORDER BY — findAll() does not guarantee any order,
+        // so the FE must not rely on insertion order / reverse() to show the latest event.
+        return eventRepository.findAllByOrderByCreatedAtDescIdDesc().stream()
                 .map(event -> {
                     event = autoProgressEventStatus(event);
                     EventResponse response = mapToResponse(event);

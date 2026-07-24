@@ -272,7 +272,7 @@ const EventArchive = () => {
                   <tbody>
                     {leaderboard.length === 0 ? (
                       <tr>
-                        <td colSpan="3" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                        <td colSpan="5" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                           No results available yet.
                         </td>
                       </tr>

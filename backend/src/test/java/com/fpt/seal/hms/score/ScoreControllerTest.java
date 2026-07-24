@@ -40,18 +40,18 @@ class ScoreControllerTest {
 
     @Test
     void grade_asLecturer_ok() throws Exception {
-        when(scoreService.gradeSubmission(eq(1L), any())).thenReturn(List.of());
+        when(scoreService.gradeSubmission(eq(1L), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(post("/api/v1/submissions/1/scores/grade")
                         .with(user("judge").roles("LECTURER")).with(csrf())
                         .contentType("application/json").content(GRADE_BODY))
                 .andExpect(status().isOk());
-        verify(scoreService).gradeSubmission(eq(1L), any());
+        verify(scoreService).gradeSubmission(eq(1L), any(), any());
     }
 
     @Test
     void grade_asGuestJudge_ok() throws Exception {
-        when(scoreService.gradeSubmission(eq(1L), any())).thenReturn(List.of());
+        when(scoreService.gradeSubmission(eq(1L), any(), any())).thenReturn(List.of());
 
         mockMvc.perform(post("/api/v1/submissions/1/scores/grade")
                         .with(user("gj").roles("GUEST_JUDGE")).with(csrf())
@@ -65,6 +65,6 @@ class ScoreControllerTest {
                         .with(user("sv").roles("STUDENT")).with(csrf())
                         .contentType("application/json").content(GRADE_BODY))
                 .andExpect(status().isForbidden());
-        verify(scoreService, never()).gradeSubmission(any(), any());
+        verify(scoreService, never()).gradeSubmission(any(), any(), any());
     }
 }

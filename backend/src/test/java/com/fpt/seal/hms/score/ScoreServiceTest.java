@@ -56,11 +56,22 @@ class ScoreServiceTest {
         return a;
     }
 
+    // Shared round id so a criterion is recognised as belonging to the submission's round.
+    private static final long ROUND_ID = 100L;
+
+    private com.fpt.seal.hms.round.entity.Round roundEntity() {
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(ROUND_ID);
+        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.COMPLETED); // Bypass active deadline check
+        return round;
+    }
+
     private Criterion criterion(long id, String maxScore, String weight) {
         Criterion c = new Criterion();
         c.setId(id);
         c.setMaxScore(new BigDecimal(maxScore));
         c.setWeight(new BigDecimal(weight));
+        c.setRound(roundEntity()); // criterion belongs to the submission's round
         return c;
     }
 
@@ -68,9 +79,7 @@ class ScoreServiceTest {
         Submission s = new Submission();
         s.setId(id);
         RoundRanking rr = new RoundRanking();
-        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
-        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.COMPLETED); // Bypass active deadline check
-        rr.setRound(round);
+        rr.setRound(roundEntity());
         s.setRoundRanking(rr);
         return s;
     }
@@ -105,7 +114,7 @@ class ScoreServiceTest {
         Account j = judge(7L);
         Criterion c1 = criterion(1L, "10", "0.6"), c2 = criterion(2L, "10", "0.4");
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c1));
         when(criterionRepository.findById(2L)).thenReturn(Optional.of(c2));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong()))
@@ -114,7 +123,7 @@ class ScoreServiceTest {
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(
                 persisted(sub, j, c1, "8"), persisted(sub, j, c2, "5")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "8"), scoreReq(2L, "5")));
+        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "8"), scoreReq(2L, "5")), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -127,7 +136,7 @@ class ScoreServiceTest {
         Account j1 = judge(7L), j2 = judge(8L);
         Criterion c1 = criterion(1L, "10", "1.0");
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(8L)).thenReturn(Optional.of(j2));
+        when(accountRepository.findByEmail("judge8@fpt.edu.vn")).thenReturn(Optional.of(j2));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c1));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong()))
                 .thenReturn(Optional.empty());
@@ -135,7 +144,7 @@ class ScoreServiceTest {
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(
                 persisted(sub, j1, c1, "10"), persisted(sub, j2, c1, "5")));
 
-        scoreService.gradeSubmission(1L, gradeReq(8L, scoreReq(1L, "5")));
+        scoreService.gradeSubmission(1L, gradeReq(8L, scoreReq(1L, "5")), "judge8@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -148,13 +157,13 @@ class ScoreServiceTest {
         Account j = judge(7L);
         Criterion c1 = criterion(1L, "10", "1.0");
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c1));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong()))
                 .thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c1, "10")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "15"))); // 15 > max 10
+        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "15")), "judge7@fpt.edu.vn"); // 15 > max 10
 
         ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);
         verify(scoreRepository).save(cap.capture());
@@ -168,13 +177,13 @@ class ScoreServiceTest {
         Criterion c1 = criterion(1L, "10", "1.0");
         Score existing = persisted(sub, j, c1, "4");
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c1));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(1L, 7L, 1L))
                 .thenReturn(Optional.of(existing));
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(existing));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "9")));
+        scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "9")), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);
         verify(scoreRepository).save(cap.capture());
@@ -186,7 +195,7 @@ class ScoreServiceTest {
     void gradeSubmission_throws_whenSubmissionMissing() {
         when(submissionRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scoreService.gradeSubmission(99L, gradeReq(7L, scoreReq(1L, "5"))))
+        assertThatThrownBy(() -> scoreService.gradeSubmission(99L, gradeReq(7L, scoreReq(1L, "5")), "judge7@fpt.edu.vn"))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(scoreRepository, never()).save(any());
     }
@@ -194,9 +203,9 @@ class ScoreServiceTest {
     @Test
     void gradeSubmission_throws_whenJudgeAccountMissing() {
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(submission(1L)));
-        when(accountRepository.findById(7L)).thenReturn(Optional.empty());
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "5"))))
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "5")), "judge7@fpt.edu.vn"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

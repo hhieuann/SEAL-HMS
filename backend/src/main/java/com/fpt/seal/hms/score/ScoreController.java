@@ -34,7 +34,9 @@ public class ScoreController {
     @PreAuthorize("hasAnyRole('LECTURER','GUEST_JUDGE','ADMIN')")
     public ResponseEntity<ApiResponse<List<ScoreResponse>>> grade(
             @PathVariable Long submissionId,
-            @RequestBody GradeSubmissionRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok("Graded successfully", scoreService.gradeSubmission(submissionId, request)));
+            @RequestBody GradeSubmissionRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok("Graded successfully",
+                scoreService.gradeSubmission(submissionId, request, authentication.getName())));
     }
 }

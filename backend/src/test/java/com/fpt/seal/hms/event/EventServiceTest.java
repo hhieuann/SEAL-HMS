@@ -213,7 +213,7 @@ class EventServiceTest {
     @Test
     void getAllEvents_mapsEachEvent() {
         Event e = event(1L, EventStatus.PLANNED);
-        when(eventRepository.findAll()).thenReturn(List.of(e));
+        when(eventRepository.findAllByOrderByCreatedAtDescIdDesc()).thenReturn(List.of(e));
         when(roundService.getRoundsByEventId(1L)).thenReturn(List.of());
         when(teamRepository.countByEventId(1L)).thenReturn(3L);
 

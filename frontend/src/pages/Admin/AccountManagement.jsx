@@ -269,7 +269,7 @@ const AccountManagement = () => {
                     {u.proof}
                   </span>
                 </td>
-                <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.registered}</td>
+                <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.joined}</td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button 

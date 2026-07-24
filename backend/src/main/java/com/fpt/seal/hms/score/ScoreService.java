@@ -52,12 +52,12 @@ public class ScoreService {
     }
 
     @Transactional
-    public List<ScoreResponse> gradeSubmission(Long submissionId, GradeSubmissionRequest request) {
+    public List<ScoreResponse> gradeSubmission(Long submissionId, GradeSubmissionRequest request, String actorEmail) {
         Submission submission = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
 
         Round round = submission.getRoundRanking().getRound();
-        
+
         // If the round is still active, enforce the deadline
         if (round.getStatus() == com.fpt.seal.hms.common.enums.RoundStatus.ACTIVE) {
             if (round.getStartTime() == null || round.getDurationHours() == null) {
@@ -70,16 +70,29 @@ public class ScoreService {
             }
         }
 
-        Account judge = accountRepository.findById(request.getJudgeAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Judge account not found"));
+        // The judge is the AUTHENTICATED user — never trust a judgeAccountId from the request
+        // body (a client could grade under someone else's identity).
+        Account judge = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Judge account not found: " + actorEmail));
 
         // Upsert each score entry
         for (var scoreReq : request.getScores()) {
             Criterion criterion = criterionRepository.findById(scoreReq.getCriterionId())
                     .orElseThrow(() -> new ResourceNotFoundException("Criterion not found: " + scoreReq.getCriterionId()));
 
-            // Clamp score to max
+            // A criterion must belong to the same round as the submission being graded.
+            if (criterion.getRound() == null || !criterion.getRound().getId().equals(round.getId())) {
+                throw new BusinessException("Criterion " + criterion.getId() + " does not belong to this submission's round.");
+            }
+
             BigDecimal value = scoreReq.getScore();
+            if (value == null) {
+                throw new BusinessException("Score is required for criterion " + criterion.getId() + ".");
+            }
+            // Reject negative scores; clamp values above the criterion max down to the max.
+            if (value.signum() < 0) {
+                throw new BusinessException("Score cannot be negative (criterion " + criterion.getId() + ").");
+            }
             if (criterion.getMaxScore() != null && value.compareTo(criterion.getMaxScore()) > 0) {
                 value = criterion.getMaxScore();
             }

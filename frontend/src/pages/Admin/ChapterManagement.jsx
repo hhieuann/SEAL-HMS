@@ -145,7 +145,7 @@ const ChapterManagement = () => {
       <div className="page-header">
         <div>
           <h1>Chapter Management</h1>
-          <p className="subtitle">Manage chapters and their bonus points. Standings accumulate across the whole year.</p>
+          <p className="subtitle">Manage chapters and their bonus points. Standings accumulate across the current year.</p>
         </div>
         <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Create Chapter</button>
       </div>

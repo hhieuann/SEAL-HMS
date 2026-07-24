@@ -11,6 +11,9 @@ import java.util.List;
 @Repository
 public interface EventRepository extends JpaRepository<Event, Long> {
 
+    /** All events, newest first (explicit ordering — findAll() guarantees no order). */
+    List<Event> findAllByOrderByCreatedAtDescIdDesc();
+
     @Query(value = "SELECT DISTINCT e.* FROM event e " +
            "LEFT JOIN track t ON e.event_id = t.event_id " +
            "LEFT JOIN track_assignment ta ON t.track_id = ta.track_id " +
