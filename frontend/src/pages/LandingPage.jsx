@@ -19,8 +19,26 @@ const LandingPage = () => {
 
   const totalEvents = events.length;
   const totalTeams = events.reduce((sum, e) => sum + (e.currentTeams || 0), 0);
-  const totalParticipants = totalTeams; // shown as "teams competing" below
-  const avgSubmissions = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
+  const avgTeamsPerEvent = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
+
+  // Compute date range label from actual event dates
+  const eventDateLabel = (() => {
+    if (events.length === 0) return 'Upcoming';
+    const dates = events
+      .map(e => e.endDate ? new Date(e.endDate) : null)
+      .filter(Boolean);
+    if (dates.length === 0) return 'Upcoming';
+    const maxDate = new Date(Math.max(...dates));
+    const now = new Date();
+    const diffDays = Math.ceil((maxDate - now) / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? `Next ${diffDays} days` : 'See all events';
+  })();
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   return (
     <div className="landing-container animate-fade-in">
@@ -31,10 +49,10 @@ const LandingPage = () => {
           <span className="logo-text">SEAL <span className="highlight">Hackathon</span></span>
         </div>
         <div className="nav-links">
-          <a href="#about">About</a>
+          <a href="#features">Features</a>
           <a href="#events">Events</a>
-          <a href="#sponsors">Sponsors</a>
           <a href="#contact">Contact</a>
+          <a href="/register">Join Now</a>
         </div>
         <div className="nav-actions">
           <Link to="/login" className="btn btn-secondary">Login</Link>
@@ -53,7 +71,7 @@ const LandingPage = () => {
               </p>
               <div className="hero-buttons">
                 <Link to="/register" className="btn btn-primary lg-btn">Register</Link>
-                <Link to="#learn-more" className="btn btn-secondary lg-btn">Learn More</Link>
+                <a href="#features" className="btn btn-secondary lg-btn">Learn More</a>
               </div>
               
               <div className="hero-tags">
@@ -69,20 +87,20 @@ const LandingPage = () => {
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Teams competing</span>
-                  <span className="stat-num">{totalParticipants}</span>
+                  <span className="stat-num">{totalTeams}</span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Average teams / event</span>
-                  <span className="stat-num">{avgSubmissions}</span>
+                  <span className="stat-num">{avgTeamsPerEvent}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="hero-events glass-panel">
+          <div id="events" className="hero-events glass-panel">
             <div className="events-header">
               <h3>Ongoing & Upcoming Events</h3>
-              <span className="events-sub">Next 60 days</span>
+              <span className="events-sub">{eventDateLabel}</span>
             </div>
             
             <div className="event-list">
@@ -110,7 +128,14 @@ const LandingPage = () => {
                         <p style={isLive ? { margin: 0, fontSize: '13px', color: 'var(--text-secondary)' } : {}}>{event.type || 'Hackathon'}</p>
                       </div>
                       <div className="event-action" style={isLive ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' } : {}}>
-                        <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>{isLive ? 'In Progress' : (isUpcoming ? 'Starts soon' : 'Ended')}</span>
+                        <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>
+                          {isLive
+                            ? `Ends ${formatDate(event.endDate)}`
+                            : isUpcoming
+                            ? `Starts ${formatDate(event.startDate)}`
+                            : `Ended ${formatDate(event.endDate)}`
+                          }
+                        </span>
                         {isLive ? (
                           <Link to="/participant/events" className="btn btn-primary sm-btn">Enter Event</Link>
                         ) : (
@@ -130,7 +155,7 @@ const LandingPage = () => {
         </section>
 
         {/* Highlights Section */}
-        <section className="highlights-section">
+        <section id="features" className="highlights-section">
           <h2>Platform Highlights</h2>
           <div className="highlights-grid">
             <div className="highlight-card glass-panel">
@@ -170,7 +195,7 @@ const LandingPage = () => {
       </main>
       
       {/* Footer */}
-      <footer className="landing-footer glass-panel">
+      <footer id="contact" className="landing-footer glass-panel">
         <div className="footer-content">
           <div className="footer-brand">
             <div className="landing-logo">
