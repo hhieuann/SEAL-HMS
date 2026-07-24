@@ -48,6 +48,8 @@ public class TeamService {
     private final MentorMessageRepository mentorMessageRepository;
     private final com.fpt.seal.hms.account.AccountService accountService;
     private final Random random = new Random();
+    private static final String INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final int INVITE_CODE_LENGTH = 6;
 
     @Transactional(readOnly = true)
     public TeamResponse getTeamById(Long id) {
@@ -103,6 +105,7 @@ public class TeamService {
         team.setEvent(event);
         team.setName(request.getName());
         team.setStatus(TeamStatus.CREATED);
+        team.setInviteCode(generateUniqueInviteCode());
 
         if (request.getChapterId() != null) {
             Chapter chapter = chapterRepository.findById(request.getChapterId())
@@ -335,6 +338,7 @@ public class TeamService {
         TeamResponse response = new TeamResponse();
         response.setId(team.getId());
         response.setName(team.getName());
+        response.setInviteCode(team.getInviteCode());
         response.setChapterId(team.getChapter() != null ? team.getChapter().getId() : null);
         response.setTrackId(team.getTrack() != null ? team.getTrack().getId() : null);
         response.setTopicId(team.getTopic() != null ? team.getTopic().getId() : null);
@@ -441,5 +445,26 @@ public class TeamService {
         dto.setMessage(saved.getMessage());
         dto.setCreatedAt(saved.getCreatedAt());
         return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public TeamResponse getTeamByInviteCode(String inviteCode) {
+        Team team = teamRepository.findByInviteCode(inviteCode.toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("No team found with invite code: " + inviteCode));
+        return mapToResponse(team);
+    }
+
+    private String generateUniqueInviteCode() {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            StringBuilder sb = new StringBuilder(INVITE_CODE_LENGTH);
+            for (int i = 0; i < INVITE_CODE_LENGTH; i++) {
+                sb.append(INVITE_CHARS.charAt(random.nextInt(INVITE_CHARS.length())));
+            }
+            String code = sb.toString();
+            if (!teamRepository.existsByInviteCode(code)) {
+                return code;
+            }
+        }
+        throw new BusinessException("Unable to generate a unique invite code. Please try again.");
     }
 }

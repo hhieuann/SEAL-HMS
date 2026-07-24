@@ -27,6 +27,11 @@ public class TeamController {
         return ResponseEntity.ok(ApiResponse.ok(teamService.getTeamById(id)));
     }
 
+    @GetMapping("/teams/by-code/{code}")
+    public ResponseEntity<ApiResponse<TeamResponse>> getTeamByInviteCode(@PathVariable String code) {
+        return ResponseEntity.ok(ApiResponse.ok(teamService.getTeamByInviteCode(code)));
+    }
+
     @PostMapping("/events/{eventId}/teams")
     public ResponseEntity<ApiResponse<TeamResponse>> createTeam(
             @PathVariable Long eventId,

@@ -74,7 +74,7 @@ const Workspace = () => {
   };
 
   const handleInviteLink = () => {
-    const inviteCode = localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`;
+    const inviteCode = localStorage.getItem('p_teamInviteCode') || '';
     const link = `${window.location.origin}/participant/team-formation?inviteCode=${inviteCode}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
@@ -498,7 +498,7 @@ const Workspace = () => {
             <div className="panel-header">
               <h3 className="panel-title"><Users size={18} /> Team Members ({(teamData && teamData.members) ? teamData.members.length : 0}/5)</h3>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`}</strong></span>
+                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || '—'}</strong></span>
                 <button 
                   onClick={() => navigate('/participant/team-management')}
                   style={{ fontSize: '13px', color: 'var(--primary)', padding: 0, background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface TeamRepository extends JpaRepository<Team, Long> {
@@ -14,4 +15,6 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     /** Teams that opted into a chapter — used to build the year-long Chapter Leaderboard. */
     List<Team> findByChapterIsNotNull();
     boolean existsByTrack_IdAndMentor_Id(Long trackId, Long mentorId);
+    Optional<Team> findByInviteCode(String inviteCode);
+    boolean existsByInviteCode(String inviteCode);
 }

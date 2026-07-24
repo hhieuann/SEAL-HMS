@@ -11,6 +11,11 @@ export const teamService = {
     return response.data;
   },
 
+  getTeamByInviteCode: async (code) => {
+    const response = await apiClient.get(`/api/v1/teams/by-code/${code}`);
+    return response.data;
+  },
+
   createTeam: async (eventId, teamData) => {
     const response = await apiClient.post(`/api/v1/events/${eventId}/teams`, teamData);
     return response.data;

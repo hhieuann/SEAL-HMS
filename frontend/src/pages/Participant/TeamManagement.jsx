@@ -62,7 +62,7 @@ const TeamManagement = () => {
         const pendingReqs = teamData.members.filter(m => m.status === 'INVITED');
         teamData.members = activeMembers;
 
-        setTeam({...teamData, inviteCode: localStorage.getItem('p_teamInviteCode') || `SEAL${teamId}`, pendingRequests: pendingReqs});
+        setTeam({...teamData, inviteCode: teamData.inviteCode || localStorage.getItem('p_teamInviteCode') || '', pendingRequests: pendingReqs});
       } catch (err) {
         console.error(err);
       } finally {

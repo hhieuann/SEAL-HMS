@@ -65,7 +65,7 @@ const TeamFormation = () => {
       // teamService returns the full response.data block.
       const teamResponseData = response.data || response; 
       const realData = teamResponseData.data || teamResponseData; // Extract inner data
-      localStorage.setItem('p_teamInviteCode', realData.inviteCode || `SEAL${realData.id}`);
+      localStorage.setItem('p_teamInviteCode', realData.inviteCode);
       localStorage.setItem('myTeamName', realData.name || teamName);
       localStorage.setItem('p_teamId', realData.id || '1');
       localStorage.setItem('p_hasJoinedEvent', 'true');
@@ -94,10 +94,10 @@ const TeamFormation = () => {
       const { teamService } = await import('../../api/teamService.js');
       const accountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
       
-      const teamIdMatch = inviteCode.match(/^SEAL(\d+)$/i);
-      if (!teamIdMatch) throw new Error('Invalid invite code. Ensure you use the exact code provided by your leader (e.g. SEAL6)');
-      
-      const teamId = parseInt(teamIdMatch[1]);
+      // Look up the team by invite code via the backend API
+      const lookupRes = await teamService.getTeamByInviteCode(inviteCode.toUpperCase());
+      const teamData = lookupRes.data || lookupRes;
+      const teamId = teamData.id;
 
       // Use real backend API to send an invite request
       await teamService.inviteMember(teamId, { accountId });

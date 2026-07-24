@@ -110,7 +110,7 @@ const ParticipantLayout = () => {
                   localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
                   localStorage.setItem('p_eventId', evt.id);
                   localStorage.setItem('p_selectedEventId', evt.id);
-                  localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
+                  localStorage.setItem('p_teamInviteCode', team.inviteCode || '');
                   setIsReady(true);
                   foundActiveTeam = true;
                   window.dispatchEvent(new Event('participant_state_updated'));
