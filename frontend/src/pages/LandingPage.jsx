@@ -106,7 +106,7 @@ const LandingPage = () => {
             
             <div className="event-list">
               {events.length === 0 ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.8)' }}>
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                   No active events at the moment. Stay tuned!
                 </div>
               ) : (
@@ -123,10 +123,10 @@ const LandingPage = () => {
                           {isLive && <span className="status-badge live" style={{ background: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', padding: '4px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', animation: 'pulse 2s infinite' }}>Live Now</span>}
                           {!isLive && isUpcoming && <span className="status-badge open">Upcoming</span>}
                           {!isLive && isCompleted && <span className="status-badge app-only">Completed</span>}
-                          {isLive && <span style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>Ongoing Event</span>}
+                          {isLive && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ongoing Event</span>}
                         </div>
                         <h4 style={isLive ? { fontSize: '18px', margin: 0 } : {}}>{event.name}</h4>
-                        <p style={isLive ? { margin: 0, fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)' } : {}}>{event.type || 'Hackathon'}</p>
+                        <p style={isLive ? { margin: 0, fontSize: '13px', color: 'var(--text-secondary)' } : {}}>{event.type || 'Hackathon'}</p>
                       </div>
                       <div className="event-action" style={isLive ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' } : {}}>
                         <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>
