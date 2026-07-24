@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Anchor, ArrowRight, Users, Scale, LayoutTemplate } from 'lucide-react';
+import { Anchor, ArrowRight, Users, Scale, LayoutTemplate, MapPin, Phone, Mail } from 'lucide-react';
 import './LandingPage.css';
 import apiClient from '../api/apiClient';
 
@@ -45,6 +45,7 @@ const LandingPage = () => {
       {/* Navigation */}
       <nav className="landing-nav glass-panel-nav">
         <div className="landing-logo">
+          <img src="/src/assets/FptLogo.png" alt="FPT" style={{ height: '100px', objectFit: 'contain', marginRight: '16px' }} />
           <Anchor size={24} className="text-primary" />
           <span className="logo-text">SEAL <span className="highlight">Hackathon</span></span>
         </div>
@@ -105,7 +106,7 @@ const LandingPage = () => {
             
             <div className="event-list">
               {events.length === 0 ? (
-                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: 'rgba(255, 255, 255, 0.8)' }}>
                   No active events at the moment. Stay tuned!
                 </div>
               ) : (
@@ -122,10 +123,10 @@ const LandingPage = () => {
                           {isLive && <span className="status-badge live" style={{ background: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', padding: '4px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', animation: 'pulse 2s infinite' }}>Live Now</span>}
                           {!isLive && isUpcoming && <span className="status-badge open">Upcoming</span>}
                           {!isLive && isCompleted && <span className="status-badge app-only">Completed</span>}
-                          {isLive && <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ongoing Event</span>}
+                          {isLive && <span style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)' }}>Ongoing Event</span>}
                         </div>
                         <h4 style={isLive ? { fontSize: '18px', margin: 0 } : {}}>{event.name}</h4>
-                        <p style={isLive ? { margin: 0, fontSize: '13px', color: 'var(--text-secondary)' } : {}}>{event.type || 'Hackathon'}</p>
+                        <p style={isLive ? { margin: 0, fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)' } : {}}>{event.type || 'Hackathon'}</p>
                       </div>
                       <div className="event-action" style={isLive ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' } : {}}>
                         <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>
@@ -204,18 +205,19 @@ const LandingPage = () => {
             </div>
             <p>Run better hackathons with streamlined workflows, reliable judging, and inclusive team features.</p>
           </div>
-          <div className="footer-links">
-            <div className="link-group">
-              <h4>Product</h4>
-              <a href="#">Events</a>
-              <a href="#">Judging</a>
-              <a href="#">Teams</a>
+          <div className="footer-contact-info">
+            <h4>Đại học FPT - Campus TP. Hồ Chí Minh</h4>
+            <div className="contact-item">
+              <MapPin size={18} />
+              <span>Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Tăng Nhơn Phú, TP. Hồ Chí Minh</span>
             </div>
-            <div className="link-group">
-              <h4>Company</h4>
-              <a href="#">About</a>
-              <a href="#">Careers</a>
-              <a href="#">Contact</a>
+            <div className="contact-item">
+              <Phone size={18} />
+              <span>(028) 7300 5588</span>
+            </div>
+            <div className="contact-item">
+              <Mail size={18} />
+              <a href="mailto:tuyensinhhcm@fpt.edu.vn">tuyensinhhcm@fpt.edu.vn</a>
             </div>
           </div>
         </div>
