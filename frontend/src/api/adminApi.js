@@ -88,6 +88,32 @@ export const adminApi = {
   removeAssignment: async (assignmentId) => {
     const response = await apiClient.delete(`/api/v1/track-assignments/${assignmentId}`);
     return response.data;
+  },
+
+  // ── Chapters (year-long Chapter Leaderboard) ──────────────────────────────
+  getChapters: async () => {
+    const response = await apiClient.get('/api/v1/chapters');
+    return response.data.data || [];
+  },
+
+  getChapterLeaderboard: async () => {
+    const response = await apiClient.get('/api/v1/chapters/leaderboard');
+    return response.data.data || [];
+  },
+
+  createChapter: async ({ name, bonusPoint }) => {
+    const response = await apiClient.post('/api/v1/chapters', { name, bonusPoint });
+    return response.data.data;
+  },
+
+  updateChapter: async (id, { name, bonusPoint }) => {
+    const response = await apiClient.put(`/api/v1/chapters/${id}`, { name, bonusPoint });
+    return response.data.data;
+  },
+
+  deleteChapter: async (id) => {
+    const response = await apiClient.delete(`/api/v1/chapters/${id}`);
+    return response.data;
   }
 };
 

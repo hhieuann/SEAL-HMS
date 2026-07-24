@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutGrid, Calendar, Users, GitMerge, ArrowRightLeft, BarChart2, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, X, ArrowLeft, Terminal, Shuffle, Edit2 } from 'lucide-react';
+import { Code, LayoutGrid, Calendar, Users, GitMerge, ArrowRightLeft, BarChart2, Bell, Plus, LogOut, Megaphone, AlertTriangle, UserCheck, X, ArrowLeft, Terminal, Shuffle, Edit2, Award } from 'lucide-react';
 import { authApi } from '../api/auth';
 import apiClient from '../api/apiClient';
 
@@ -258,6 +258,9 @@ const AdminLayout = () => {
                 </NavLink>
                 <NavLink to="/admin/accounts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <UserCheck size={20} /><span>Account Management</span>
+                </NavLink>
+                <NavLink to="/admin/chapters" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                  <Award size={20} /><span>Chapter Management</span>
                 </NavLink>
                 <NavLink to="/admin/activity-log" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                   <Terminal size={20} /><span>System Audit Log</span>

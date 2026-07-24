@@ -9,6 +9,7 @@ import EventForm from './pages/Admin/EventForm';
 import PerformingTeams from './pages/Admin/PerformingTeams';
 import EventsConfig from './pages/Admin/EventsConfig';
 import AccountManagement from './pages/Admin/AccountManagement';
+import ChapterManagement from './pages/Admin/ChapterManagement';
 import AssignmentMatrix from './pages/Admin/AssignmentMatrix';
 import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
@@ -93,6 +94,7 @@ function App() {
             <Route path="create" element={<EventForm />} />
           </Route>
           <Route path="accounts" element={<AccountManagement />} />
+          <Route path="chapters" element={<ChapterManagement />} />
           <Route path="activity-log" element={<AnalyticsLog />} />
           
         </Route>
