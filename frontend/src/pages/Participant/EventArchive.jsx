@@ -78,7 +78,8 @@ const EventArchive = () => {
              const formattedFinal = finalStandings.map((s, idx) => ({
                  rank: idx + 1,
                  name: s.teamName,
-                 score: s.score || 0
+                 score: s.score || 0,
+                 trackName: teamTrackMap[s.teamId] || 'Global'
              }));
              setLeaderboard(formattedFinal);
           }
@@ -242,6 +243,7 @@ const EventArchive = () => {
                     <tr style={{ background: 'var(--bg-hover)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', width: '100px' }}>Rank</th>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Track</th>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Final Score</th>
                     </tr>
                   </thead>
@@ -262,6 +264,11 @@ const EventArchive = () => {
                         </td>
                         <td style={{ padding: '16px 24px', fontWeight: team.rank <= 3 ? '700' : '500', color: team.rank === 1 ? '#ffd700' : 'var(--text-primary)' }}>
                           {team.name}
+                        </td>
+                        <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                          <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
+                            {team.trackName}
+                          </span>
                         </td>
                         <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: '700', color: team.rank <= 3 ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
                           {team.score.toFixed(1)}
@@ -285,6 +292,7 @@ const EventArchive = () => {
                           <tr style={{ background: 'var(--bg-subtle)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '80px' }}>Rank</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Team Name</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Track</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '120px' }}>Status</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', textAlign: 'right', width: '100px' }}>Score</th>
                           </tr>
@@ -302,6 +310,11 @@ const EventArchive = () => {
                               </td>
                               <td style={{ padding: '16px 24px', fontWeight: team.promoted ? '700' : '500' }}>
                                 {team.name}
+                              </td>
+                              <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                                <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
+                                  {team.trackName}
+                                </span>
                               </td>
                               <td style={{ padding: '16px 24px' }}>
                                 {team.promoted ? (
