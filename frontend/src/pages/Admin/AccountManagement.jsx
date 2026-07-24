@@ -536,7 +536,7 @@ const AccountManagement = () => {
             {profileAccount.proofUrl && (
               <button onClick={() => { const url = profileAccount.proofUrl; setProfileAccount(null); setShowProofUrl(url); }} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: '20px' }}>View Verification Proof</button>
             )}
-            <button onClick={() => handleSendEmail(profileAccount)} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}><Mail size={16} /> Send Email</button>
+            <button onClick={() => setProfileAccount(null)} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: '16px' }}>Close</button>
           </div>
         </div>
       )}
