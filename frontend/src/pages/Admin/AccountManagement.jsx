@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
+import { UserX, Search, Plus, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 
 const AccountManagement = () => {
@@ -74,12 +74,6 @@ const AccountManagement = () => {
     } finally {
       setProcessingId(null);
     }
-  };
-
-  // Opens the admin's mail client addressed to the user — no server-side mail needed.
-  const handleSendEmail = (u) => {
-    const subject = encodeURIComponent('[SEAL Hackathon] Notification');
-    window.location.href = `mailto:${u.email}?subject=${subject}`;
   };
 
   const confirmSuspend = async () => {
@@ -236,7 +230,7 @@ const AccountManagement = () => {
                   <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>{h}</th>
                 ))
               ) : (
-                ['User Info', 'Global Role', 'Joined Date', 'Status', 'Actions'].map(h => (
+                ['User Info', 'Global Role', 'Joined Date', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>{h}</th>
                 ))
               )}
@@ -325,14 +319,8 @@ const AccountManagement = () => {
                 </td>
                 <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.joined}</td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px', fontWeight: '600', background: u.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: u.status === 'active' ? 'var(--success)' : 'var(--danger)', textTransform: 'capitalize' }}>
-                    {u.status}
-                  </span>
-                </td>
-                <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => setProfileAccount(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="View Profile"><Eye size={14} /></button>
-                    <button onClick={() => handleSendEmail(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="Send Email"><Mail size={14} /></button>
                     <button onClick={() => setSuspendAccount(u)} disabled={processingId === u.id} style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer' }} title="Suspend Account"><UserX size={14} /></button>
                   </div>
                 </td>

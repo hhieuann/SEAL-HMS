@@ -1,5 +1,7 @@
 package com.fpt.seal.hms.account.dto;
 
+import java.time.LocalDateTime;
+
 public record AccountProfileResponse(
         Long id,
         String email,
@@ -11,5 +13,6 @@ public record AccountProfileResponse(
         String proof,
         String department,
         String phone,
-        String avatarUrl
+        String avatarUrl,
+        LocalDateTime createdAt
 ) {}

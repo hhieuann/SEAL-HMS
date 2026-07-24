@@ -13,7 +13,7 @@ export const adminApi = {
       avatarUrl: acc.avatarUrl,
       proof: 'Student ID', 
       proofUrl: acc.proof || null,
-      registered: 'Just now'
+      joined: acc.createdAt ? new Date(acc.createdAt).toLocaleDateString('en-GB') : 'N/A'
     }));
   },
 
@@ -31,7 +31,7 @@ export const adminApi = {
       department: acc.department || null,
       phone: acc.phone || null,
       proofUrl: acc.proof || null,
-      joined: 'Just now'
+      joined: acc.createdAt ? new Date(acc.createdAt).toLocaleDateString('en-GB') : 'N/A'
     }));
   },
 
