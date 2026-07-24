@@ -55,7 +55,7 @@ const EventsConfig = () => {
     });
   }, []);
 
-  const statusColor = { ongoing: 'var(--success)', upcoming: 'var(--primary)', completed: 'var(--text-secondary)' };
+  const statusColor = { ongoing: 'var(--success)', upcoming: 'var(--primary)', completed: 'var(--text-secondary)', cancelled: 'var(--danger)' };
 
   return (
     <div className="animate-fade-in">

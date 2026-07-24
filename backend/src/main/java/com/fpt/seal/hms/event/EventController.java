@@ -73,6 +73,13 @@ public class EventController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<ApiResponse<EventResponse>> cancelEvent(@PathVariable Long id) {
+        EventResponse cancelled = eventService.cancelEvent(id);
+        return ResponseEntity.ok(ApiResponse.ok("Event cancelled successfully", cancelled));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteEvent(@PathVariable Long id) {
         eventService.deleteEvent(id);

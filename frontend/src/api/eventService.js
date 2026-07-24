@@ -48,6 +48,16 @@ export const eventService = {
     return response.data;
   },
 
+  cancelEvent: async (id) => {
+    const response = await apiClient.post(`/api/v1/events/${id}/cancel`);
+    return response.data;
+  },
+
+  deleteEvent: async (id) => {
+    const response = await apiClient.delete(`/api/v1/events/${id}`);
+    return response.data;
+  },
+
   updateEventStatus: async (id, status) => {
     const response = await apiClient.patch(`/api/v1/events/${id}/status`, { status });
     return response.data;

@@ -110,7 +110,7 @@ const LandingPage = () => {
                   No active events at the moment. Stay tuned!
                 </div>
               ) : (
-                events.slice(0, 4).map(event => {
+                events.filter(e => e.status?.toUpperCase() !== 'CANCELLED').slice(0, 4).map(event => {
                   const isLive = event.status?.toLowerCase() === 'live' || event.status?.toLowerCase() === 'ongoing';
                   const isUpcoming = event.status?.toLowerCase() === 'upcoming' || event.status?.toLowerCase() === 'planned';
                   const isCompleted = event.status?.toLowerCase() === 'completed';

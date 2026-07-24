@@ -33,6 +33,7 @@ public class EventService {
     private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
     private final com.fpt.seal.hms.submission.SubmissionRepository submissionRepository;
     private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
@@ -187,15 +188,95 @@ public class EventService {
     }
 
     @Transactional
+    public EventResponse cancelEvent(Long id) {
+        Event event = findEventEntityById(id);
+
+        if (event.getStatus() != EventStatus.UPCOMING && event.getStatus() != EventStatus.PLANNED) {
+            throw new BusinessException("Only PLANNED or UPCOMING events can be cancelled.");
+        }
+
+        // 1. Delete all teams and members to free up students
+        jdbcTemplate.update("DELETE FROM mentor_message WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM team_member WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM round_ranking WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM team WHERE event_id = ?", id);
+
+        // 2. Delete event staff so they are unassigned
+        jdbcTemplate.update("DELETE FROM event_staff WHERE event_id = ?", id);
+
+        // 3. Change status to CANCELLED
+        event.setStatus(EventStatus.CANCELLED);
+        Event savedEvent = eventRepository.save(event);
+        
+        auditLogService.log("EVENT_CANCELLED", "event", id, event.getName());
+        return mapToResponse(savedEvent);
+    }
+
+    @Transactional
     public void deleteEvent(Long id) {
         Event event = findEventEntityById(id);
 
-        // Guard: Prevent deleting if ONGOING or COMPLETED
-        if (event.getStatus() == EventStatus.ONGOING || event.getStatus() == EventStatus.COMPLETED) {
-            throw new BusinessException("Cannot delete event when status is " + event.getStatus());
+        // Guard: Only allow deleting CANCELLED events
+        if (event.getStatus() != EventStatus.CANCELLED) {
+            throw new BusinessException("Cannot permanently delete event unless its status is CANCELLED.");
         }
 
         String name = event.getName();
+
+        // ──────────────────────────────────────────────────────────────
+        // Cascading manual delete — order matters due to FK constraints
+        // ──────────────────────────────────────────────────────────────
+
+        // 1. score → submission → round_ranking (deepest FK chain)
+        jdbcTemplate.update(
+            "DELETE FROM score WHERE submission_id IN ("
+          + "  SELECT s.submission_id FROM submission s"
+          + "  JOIN round_ranking rr ON s.round_ranking_id = rr.round_ranking_id"
+          + "  WHERE rr.round_id IN (SELECT round_id FROM round WHERE event_id = ?)"
+          + ")", id);
+        jdbcTemplate.update(
+            "DELETE FROM submission WHERE round_ranking_id IN ("
+          + "  SELECT rr.round_ranking_id FROM round_ranking rr"
+          + "  WHERE rr.round_id IN (SELECT round_id FROM round WHERE event_id = ?)"
+          + ")", id);
+        jdbcTemplate.update(
+            "DELETE FROM round_ranking WHERE round_id IN ("
+          + "  SELECT round_id FROM round WHERE event_id = ?)", id);
+        // Also clean up round_ranking by team (in case any were linked via team)
+        jdbcTemplate.update(
+            "DELETE FROM round_ranking WHERE team_id IN ("
+          + "  SELECT team_id FROM team WHERE event_id = ?)", id);
+
+        // 2. Teams: mentor_message → team_member → team
+        jdbcTemplate.update("DELETE FROM mentor_message WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM team_member WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        // mentor table has optional team_id FK (V28)
+        jdbcTemplate.update("DELETE FROM mentor WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        // prize references team_id (nullable)
+        jdbcTemplate.update("UPDATE prize SET team_id = NULL WHERE team_id IN (SELECT team_id FROM team WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM team WHERE event_id = ?", id);
+
+        // 3. Event staff
+        jdbcTemplate.update("DELETE FROM event_staff WHERE event_id = ?", id);
+
+        // 4. Event-level metadata
+        jdbcTemplate.update("DELETE FROM announcement WHERE event_id = ?", id);
+        jdbcTemplate.update("DELETE FROM prize WHERE event_id = ?", id);
+
+        // 5. topic (has FK to track_id AND round_id) — must go before round & track
+        jdbcTemplate.update("DELETE FROM topic WHERE track_id IN (SELECT track_id FROM track WHERE event_id = ?)", id);
+        // Also topics directly linked by event_id (V14)
+        jdbcTemplate.update("DELETE FROM topic WHERE event_id = ?", id);
+
+        // 6. Round-related: criterion → round
+        jdbcTemplate.update("DELETE FROM criterion WHERE round_id IN (SELECT round_id FROM round WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM round WHERE event_id = ?", id);
+
+        // 7. Track-related: track_assignment → track
+        jdbcTemplate.update("DELETE FROM track_assignment WHERE track_id IN (SELECT track_id FROM track WHERE event_id = ?)", id);
+        jdbcTemplate.update("DELETE FROM track WHERE event_id = ?", id);
+
+        // 8. Finally, delete the event itself
         eventRepository.delete(event);
         auditLogService.log("EVENT_DELETED", "event", id, name);
     }
