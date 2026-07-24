@@ -47,7 +47,8 @@ const EventDashboard = () => {
         } else {
           const eventsRes = await eventService.getEvents();
           if (eventsRes.data && eventsRes.data.length > 0) {
-            rawEvent = eventsRes.data[0];
+            // Backend returns ordered by ID ascending. Pick the newest event (last item).
+            rawEvent = eventsRes.data[eventsRes.data.length - 1];
             parsedId = rawEvent.id;
           }
         }
