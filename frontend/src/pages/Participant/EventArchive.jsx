@@ -4,6 +4,7 @@ import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Gift, Award, Target,
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
 import { teamService } from '../../api/teamService';
+import { trackService } from '../../api/trackService';
 
 const EventArchive = () => {
   const navigate = useNavigate();
@@ -24,17 +25,35 @@ const EventArchive = () => {
         const evt = evts.find(e => String(e.id) === String(eventId));
         
         if (evt) {
-          const [roundsRes, teamsRes] = await Promise.all([
+          const [roundsRes, teamsRes, topicsRes, tracksRes] = await Promise.all([
             eventService.getEventRounds(evt.id),
-            teamService.getTeamsByEvent(evt.id)
+            teamService.getTeamsByEvent(evt.id),
+            trackService.getTopicsByEvent(evt.id),
+            trackService.getTracksByEvent(evt.id)
           ]);
           evt.rounds = roundsRes.data || [];
           const teams = teamsRes.data || teamsRes || [];
+          const topics = topicsRes.data || topicsRes || [];
+          const tracks = tracksRes.data || tracksRes || [];
           setEventData(evt);
 
+          const trackIdMap = {};
+          tracks.forEach(tr => {
+            trackIdMap[tr.id] = tr.name;
+          });
+
+          const trackToTopicMap = {};
+          topics.forEach(tp => {
+            trackToTopicMap[tp.trackId] = tp.name;
+          });
+
           const teamTrackMap = {};
+          const teamTopicMap = {};
           teams.forEach(t => {
-            teamTrackMap[t.id] = t.track?.name || 'Global';
+            teamTrackMap[t.id] = trackIdMap[t.trackId] || 'Global';
+            // map topic from direct topicId, or fallback to the topic linked to the track
+            const topicByDirectId = topics.find(tp => tp.id === t.topicId);
+            teamTopicMap[t.id] = topicByDirectId?.name || trackToTopicMap[t.trackId] || 'No Topic';
           });
 
           if (evt.rounds && evt.rounds.length > 0) {
@@ -50,8 +69,9 @@ const EventArchive = () => {
                    teamId: s.teamId,
                    name: s.teamName,
                    score: s.score || 0,
-                   promoted: s.promoted || false,
-                   trackName: teamTrackMap[s.teamId] || 'Global'
+                   promoted: !!s.promoted,
+                   trackName: teamTrackMap[s.teamId] || 'Global',
+                   topicName: teamTopicMap[s.teamId] || 'No Topic'
                }));
                formattedBoard.sort((a, b) => b.score - a.score);
                
@@ -79,7 +99,8 @@ const EventArchive = () => {
                  rank: idx + 1,
                  name: s.teamName,
                  score: s.score || 0,
-                 trackName: teamTrackMap[s.teamId] || 'Global'
+                 trackName: teamTrackMap[s.teamId] || 'Global',
+                 topicName: teamTopicMap[s.teamId] || 'No Topic'
              }));
              setLeaderboard(formattedFinal);
           }
@@ -244,6 +265,7 @@ const EventArchive = () => {
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', width: '100px' }}>Rank</th>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Track</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Topic</th>
                       <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Final Score</th>
                     </tr>
                   </thead>
@@ -266,8 +288,11 @@ const EventArchive = () => {
                           {team.name}
                         </td>
                         <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                          {team.trackName}
+                        </td>
+                        <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
                           <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
-                            {team.trackName}
+                            {team.topicName}
                           </span>
                         </td>
                         <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: '700', color: team.rank <= 3 ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
@@ -292,7 +317,7 @@ const EventArchive = () => {
                           <tr style={{ background: 'var(--bg-subtle)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '80px' }}>Rank</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Team Name</th>
-                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Track</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Topic</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '120px' }}>Status</th>
                             <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', textAlign: 'right', width: '100px' }}>Score</th>
                           </tr>
@@ -313,7 +338,7 @@ const EventArchive = () => {
                               </td>
                               <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
                                 <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
-                                  {team.trackName}
+                                  {team.topicName}
                                 </span>
                               </td>
                               <td style={{ padding: '16px 24px' }}>
