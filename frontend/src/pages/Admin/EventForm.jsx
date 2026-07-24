@@ -224,7 +224,9 @@ const EventForm = () => {
         }
       } else {
         response = await eventService.createEventBatch(requestData);
-        const savedId = response.data?.id || eventId;
+        // createEventBatch returns axios response.data = ApiResponse { success, data: EventResponse }
+        // So event ID lives at response.data.id (the inner data field of ApiResponse)
+        const savedId = response.data?.id || response.id || eventId;
         if (formData.subTopics?.length > 0) {
           try {
             for (const topic of formData.subTopics) await trackService.createTopicByEvent(savedId, { name: topic.name, description: topic.desc });
@@ -243,7 +245,12 @@ const EventForm = () => {
       }
 
       localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData));
-      const finalId = isEditMode ? eventId : (response.data?.id || eventId);
+      // response = ApiResponse { success, data: EventResponse }
+      // Unwrap: response.data?.id = the event's ID
+      const finalId = isEditMode ? eventId : (response?.data?.id || response?.id || eventId);
+      if (!finalId) {
+        console.error('Could not determine event ID from response:', response);
+      }
       navigate(`/admin/event/${finalId}/dashboard`);
     } catch (err) {
       console.error(err);

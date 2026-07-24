@@ -43,12 +43,14 @@ const EventDashboard = () => {
 
         if (parsedId) {
           const eventRes = await eventService.getEventDetails(parsedId);
-          rawEvent = eventRes.data;
+          // getEventDetails returns ApiResponse { success, data: EventResponse }
+          rawEvent = eventRes?.data || eventRes;
         } else {
           const eventsRes = await eventService.getEvents();
-          if (eventsRes.data && eventsRes.data.length > 0) {
-            // Backend returns ordered by ID ascending. Pick the newest event (last item).
-            rawEvent = eventsRes.data[eventsRes.data.length - 1];
+          // getEvents returns ApiResponse { success, data: EventResponse[] }
+          const eventList = eventsRes?.data || eventsRes || [];
+          if (Array.isArray(eventList) && eventList.length > 0) {
+            rawEvent = eventList[eventList.length - 1];
             parsedId = rawEvent.id;
           }
         }
@@ -57,11 +59,13 @@ const EventDashboard = () => {
 
         // Fetch Rounds
         const roundsRes = await eventService.getEventRounds(parsedId);
-        const rawRounds = roundsRes.data || [];
+        // getEventRounds returns ApiResponse { success, data: Round[] }
+        const rawRounds = roundsRes?.data || [];
 
         // Fetch Topics
         const topicsRes = await trackService.getTopicsByEvent(parsedId);
-        const subTopics = topicsRes.data || [];
+        // getTopicsByEvent returns ApiResponse { success, data: Topic[] }
+        const subTopics = topicsRes?.data || [];
 
         // Fetch Teams
         try {
