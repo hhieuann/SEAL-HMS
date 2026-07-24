@@ -209,8 +209,8 @@ const Register = () => {
         </div>
 
         <div className="form-group" style={{ marginTop: '16px' }}>
-          <label style={{ color: '#ffffff', marginBottom: '8px', display: 'block' }}>Verification Proof (Student ID or FAP Screenshot) *</label>
-          <div style={{ padding: proofPreview ? '10px' : '20px', border: `1px dashed ${fieldErrors.proof ? 'rgba(239,68,68,0.5)' : 'rgba(255, 255, 255, 0.3)'}`, borderRadius: '8px', background: fieldErrors.proof ? 'rgba(239,68,68,0.03)' : 'rgba(255, 255, 255, 0.05)', textAlign: 'center', position: 'relative', overflow: 'hidden', transition: 'border-color 0.2s, background 0.2s' }}>
+          <label>Verification Proof (Student ID or FAP Screenshot) *</label>
+          <div style={{ padding: proofPreview ? '10px' : '20px', border: `1px dashed ${fieldErrors.proof ? 'rgba(239,68,68,0.5)' : 'var(--border-color)'}`, borderRadius: '8px', background: fieldErrors.proof ? 'rgba(239,68,68,0.03)' : 'var(--bg-subtle)', textAlign: 'center', position: 'relative', overflow: 'hidden', transition: 'border-color 0.2s, background 0.2s' }}>
             <input type="file" id="proof" accept="image/*,.pdf" onChange={handleFileChange} style={{ display: 'none' }} />
             
             {proofPreview ? (
@@ -230,7 +230,7 @@ const Register = () => {
                 <label htmlFor="proof" style={{ cursor: 'pointer', color: fieldErrors.proof ? '#ef4444' : 'var(--primary)', fontWeight: '600', display: 'inline-block' }}>
                   Click to upload file
                 </label>
-                <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.8)', marginTop: '8px' }}>Accepted formats: JPG, PNG, PDF (Max 5MB)</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '8px' }}>Accepted formats: JPG, PNG, PDF (Max 5MB)</div>
               </>
             )}
           </div>
