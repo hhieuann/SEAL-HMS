@@ -131,6 +131,20 @@ class ChapterServiceTest {
     // ---------- CRUD ----------
 
     @Test
+    void createChapter_keepsProvidedBonus() {
+        when(chapterRepository.save(any(Chapter.class))).thenAnswer(inv -> {
+            Chapter c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+
+        ChapterResponse res = chapterService.createChapter(new ChapterRequest("FPT Da Nang", 8));
+
+        assertThat(res.name()).isEqualTo("FPT Da Nang");
+        assertThat(res.bonusPoint()).isEqualTo(8); // explicit bonus kept as-is
+    }
+
+    @Test
     void createChapter_defaultsBonusToZero_whenNull() {
         when(chapterRepository.save(any(Chapter.class))).thenAnswer(inv -> {
             Chapter c = inv.getArgument(0);
@@ -150,6 +164,57 @@ class ChapterServiceTest {
 
         assertThatThrownBy(() -> chapterService.updateChapter(9L, new ChapterRequest("X", 0)))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void updateChapter_changesNameAndBonus_whenBonusProvided() {
+        Chapter existing = chapter(1L, "Old name", 5);
+        when(chapterRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(chapterRepository.save(any(Chapter.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ChapterResponse res = chapterService.updateChapter(1L, new ChapterRequest("New name", -3));
+
+        assertThat(res.name()).isEqualTo("New name");
+        assertThat(res.bonusPoint()).isEqualTo(-3); // negative adjustment applied
+    }
+
+    @Test
+    void updateChapter_keepsExistingBonus_whenBonusOmitted() {
+        Chapter existing = chapter(1L, "Old name", 7);
+        when(chapterRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(chapterRepository.save(any(Chapter.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ChapterResponse res = chapterService.updateChapter(1L, new ChapterRequest("Renamed", null));
+
+        assertThat(res.name()).isEqualTo("Renamed");
+        assertThat(res.bonusPoint()).isEqualTo(7); // untouched when the request omits it
+    }
+
+    @Test
+    void leaderboard_nullBonusPoint_treatedAsZero() {
+        Chapter a = chapter(1L, "A", 0);
+        a.setBonusPoint(null); // legacy row with no bonus set
+        when(chapterRepository.findAll()).thenReturn(List.of(a));
+        when(teamRepository.findByChapterIsNotNull()).thenReturn(List.of(team(a, 2))); // +15
+
+        List<ChapterLeaderboardEntry> board = chapterService.getLeaderboard();
+
+        assertThat(board.get(0).totalPoints()).isEqualTo(15); // null base counted as 0
+    }
+
+    @Test
+    void leaderboard_ignoresTeamWhoseChapterIsNoLongerListed() {
+        Chapter listed = chapter(1L, "Listed", 0);
+        Chapter removed = chapter(99L, "Removed", 0); // not returned by findAll
+        when(chapterRepository.findAll()).thenReturn(List.of(listed));
+        when(teamRepository.findByChapterIsNotNull()).thenReturn(List.of(
+                team(listed, 1), team(removed, 1))); // the orphan must be skipped
+
+        List<ChapterLeaderboardEntry> board = chapterService.getLeaderboard();
+
+        assertThat(board).hasSize(1);
+        assertThat(board.get(0).chapterName()).isEqualTo("Listed");
+        assertThat(board.get(0).totalPoints()).isEqualTo(20); // only the listed chapter's champion
     }
 
     @Test

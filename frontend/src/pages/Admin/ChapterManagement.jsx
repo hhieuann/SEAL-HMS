@@ -4,8 +4,8 @@ import ConfirmModal from '../../components/ConfirmModal';
 import { adminApi } from '../../api/adminApi';
 
 /**
- * Admin screen to manage Chapters (create / edit / delete) and see the year-long
- * Chapter Leaderboard standings side by side.
+ * Admin screen to manage Chapters (create / edit / delete) alongside their standing in
+ * the year-long Chapter Leaderboard.
  * Scoring rule: champion +20, runner-up +15, third +10 per event; equal totals share a rank.
  */
 const ChapterManagement = () => {
@@ -41,7 +41,7 @@ const ChapterManagement = () => {
       setLeaderboard(board);
     } catch (err) {
       console.error('Failed to load chapters', err);
-      showToast('Không tải được danh sách chapter', 'error');
+      showToast('Failed to load chapters', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -83,33 +83,33 @@ const ChapterManagement = () => {
     setError('');
 
     const name = form.name.trim();
-    if (!name) return triggerError('Tên chapter không được để trống.');
-    if (name.length > 150) return triggerError('Tên chapter tối đa 150 ký tự.');
+    if (!name) return triggerError('Chapter name is required.');
+    if (name.length > 150) return triggerError('Chapter name must be at most 150 characters.');
 
     const bonusRaw = String(form.bonusPoint ?? '').trim();
     if (bonusRaw !== '' && !/^-?\d+$/.test(bonusRaw)) {
-      return triggerError('Điểm thưởng/phạt phải là số nguyên (có thể âm).');
+      return triggerError('Bonus / penalty must be a whole number (negative allowed).');
     }
     const bonusPoint = bonusRaw === '' ? 0 : parseInt(bonusRaw, 10);
 
     // Duplicate name guard (client-side, case-insensitive)
     const dup = chapters.some(c =>
       c.name?.trim().toLowerCase() === name.toLowerCase() && c.id !== editingChapter?.id);
-    if (dup) return triggerError('Đã tồn tại chapter trùng tên.');
+    if (dup) return triggerError('A chapter with this name already exists.');
 
     setIsSaving(true);
     try {
       if (editingChapter) {
         await adminApi.updateChapter(editingChapter.id, { name, bonusPoint });
-        showToast(`Đã cập nhật chapter "${name}"`);
+        showToast(`Chapter "${name}" updated`);
       } else {
         await adminApi.createChapter({ name, bonusPoint });
-        showToast(`Đã tạo chapter "${name}"`);
+        showToast(`Chapter "${name}" created`);
       }
       closeFormModal();
       loadData();
     } catch (err) {
-      triggerError(err.response?.data?.message || err.message || 'Lưu chapter thất bại');
+      triggerError(err.response?.data?.message || err.message || 'Failed to save chapter');
     } finally {
       setIsSaving(false);
     }
@@ -121,10 +121,10 @@ const ChapterManagement = () => {
     setDeleteTarget(null);
     try {
       await adminApi.deleteChapter(target.id);
-      showToast(`Đã xoá chapter "${target.name}"`);
+      showToast(`Chapter "${target.name}" deleted`);
       loadData();
     } catch (err) {
-      showToast(err.response?.data?.message || 'Xoá chapter thất bại', 'error');
+      showToast(err.response?.data?.message || 'Failed to delete chapter', 'error');
     }
   };
 
@@ -140,28 +140,24 @@ const ChapterManagement = () => {
   };
 
   return (
-    <div className="animate-fade-in" style={{ padding: '0 20px' }}>
-      {/* Header */}
-      <div className="page-header" style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h1 style={{ fontSize: '30px', marginBottom: '6px' }}>Chapter Management</h1>
-            <p className="subtitle" style={{ margin: 0 }}>
-              Quản lý các Chapter và điểm thưởng/phạt. Bảng xếp hạng tích luỹ xuyên suốt năm.
-            </p>
-          </div>
-          <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Create Chapter</button>
+    <div className="animate-fade-in">
+      {/* Header — same structure as Events & Rounds so the action button sits far right */}
+      <div className="page-header">
+        <div>
+          <h1>Chapter Management</h1>
+          <p className="subtitle">Manage chapters and their bonus points. Standings accumulate across the whole year.</p>
         </div>
+        <button className="btn btn-primary" onClick={openCreate}><Plus size={18} /> Create Chapter</button>
       </div>
 
       {/* Scoring rule note */}
       <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', marginBottom: '20px', padding: '14px 18px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.18)', borderRadius: '12px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-        <span><Trophy size={14} style={{ verticalAlign: '-2px' }} /> Quy tắc điểm:</span>
-        <span>🥇 Vô địch <strong style={{ color: 'var(--text-primary)' }}>+20</strong></span>
-        <span>🥈 Á quân <strong style={{ color: 'var(--text-primary)' }}>+15</strong></span>
-        <span>🥉 Hạng ba <strong style={{ color: 'var(--text-primary)' }}>+10</strong></span>
-        <span>· Điểm thưởng/phạt thủ công cộng thêm vào tổng</span>
-        <span>· Bằng điểm thì <strong style={{ color: 'var(--text-primary)' }}>cùng hạng</strong></span>
+        <span><Trophy size={14} style={{ verticalAlign: '-2px' }} /> Scoring rule:</span>
+        <span>🥇 Champion <strong style={{ color: 'var(--text-primary)' }}>+20</strong></span>
+        <span>🥈 Runner-up <strong style={{ color: 'var(--text-primary)' }}>+15</strong></span>
+        <span>🥉 Third place <strong style={{ color: 'var(--text-primary)' }}>+10</strong></span>
+        <span>· Manual bonus / penalty adds to the total</span>
+        <span>· Equal totals <strong style={{ color: 'var(--text-primary)' }}>share the same rank</strong></span>
       </div>
 
       {/* Table */}
@@ -170,23 +166,23 @@ const ChapterManagement = () => {
           <thead>
             <tr style={{ background: 'var(--bg-subtle, #f8fafc)', borderBottom: '1px solid var(--border-color)' }}>
               <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Chapter</th>
-              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Hạng</th>
-              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tổng điểm</th>
-              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thưởng/phạt</th>
-              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Đội có thành tích</th>
-              <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thao tác</th>
+              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Rank</th>
+              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Points</th>
+              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bonus / Penalty</th>
+              <th style={{ padding: '14px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Placed Teams</th>
+              <th style={{ padding: '14px 24px', textAlign: 'right', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
               <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                <Loader2 size={24} className="spin" style={{ margin: '0 auto 8px', display: 'block' }} />Đang tải…
+                <Loader2 size={24} className="spin" style={{ margin: '0 auto 8px', display: 'block' }} />Loading chapters...
               </td></tr>
             ) : chapters.length === 0 ? (
               <tr><td colSpan="6" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-secondary)' }}>
                 <Award size={36} style={{ marginBottom: '10px' }} />
-                <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>Chưa có chapter nào</div>
-                <div style={{ fontSize: '13px' }}>Bấm “Create Chapter” để tạo chapter đầu tiên.</div>
+                <div style={{ fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px' }}>No chapters yet</div>
+                <div style={{ fontSize: '13px' }}>Click “Create Chapter” to add the first one.</div>
               </td></tr>
             ) : chapters.map((c) => {
               const st = statsById[c.id];
@@ -210,11 +206,11 @@ const ChapterManagement = () => {
                   </td>
                   <td style={{ padding: '16px 24px' }}>
                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <button onClick={() => openEdit(c)} title="Sửa chapter"
+                      <button onClick={() => openEdit(c)} title="Edit chapter"
                         style={{ padding: '7px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                         <Edit2 size={15} />
                       </button>
-                      <button onClick={() => setDeleteTarget(c)} title="Xoá chapter"
+                      <button onClick={() => setDeleteTarget(c)} title="Delete chapter"
                         style={{ padding: '7px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer' }}>
                         <Trash2 size={15} />
                       </button>
@@ -243,9 +239,9 @@ const ChapterManagement = () => {
                 <Award size={23} color="#fff" />
               </div>
               <div>
-                <h3 style={{ fontSize: '19px', marginBottom: '2px' }}>{editingChapter ? 'Sửa Chapter' : 'Tạo Chapter mới'}</h3>
+                <h3 style={{ fontSize: '19px', marginBottom: '2px' }}>{editingChapter ? 'Edit Chapter' : 'Create Chapter'}</h3>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
-                  {editingChapter ? 'Cập nhật tên hoặc điểm thưởng/phạt.' : 'Chapter dùng cho bảng xếp hạng xuyên suốt năm.'}
+                  {editingChapter ? 'Update the name or the manual bonus / penalty.' : 'Chapters are ranked across the whole year.'}
                 </p>
               </div>
             </div>
@@ -260,35 +256,35 @@ const ChapterManagement = () => {
             <form onSubmit={handleSave}>
               <div style={{ marginBottom: '18px' }}>
                 <label htmlFor="chapterName" style={{ display: 'block', marginBottom: '7px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                  Tên Chapter <span style={{ color: 'var(--danger)' }}>*</span>
+                  Chapter Name <span style={{ color: 'var(--danger)' }}>*</span>
                 </label>
                 <input id="chapterName" type="text" value={form.name} autoFocus
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="VD: FPT Hồ Chí Minh"
+                  placeholder="e.g. FPT Ho Chi Minh"
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }} />
               </div>
 
               <div style={{ marginBottom: '22px' }}>
                 <label htmlFor="chapterBonus" style={{ display: 'block', marginBottom: '7px', fontSize: '13px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                  Điểm thưởng / phạt thủ công
+                  Manual Bonus / Penalty
                 </label>
                 <input id="chapterBonus" type="number" value={form.bonusPoint}
                   onChange={(e) => setForm({ ...form, bonusPoint: e.target.value })}
                   placeholder="0"
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }} />
                 <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: '1.5' }}>
-                  Cộng thêm vào tổng điểm của chapter (số âm để trừ điểm theo quy định). Điểm thành tích 20/15/10 được hệ thống tự cộng.
+                  Added on top of the chapter total (use a negative value to deduct points). Placement points 20 / 15 / 10 are awarded automatically.
                 </p>
               </div>
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button type="button" onClick={closeFormModal}
                   style={{ flex: 1, padding: '12px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }}>
-                  Huỷ
+                  Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={isSaving}
                   style={{ flex: 1, justifyContent: 'center', padding: '12px' }}>
-                  {isSaving ? 'Đang lưu…' : <><Save size={16} /> {editingChapter ? 'Lưu thay đổi' : 'Tạo Chapter'}</>}
+                  {isSaving ? 'Saving...' : <><Save size={16} /> {editingChapter ? 'Save Changes' : 'Create Chapter'}</>}
                 </button>
               </div>
             </form>
@@ -302,11 +298,11 @@ const ChapterManagement = () => {
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
         type="danger"
-        title="Xoá Chapter?"
-        confirmText="Xoá Chapter"
-        cancelText="Huỷ"
+        title="Delete Chapter?"
+        confirmText="Delete Chapter"
+        cancelText="Cancel"
         message={deleteTarget
-          ? `Chapter "${deleteTarget.name}" sẽ bị xoá khỏi bảng xếp hạng. Các đội đang thuộc chapter này sẽ không còn đóng góp điểm. Hành động này không thể hoàn tác.`
+          ? `Chapter "${deleteTarget.name}" will be removed from the leaderboard. Its teams will no longer contribute points. This action cannot be undone.`
           : ''}
       />
 

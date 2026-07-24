@@ -16,7 +16,7 @@ const TeamFormation = () => {
   const [copied, setCopied] = useState(false);
   const [trackName, setTrackName] = useState('');
   const [chapters, setChapters] = useState([]);
-  const [chapterId, setChapterId] = useState(''); // '' = không theo chapter nào
+  const [chapterId, setChapterId] = useState(''); // '' = no chapter
 
   useEffect(() => {
     const eventId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
@@ -58,7 +58,7 @@ const TeamFormation = () => {
       const response = await teamService.createTeam(eventId, {
         name: teamName,
         leaderAccountId,
-        chapterId: chapterId ? parseInt(chapterId) : null, // null = không theo chapter nào
+        chapterId: chapterId ? parseInt(chapterId) : null, // null = not affiliated with a chapter
       });
       
       // The API returns { success: true, data: { id, name, ... } }
@@ -223,7 +223,7 @@ const TeamFormation = () => {
 
             <div style={{ marginBottom: '20px' }}>
               <label htmlFor="chapterSelect" style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600' }}>
-                Chapter <span style={{ fontWeight: '400' }}>(tuỳ chọn)</span>
+                Chapter <span style={{ fontWeight: '400' }}>(optional)</span>
               </label>
               <select
                 id="chapterSelect"
@@ -231,13 +231,13 @@ const TeamFormation = () => {
                 onChange={(e) => setChapterId(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }}
               >
-                <option value="">Không theo chapter nào (chỉ xếp hạng trong event)</option>
+                <option value="">No chapter (event ranking only)</option>
                 {chapters.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: '1.5' }}>
-                Chọn chapter để đóng góp điểm vào <strong>Bảng xếp hạng Chapter</strong> xuyên suốt năm. Bỏ trống nếu chỉ thi trong event này.
+                Pick a chapter to contribute points to the year-long <strong>Chapter Leaderboard</strong>. Leave empty to compete in this event only.
               </p>
             </div>
 
