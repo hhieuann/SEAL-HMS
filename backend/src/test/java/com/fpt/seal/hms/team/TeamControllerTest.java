@@ -67,7 +67,7 @@ class TeamControllerTest {
 
     @Test
     void createTeam_returns201() throws Exception {
-        when(teamService.createTeam(eq(1L), any())).thenReturn(mockResponse());
+        when(teamService.createTeam(eq(1L), any(), any())).thenReturn(mockResponse());
         mockMvc.perform(post("/api/v1/events/1/teams")
                         .with(user("student").roles("STUDENT")).with(csrf())
                         .contentType("application/json")
@@ -148,7 +148,7 @@ class TeamControllerTest {
 
     @Test
     void getMentorMessages_authenticated_ok() throws Exception {
-        when(teamService.getMentorMessages(1L)).thenReturn(List.of(mockMessage()));
+        when(teamService.getMentorMessages(eq(1L), any())).thenReturn(List.of(mockMessage()));
         mockMvc.perform(get("/api/v1/teams/1/messages")
                         .with(user("user@fpt.edu.vn").roles("STUDENT")))
                 .andExpect(status().isOk())

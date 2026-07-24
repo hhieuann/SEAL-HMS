@@ -30,8 +30,9 @@ public class TeamController {
     @PostMapping("/events/{eventId}/teams")
     public ResponseEntity<ApiResponse<TeamResponse>> createTeam(
             @PathVariable Long eventId,
-            @Valid @RequestBody TeamRequest request) {
-        TeamResponse created = teamService.createTeam(eventId, request);
+            @Valid @RequestBody TeamRequest request,
+            org.springframework.security.core.Authentication authentication) {
+        TeamResponse created = teamService.createTeam(eventId, request, authentication.getName());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Team created successfully", created));
     }
@@ -103,8 +104,10 @@ public class TeamController {
 
     @GetMapping("/teams/{id}/messages")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<java.util.List<com.fpt.seal.hms.team.dto.MentorMessageDto>>> getMentorMessages(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(teamService.getMentorMessages(id)));
+    public ResponseEntity<ApiResponse<java.util.List<com.fpt.seal.hms.team.dto.MentorMessageDto>>> getMentorMessages(
+            @PathVariable Long id,
+            org.springframework.security.core.Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.ok(teamService.getMentorMessages(id, authentication.getName())));
     }
 
     @PostMapping("/teams/{id}/messages")
