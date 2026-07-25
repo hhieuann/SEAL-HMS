@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, GraduationCap, X, Plus, UserCheck, Loader2 } from 'lucide-react';
+import { Users, CheckSquare, AlertTriangle, ArrowRight, Activity, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, X } from 'lucide-react';
 import './EventDashboard.css';
 
 const formatDate = (dateStr) => {
@@ -15,7 +15,7 @@ const formatDate = (dateStr) => {
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + 
            d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  } catch(e) { return dateStr; }
+  } catch { return dateStr; }
 };
 
 const EventDashboard = () => {
@@ -25,13 +25,16 @@ const EventDashboard = () => {
   const [teams, setTeams] = useState([]);
   const [statusActionLoading, setStatusActionLoading] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [statusError, setStatusError] = useState('');
   const [userRole, setUserRole] = useState('');
 
   useEffect(() => {
     try {
       setUserRole(localStorage.getItem('userRole') || '');
-    } catch(e) {}
+    } catch { /* ignored on purpose */ }
     const fetchData = async () => {
       try {
         const { eventService } = await import('../../api/eventService.js');
@@ -43,11 +46,14 @@ const EventDashboard = () => {
 
         if (parsedId) {
           const eventRes = await eventService.getEventDetails(parsedId);
-          rawEvent = eventRes.data;
+          // getEventDetails returns ApiResponse { success, data: EventResponse }
+          rawEvent = eventRes?.data || eventRes;
         } else {
           const eventsRes = await eventService.getEvents();
-          if (eventsRes.data && eventsRes.data.length > 0) {
-            rawEvent = eventsRes.data[0];
+          // getEvents returns ApiResponse { success, data: EventResponse[] }
+          const eventList = eventsRes?.data || eventsRes || [];
+          if (Array.isArray(eventList) && eventList.length > 0) {
+            rawEvent = eventList[eventList.length - 1];
             parsedId = rawEvent.id;
           }
         }
@@ -56,11 +62,13 @@ const EventDashboard = () => {
 
         // Fetch Rounds
         const roundsRes = await eventService.getEventRounds(parsedId);
-        const rawRounds = roundsRes.data || [];
+        // getEventRounds returns ApiResponse { success, data: Round[] }
+        const rawRounds = roundsRes?.data || [];
 
         // Fetch Topics
         const topicsRes = await trackService.getTopicsByEvent(parsedId);
-        const subTopics = topicsRes.data || [];
+        // getTopicsByEvent returns ApiResponse { success, data: Topic[] }
+        const subTopics = topicsRes?.data || [];
 
         // Fetch Teams
         try {
@@ -123,6 +131,47 @@ const EventDashboard = () => {
     if (confirmAction) {
       handleUpdateEvent(confirmAction);
       setConfirmAction(null);
+    }
+  };
+
+  const handleCancelEvent = async () => {
+    try {
+      setStatusError('');
+      setStatusActionLoading(true);
+      const { eventService } = await import('../../api/eventService.js');
+      const res = await eventService.cancelEvent(event.id);
+      setEvent(prev => ({ ...prev, status: res.data.status }));
+      setConfirmCancel(false);
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message || err.message || 'Failed to cancel event.';
+      setStatusError(msg);
+    } finally {
+      setStatusActionLoading(false);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (deleteConfirmText !== event.name) {
+      setStatusError('Event name does not match. Deletion cancelled.');
+      setConfirmDelete(false);
+      setDeleteConfirmText('');
+      return;
+    }
+    
+    try {
+      setStatusError('');
+      setStatusActionLoading(true);
+      const { eventService } = await import('../../api/eventService.js');
+      await eventService.deleteEvent(event.id);
+      navigate('/admin/dashboard');
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message || err.message || 'Failed to permanently delete event.';
+      setStatusError(msg);
+      setStatusActionLoading(false);
+      setConfirmDelete(false);
+      setDeleteConfirmText('');
     }
   };
 
@@ -205,12 +254,26 @@ const EventDashboard = () => {
             </div>
           )}
         </div>
-        {userRole === 'ADMIN' && sc.nextStatus && (
-          <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
-            disabled={statusActionLoading} onClick={() => setConfirmAction({ status: sc.nextStatus, label: sc.nextLabel })}>
-            {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {userRole === 'ADMIN' && sc.nextStatus && (
+            <button className="btn btn-primary" style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}
+              disabled={statusActionLoading} onClick={() => setConfirmAction({ status: sc.nextStatus, label: sc.nextLabel })}>
+              {sc.icon} {statusActionLoading ? 'Updating…' : sc.nextLabel}
+            </button>
+          )}
+          {userRole === 'ADMIN' && statusUpper === 'UPCOMING' && (
+            <button style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: '8px', cursor: 'pointer' }}
+              disabled={statusActionLoading} onClick={() => setConfirmCancel(true)}>
+              <Ban size={16} /> Cancel Event
+            </button>
+          )}
+          {userRole === 'ADMIN' && statusUpper === 'CANCELLED' && (
+            <button style={{ padding: '10px 20px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px', background: 'var(--danger)', border: 'none', color: '#fff', borderRadius: '8px', cursor: 'pointer', fontWeight: '600' }}
+              disabled={statusActionLoading} onClick={() => setConfirmDelete(true)}>
+              <X size={16} /> Delete Permanently
+            </button>
+          )}
+        </div>
       </div>
 
 
@@ -400,6 +463,89 @@ const EventDashboard = () => {
               <button style={{ flex: 1, padding: '10px', background: 'white', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-primary)', fontWeight: '600', cursor: 'pointer' }} onClick={() => setConfirmAction(null)}>Cancel</button>
               <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={executeConfirmAction}>
                 Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Confirmation Modal */}
+      {confirmCancel && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => setConfirmCancel(false)} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '100%', maxWidth: '500px', background: 'var(--bg-panel)', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', borderTop: '4px solid var(--danger)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
+                <Ban size={24} color="var(--danger)" />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Cancel Event</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+                  Are you sure you want to cancel this event? <strong style={{ color: 'var(--text-primary)' }}>All registered teams and event staff will be removed.</strong> This action will free up students to join other events.
+                </p>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button className="btn btn-secondary" onClick={() => setConfirmCancel(false)} disabled={statusActionLoading}>Keep Event</button>
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleCancelEvent} disabled={statusActionLoading}>
+                {statusActionLoading ? 'Cancelling...' : 'Yes, Cancel Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }} onClick={() => { setConfirmDelete(false); setDeleteConfirmText(''); }} />
+          <div className="animate-fade-in" style={{ position: 'relative', width: '100%', maxWidth: '500px', background: 'var(--bg-panel)', borderRadius: '16px', padding: '24px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)', borderTop: '4px solid var(--danger)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '12px', borderRadius: '50%', flexShrink: 0 }}>
+                <AlertTriangle size={24} color="var(--danger)" />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '8px' }}>Hard Delete Event</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.5' }}>
+                  You are about to permanently delete this event and all associated tracks, rounds, topics, teams, and data. <strong style={{ color: 'var(--text-primary)' }}>This action cannot be undone.</strong>
+                </p>
+              </div>
+            </div>
+            
+            <div style={{ marginBottom: '24px', textAlign: 'left' }}>
+              <label style={{ display: 'block', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Please type <strong>{event.name}</strong> to confirm.</label>
+              <input 
+                type="text" 
+                style={{ 
+                  width: '100%', 
+                  padding: '12px', 
+                  background: 'var(--bg-subtle)', 
+                  border: `1px solid ${deleteConfirmText.length > 0 && deleteConfirmText !== event.name ? 'var(--danger)' : 'var(--border-color)'}`, 
+                  borderRadius: '8px', 
+                  color: 'var(--text-primary)' 
+                }}
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={event.name}
+                autoFocus
+              />
+              {deleteConfirmText.length > 0 && deleteConfirmText !== event.name && (
+                <div style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '6px', fontWeight: '500' }}>
+                  Event name does not match. Please type exactly as shown.
+                </div>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button className="btn btn-secondary" onClick={() => { setConfirmDelete(false); setDeleteConfirmText(''); }} disabled={statusActionLoading}>Cancel</button>
+              <button 
+                className="btn btn-primary" 
+                style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }} 
+                onClick={handleDeleteEvent}
+                disabled={deleteConfirmText !== event.name || statusActionLoading}
+              >
+                {statusActionLoading ? 'Deleting...' : 'Permanently Delete'}
               </button>
             </div>
           </div>

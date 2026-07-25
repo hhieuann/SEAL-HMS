@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Calendar, Target, Plus, X, AlertTriangle, Save, AlertCircle, Users } from 'lucide-react';
+import ConfirmModal from '../../components/ConfirmModal';
+
+// Defined at module scope: a component declared inside EventForm would be a brand-new
+// component type on every render, which remounts it and drops its state.
+const InlineWarn = ({ msg }) => <div style={{display:'flex',alignItems:'center',gap:'5px',marginTop:'5px',color:'var(--danger)',fontSize:'12px'}}><AlertTriangle size={11}/> {msg}</div>;
 
 const EventForm = () => {
   const navigate = useNavigate();
@@ -32,6 +37,7 @@ const EventForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [initialTopics, setInitialTopics] = useState([]);
   const [initialRounds, setInitialRounds] = useState([]);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false); // edit-mode save confirmation
 
   // ── Derived validation (live from formData) ──────────────────────────────
   const { registrationStartDate: regStart, registrationEndDate: regEnd, startDate: evtStart, endDate: evtEnd } = formData;
@@ -71,14 +77,31 @@ const EventForm = () => {
           errs.push(`Must start after "${prev.name || `Round ${index}`}" ends`);
       }
     }
+    // Judges cannot score a round without criteria — every round must define at least one,
+    // and the weights must add up to exactly 100%.
+    if (!round.criteria || round.criteria.length === 0) {
+      errs.push('At least one scoring criterion is required');
+    } else {
+      const totalWeight = round.criteria.reduce((s, c) => s + (Number(c.weight) || 0), 0);
+      if (totalWeight !== 100) {
+        errs.push(`Criteria weights must total 100% (currently ${totalWeight}%)`);
+      }
+      if (round.criteria.some(c => !c.name || !c.name.trim())) {
+        errs.push('Every criterion needs a name');
+      }
+    }
     return errs;
   };
 
   const allRoundErrors = formData.rounds.map((r, i) => getRoundErrors(r, i));
   const hasRoundErrors = allRoundErrors.some(e => e.length > 0);
+  // Rounds with no criteria at all — surfaced as a dedicated message so the organiser
+  // knows exactly which round to fix.
+  const roundsMissingCriteria = formData.rounds
+    .filter(r => !r.criteria || r.criteria.length === 0)
+    .map((r, i) => r.name || `Round ${i + 1}`);
 
   const maxTeamsNum = parseInt(formData.maxTeams) || 0;
-  const trackCount = Math.max(1, formData.subTopics?.length || 1);
   const teamFlow = formData.rounds.reduce((acc, round, idx) => {
     const isFinal    = idx === formData.rounds.length - 1;
     const prevLeft   = acc.length > 0 ? acc[acc.length - 1].promotedTotal : maxTeamsNum;
@@ -101,8 +124,6 @@ const EventForm = () => {
         if (!rawEvent) return;
         const roundsRes = await eventService.getEventRounds(eventId);
         const rawRounds = roundsRes.data || [];
-        const tracksRes = await trackService.getTracksByEvent(eventId);
-        const tracks    = tracksRes.data || [];
         const topicsRes = await trackService.getTopicsByEvent(eventId);
         const subTopics = (topicsRes.data || []).map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
         setInitialTopics(subTopics);
@@ -143,24 +164,34 @@ const EventForm = () => {
     setTimeout(() => setShaking(false), 500);
   };
 
-  const handleSave = async () => {
+  /** Runs every validation rule; returns true when the form is safe to submit. */
+  const validateForm = () => {
     setError('');
-    if (!formData.name)                                         { triggerError('Event Name is required.', 1); return; }
-    if (!formData.registrationStartDate || !formData.registrationEndDate) { triggerError('Registration open and close dates are required.', 1); return; }
-    if (!formData.maxTeams || maxTeamsInvalidFormat || maxTeamsLessThanOne) { triggerError('Max Teams is required and must be a positive whole number.', 1); return; }
-    if (!formData.minTeams || minTeamsInvalidFormat || minTeamsLessThanTwo) { triggerError('Min Teams is required, must be a positive whole number ≥ 2.', 1); return; }
-    if (minGtMax)                                               { triggerError('Min Teams cannot be greater than Max Teams.', 1); return; }
-    if (!formData.startDate || !formData.endDate)               { triggerError('Event start and end dates are required.', 1); return; }
-    if (hasDateErrors)                                          { triggerError('Please fix the date errors on Step 1 before saving.', 1); return; }
-    if (formData.rounds.length === 0)                           { triggerError('At least one round is required. Please add a round in Step 3.', 3); return; }
-    if (hasRoundErrors)                                         { triggerError('Please fix the round errors in Step 3 before saving.', 3); return; }
-    if (hasTeamFlowError)                                       { triggerError('Promoted teams must be strictly less than the available pool from the previous round.', 3); return; }
-
-    // Editing an existing event affects live data (rounds, criteria, registered teams) — confirm first.
-    if (isEditMode && !window.confirm(`Are you sure you want to save these changes to "${formData.name}"? Rounds and criteria will be updated for all participants.`)) {
-      return;
+    if (!formData.name)                                         { triggerError('Event Name is required.', 1); return false; }
+    if (!formData.registrationStartDate || !formData.registrationEndDate) { triggerError('Registration open and close dates are required.', 1); return false; }
+    if (!formData.maxTeams || maxTeamsInvalidFormat || maxTeamsLessThanOne) { triggerError('Max Teams is required and must be a positive whole number.', 1); return false; }
+    if (!formData.minTeams || minTeamsInvalidFormat || minTeamsLessThanTwo) { triggerError('Min Teams is required, must be a positive whole number ≥ 2.', 1); return false; }
+    if (minGtMax)                                               { triggerError('Min Teams cannot be greater than Max Teams.', 1); return false; }
+    if (!formData.startDate || !formData.endDate)               { triggerError('Event start and end dates are required.', 1); return false; }
+    if (hasDateErrors)                                          { triggerError('Please fix the date errors on Step 1 before saving.', 1); return false; }
+    if (formData.rounds.length === 0)                           { triggerError('At least one round is required. Please add a round in Step 3.', 3); return false; }
+    if (roundsMissingCriteria.length > 0) {
+      triggerError(`Every round must have scoring criteria. Missing in: ${roundsMissingCriteria.join(', ')}.`, 3);
+      return false;
     }
+    if (hasRoundErrors)                                         { triggerError('Please fix the round errors in Step 3 before saving.', 3); return false; }
+    if (hasTeamFlowError)                                       { triggerError('Promoted teams must be strictly less than the available pool from the previous round.', 3); return false; }
+    return true;
+  };
 
+  /** Save button: validate first, then ask for confirmation when editing a saved event. */
+  const handleSaveClick = () => {
+    if (!validateForm()) return;
+    if (isEditMode) { setShowSaveConfirm(true); return; }
+    performSave();
+  };
+
+  const performSave = async () => {
     setIsSubmitting(true);
     try {
       const requestData = {
@@ -224,7 +255,9 @@ const EventForm = () => {
         }
       } else {
         response = await eventService.createEventBatch(requestData);
-        const savedId = response.data?.id || eventId;
+        // createEventBatch returns axios response.data = ApiResponse { success, data: EventResponse }
+        // So event ID lives at response.data.id (the inner data field of ApiResponse)
+        const savedId = response.data?.id || response.id || eventId;
         if (formData.subTopics?.length > 0) {
           try {
             for (const topic of formData.subTopics) await trackService.createTopicByEvent(savedId, { name: topic.name, description: topic.desc });
@@ -243,7 +276,12 @@ const EventForm = () => {
       }
 
       localStorage.setItem('event_settings_seal_sp26', JSON.stringify(formData));
-      const finalId = isEditMode ? eventId : (response.data?.id || eventId);
+      // response = ApiResponse { success, data: EventResponse }
+      // Unwrap: response.data?.id = the event's ID
+      const finalId = isEditMode ? eventId : (response?.data?.id || response?.id || eventId);
+      if (!finalId) {
+        console.error('Could not determine event ID from response:', response);
+      }
       navigate(`/admin/event/${finalId}/dashboard`);
     } catch (err) {
       console.error(err);
@@ -264,7 +302,6 @@ const EventForm = () => {
   const errBorder = { borderColor:'rgba(239,68,68,0.5)' };
   const lbl = { display:'block',fontSize:'13px',fontWeight:'600',color:'var(--text-secondary)',marginBottom:'8px' };
   const req = <span style={{color:'var(--danger)'}}>*</span>;
-  const InlineWarn = ({msg}) => <div style={{display:'flex',alignItems:'center',gap:'5px',marginTop:'5px',color:'var(--danger)',fontSize:'12px'}}><AlertTriangle size={11}/> {msg}</div>;
 
   return (
     <div className="animate-fade-in" style={{paddingBottom:'40px'}}>
@@ -276,7 +313,7 @@ const EventForm = () => {
         </div>
         <div style={{display:'flex',gap:'12px'}}>
           <button className="btn btn-secondary" onClick={()=>navigate(isEditMode ? `/admin/event/${eventId}/dashboard` : '/admin/events')}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} style={{background:'var(--success)',color:'#000'}} disabled={isSubmitting}><Save size={18}/> {isSubmitting?'Saving…':'Save Event'}</button>
+          <button className="btn btn-primary" onClick={handleSaveClick} style={{background:'var(--success)',color:'#000'}} disabled={isSubmitting}><Save size={18}/> {isSubmitting?'Saving…':'Save Event'}</button>
         </div>
       </div>
 
@@ -462,6 +499,7 @@ const EventForm = () => {
                   const roundErrs=allRoundErrors[rIdx]; const hasErrs=roundErrs.length>0;
                   const totalWeight=round.criteria.reduce((s,c)=>s+(c.weight||0),0);
                   const weightErr=round.criteria.length>0&&totalWeight!==100;
+                  const noCriteria=round.criteria.length===0;
                   const isFinalRound=rIdx===formData.rounds.length-1;
                   return (
                     <div key={round.id} style={{padding:'24px',background:'#F8FAFC',borderRadius:'16px',border:`1px solid ${hasErrs?'rgba(239,68,68,0.4)':isFinalRound?'rgba(255,215,0,0.3)':'var(--border-color)'}`}}>
@@ -504,17 +542,18 @@ const EventForm = () => {
                         </div>
                       )}
 
-                      <div style={{background:'var(--bg-subtle)',padding:'20px',borderRadius:'12px',border:`1px solid ${weightErr?'var(--danger)':'var(--bg-hover)'}`}}>
+                      <div style={{background:'var(--bg-subtle)',padding:'20px',borderRadius:'12px',border:`1px solid ${(weightErr||noCriteria)?'var(--danger)':'var(--bg-hover)'}`}}>
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
                           <h4 style={{fontSize:'14px',color:'var(--text-secondary)',display:'flex',alignItems:'center',gap:'8px'}}>
-                            Scoring Criteria
+                            Scoring Criteria <span style={{color:'var(--danger)'}}>*</span>
+                            {noCriteria&&<span style={{fontSize:'12px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'4px',background:'rgba(239,68,68,0.1)',padding:'2px 8px',borderRadius:'20px'}}><AlertTriangle size={12}/> Required</span>}
                             {weightErr&&<span style={{fontSize:'12px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'4px',background:'rgba(239,68,68,0.1)',padding:'2px 8px',borderRadius:'20px'}}><AlertTriangle size={12}/> {totalWeight}% (need 100%)</span>}
                             {!weightErr&&round.criteria.length>0&&<span style={{fontSize:'12px',color:'var(--success)',background:'rgba(16,185,129,0.1)',padding:'2px 8px',borderRadius:'20px'}}>✓ 100%</span>}
                           </h4>
                           <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>addCriterion(round.id)} disabled={isLocked}><Plus size={14}/> Add Criterion</button>
                         </div>
                         {round.criteria.length===0
-                          ? <div style={{fontSize:'13px',color:'var(--text-secondary)',fontStyle:'italic'}}>No criteria yet. Add criteria for judges to evaluate.</div>
+                          ? <div style={{fontSize:'13px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'6px'}}><AlertTriangle size={14}/> At least one scoring criterion is required — judges cannot grade this round without it.</div>
                           : <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
                               {round.criteria.map(c=>(
                                 <div key={c.id} style={{display:'flex',gap:'16px',alignItems:'center'}}>
@@ -537,6 +576,18 @@ const EventForm = () => {
           </div>
         )}
       </div>
+
+      {/* Edit-mode save confirmation — in-app modal instead of the browser dialog */}
+      <ConfirmModal
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={performSave}
+        type="warning"
+        title="Save changes to this event?"
+        confirmText="Save Changes"
+        cancelText="Cancel"
+        message={`"${formData.name}" will be updated. Rounds and scoring criteria are applied to every participating team — review them before continuing.`}
+      />
 
       <style>{`@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}`}</style>
     </div>

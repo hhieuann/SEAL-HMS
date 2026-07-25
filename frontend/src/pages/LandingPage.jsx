@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Anchor, ArrowRight, Users, Scale, LayoutTemplate } from 'lucide-react';
+import { Anchor, ArrowRight, Users, Scale, LayoutTemplate, MapPin, Phone, Mail } from 'lucide-react';
 import './LandingPage.css';
 import apiClient from '../api/apiClient';
 
@@ -19,22 +19,41 @@ const LandingPage = () => {
 
   const totalEvents = events.length;
   const totalTeams = events.reduce((sum, e) => sum + (e.currentTeams || 0), 0);
-  const totalParticipants = totalTeams; // shown as "teams competing" below
-  const avgSubmissions = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
+  const avgTeamsPerEvent = totalEvents > 0 ? Math.round(totalTeams / totalEvents) : 0;
+
+  // Compute date range label from actual event dates
+  const eventDateLabel = (() => {
+    if (events.length === 0) return 'Upcoming';
+    const dates = events
+      .map(e => e.endDate ? new Date(e.endDate) : null)
+      .filter(Boolean);
+    if (dates.length === 0) return 'Upcoming';
+    const maxDate = new Date(Math.max(...dates));
+    const now = new Date();
+    const diffDays = Math.ceil((maxDate - now) / (1000 * 60 * 60 * 24));
+    return diffDays > 0 ? `Next ${diffDays} days` : 'See all events';
+  })();
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  };
 
   return (
     <div className="landing-container animate-fade-in">
       {/* Navigation */}
       <nav className="landing-nav glass-panel-nav">
         <div className="landing-logo">
+          <img src="/src/assets/FptLogo.png" alt="FPT" style={{ height: '100px', objectFit: 'contain', marginRight: '16px' }} />
           <Anchor size={24} className="text-primary" />
           <span className="logo-text">SEAL <span className="highlight">Hackathon</span></span>
         </div>
         <div className="nav-links">
-          <a href="#about">About</a>
+          <a href="#features">Features</a>
           <a href="#events">Events</a>
-          <a href="#sponsors">Sponsors</a>
           <a href="#contact">Contact</a>
+          <a href="/register">Join Now</a>
         </div>
         <div className="nav-actions">
           <Link to="/login" className="btn btn-secondary">Login</Link>
@@ -53,7 +72,7 @@ const LandingPage = () => {
               </p>
               <div className="hero-buttons">
                 <Link to="/register" className="btn btn-primary lg-btn">Register</Link>
-                <Link to="#learn-more" className="btn btn-secondary lg-btn">Learn More</Link>
+                <a href="#features" className="btn btn-secondary lg-btn">Learn More</a>
               </div>
               
               <div className="hero-tags">
@@ -69,20 +88,20 @@ const LandingPage = () => {
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Teams competing</span>
-                  <span className="stat-num">{totalParticipants}</span>
+                  <span className="stat-num">{totalTeams}</span>
                 </div>
                 <div className="stat-box">
                   <span className="stat-label">Average teams / event</span>
-                  <span className="stat-num">{avgSubmissions}</span>
+                  <span className="stat-num">{avgTeamsPerEvent}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="hero-events glass-panel">
+          <div id="events" className="hero-events glass-panel">
             <div className="events-header">
               <h3>Ongoing & Upcoming Events</h3>
-              <span className="events-sub">Next 60 days</span>
+              <span className="events-sub">{eventDateLabel}</span>
             </div>
             
             <div className="event-list">
@@ -91,7 +110,7 @@ const LandingPage = () => {
                   No active events at the moment. Stay tuned!
                 </div>
               ) : (
-                events.slice(0, 4).map(event => {
+                events.filter(e => e.status?.toUpperCase() !== 'CANCELLED').slice(0, 4).map(event => {
                   const isLive = event.status?.toLowerCase() === 'live' || event.status?.toLowerCase() === 'ongoing';
                   const isUpcoming = event.status?.toLowerCase() === 'upcoming' || event.status?.toLowerCase() === 'planned';
                   const isCompleted = event.status?.toLowerCase() === 'completed';
@@ -110,7 +129,14 @@ const LandingPage = () => {
                         <p style={isLive ? { margin: 0, fontSize: '13px', color: 'var(--text-secondary)' } : {}}>{event.type || 'Hackathon'}</p>
                       </div>
                       <div className="event-action" style={isLive ? { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' } : {}}>
-                        <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>{isLive ? 'In Progress' : (isUpcoming ? 'Starts soon' : 'Ended')}</span>
+                        <span className="time-left" style={isLive ? { color: 'var(--success)', fontWeight: '600' } : {}}>
+                          {isLive
+                            ? `Ends ${formatDate(event.endDate)}`
+                            : isUpcoming
+                            ? `Starts ${formatDate(event.startDate)}`
+                            : `Ended ${formatDate(event.endDate)}`
+                          }
+                        </span>
                         {isLive ? (
                           <Link to="/participant/events" className="btn btn-primary sm-btn">Enter Event</Link>
                         ) : (
@@ -130,7 +156,7 @@ const LandingPage = () => {
         </section>
 
         {/* Highlights Section */}
-        <section className="highlights-section">
+        <section id="features" className="highlights-section">
           <h2>Platform Highlights</h2>
           <div className="highlights-grid">
             <div className="highlight-card glass-panel">
@@ -170,7 +196,7 @@ const LandingPage = () => {
       </main>
       
       {/* Footer */}
-      <footer className="landing-footer glass-panel">
+      <footer id="contact" className="landing-footer glass-panel">
         <div className="footer-content">
           <div className="footer-brand">
             <div className="landing-logo">
@@ -179,18 +205,19 @@ const LandingPage = () => {
             </div>
             <p>Run better hackathons with streamlined workflows, reliable judging, and inclusive team features.</p>
           </div>
-          <div className="footer-links">
-            <div className="link-group">
-              <h4>Product</h4>
-              <a href="#">Events</a>
-              <a href="#">Judging</a>
-              <a href="#">Teams</a>
+          <div className="footer-contact-info">
+            <h4>Đại học FPT - Campus TP. Hồ Chí Minh</h4>
+            <div className="contact-item">
+              <MapPin size={18} />
+              <span>Lô E2a-7, Đường D1, Khu Công nghệ cao, Phường Tăng Nhơn Phú, TP. Hồ Chí Minh</span>
             </div>
-            <div className="link-group">
-              <h4>Company</h4>
-              <a href="#">About</a>
-              <a href="#">Careers</a>
-              <a href="#">Contact</a>
+            <div className="contact-item">
+              <Phone size={18} />
+              <span>(028) 7300 5588</span>
+            </div>
+            <div className="contact-item">
+              <Mail size={18} />
+              <a href="mailto:tuyensinhhcm@fpt.edu.vn">tuyensinhhcm@fpt.edu.vn</a>
             </div>
           </div>
         </div>

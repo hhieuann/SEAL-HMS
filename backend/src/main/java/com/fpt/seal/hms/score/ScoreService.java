@@ -2,6 +2,7 @@ package com.fpt.seal.hms.score;
 
 import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.criterion.CriterionRepository;
@@ -13,9 +14,8 @@ import com.fpt.seal.hms.score.dto.ScoreResponse;
 import com.fpt.seal.hms.score.entity.Score;
 import com.fpt.seal.hms.submission.SubmissionRepository;
 import com.fpt.seal.hms.submission.entity.Submission;
-import com.fpt.seal.hms.team.TeamRepository;
 import com.fpt.seal.hms.lecturer.LecturerRepository;
-import com.fpt.seal.hms.lecturer.Lecturer;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,8 +36,8 @@ public class ScoreService {
     private final AccountRepository accountRepository;
     private final CriterionRepository criterionRepository;
     private final RoundRankingRepository roundRankingRepository;
-    private final TeamRepository teamRepository;
     private final LecturerRepository lecturerRepository;
+    private final TrackAssignmentRepository trackAssignmentRepository;
 
     @Transactional(readOnly = true)
     public List<ScoreResponse> getScoresForSubmission(Long submissionId) {
@@ -52,12 +52,12 @@ public class ScoreService {
     }
 
     @Transactional
-    public List<ScoreResponse> gradeSubmission(Long submissionId, GradeSubmissionRequest request) {
+    public List<ScoreResponse> gradeSubmission(Long submissionId, GradeSubmissionRequest request, String actorEmail) {
         Submission submission = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Submission not found"));
 
         Round round = submission.getRoundRanking().getRound();
-        
+
         // If the round is still active, enforce the deadline
         if (round.getStatus() == com.fpt.seal.hms.common.enums.RoundStatus.ACTIVE) {
             if (round.getStartTime() == null || round.getDurationHours() == null) {
@@ -70,16 +70,41 @@ public class ScoreService {
             }
         }
 
-        Account judge = accountRepository.findById(request.getJudgeAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Judge account not found"));
+        // The judge is the AUTHENTICATED user — never trust a judgeAccountId from the request
+        // body (a client could grade under someone else's identity).
+        Account judge = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Judge account not found: " + actorEmail));
+
+        var team = submission.getRoundRanking().getTeam();
+        var track = team != null ? team.getTrack() : null;
+        if (track == null) {
+            throw new BusinessException("Cannot grade: The submission team is not assigned to a track.");
+        }
+        boolean isAssignedJudge =
+                trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                        track.getId(), actorEmail, AssignmentRole.JUDGE);
+        if (!isAssignedJudge) {
+            throw new BusinessException("You are not assigned as a Judge for this submission's track.");
+        }
 
         // Upsert each score entry
         for (var scoreReq : request.getScores()) {
             Criterion criterion = criterionRepository.findById(scoreReq.getCriterionId())
                     .orElseThrow(() -> new ResourceNotFoundException("Criterion not found: " + scoreReq.getCriterionId()));
 
-            // Clamp score to max
+            // A criterion must belong to the same round as the submission being graded.
+            if (criterion.getRound() == null || !criterion.getRound().getId().equals(round.getId())) {
+                throw new BusinessException("Criterion " + criterion.getId() + " does not belong to this submission's round.");
+            }
+
             BigDecimal value = scoreReq.getScore();
+            if (value == null) {
+                throw new BusinessException("Score is required for criterion " + criterion.getId() + ".");
+            }
+            // Reject negative scores; clamp values above the criterion max down to the max.
+            if (value.signum() < 0) {
+                throw new BusinessException("Score cannot be negative (criterion " + criterion.getId() + ").");
+            }
             if (criterion.getMaxScore() != null && value.compareTo(criterion.getMaxScore()) > 0) {
                 value = criterion.getMaxScore();
             }

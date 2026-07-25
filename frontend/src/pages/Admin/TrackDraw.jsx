@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Shuffle, CheckCircle, AlertCircle, ChevronRight, Users, Tag, Lock, Unlock, RefreshCw, ArrowRight, Target } from 'lucide-react';
+import { Shuffle, CheckCircle, AlertCircle, Users, Lock, RefreshCw, ArrowRight, Target } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
 import { trackService } from '../../api/trackService';
@@ -18,7 +18,6 @@ const TrackDraw = () => {
   const [activeTeamsList, setActiveTeamsList] = useState([]);
   const [topicDrawn, setTopicDrawn] = useState(false);
   const [teamsAssigned, setTeamsAssigned] = useState(false);
-  const parsedInitEventId = parseInt(eventId);
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
@@ -26,6 +25,10 @@ const TrackDraw = () => {
   const [toast, setToast] = useState('');
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
   const [resetModal, setResetModal] = useState(false);
+  const [roundsAdvanced, setRoundsAdvanced] = useState(false);
+  // Resetting the draw wipes tracks, mentors, submissions, scores and rankings, so it stays an
+  // ADMIN action even though STAFF may run the draw itself.
+  const isAdmin = localStorage.getItem('userRole') === 'ADMIN';
 
   const trackColors = [
     { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
@@ -53,6 +56,13 @@ const TrackDraw = () => {
           setIsLocked(false);
         }
 
+        // Once a later round has been opened, teams have been promoted on the strength of this
+        // draw. Redrawing would invalidate those results, so the reset is withdrawn for good.
+        const rounds = activeEvent.rounds || [];
+        setRoundsAdvanced(
+          rounds.some((r, i) => i > 0 && r.status !== 'CREATED' && r.status !== 'PLANNED')
+        );
+
         // Fetch topics directly from the Event (no tracks required yet!)
         let realSubTopics = [];
         try {
@@ -79,7 +89,7 @@ const TrackDraw = () => {
         try {
            const tracksRes = await trackService.getTracksByEvent(parsedEventId);
            realTracks = tracksRes.data || [];
-        } catch (e) {}
+        } catch { /* ignored on purpose */ }
 
         if (realTracks.length > 0) {
            // We have real tracks! The draw is already confirmed.
@@ -203,33 +213,39 @@ const TrackDraw = () => {
     try {
       const parsedEventId = parseInt(eventId);
       
-      // 1. Create Tracks in DB and Assign Topics
+      // 1. Create Tracks in DB and Assign Topics.
+      // Build a fresh array instead of mutating the objects held in state — the local
+      // placeholder ids ("T0", "T1"...) are swapped for the real DB ids here.
+      const savedTracks = [];
       for (const track of tracks) {
         if (!track.id || track.id.toString().startsWith('T')) {
           const trackPayload = { name: track.name, description: 'Generated during Track Draw' };
           const createdTrack = await trackService.createTrack(parsedEventId, trackPayload);
           const dbTrack = createdTrack.data;
-          
+
           if (dbTrack && track.subTopic && track.subTopic.id) {
              await trackService.assignTopicToTrack(track.subTopic.id, dbTrack.id);
           }
-          
+
           // 2. Assign teams to the newly created DB track
           if (dbTrack && dbTrack.id) {
-            track.id = dbTrack.id; // update client id
             for (const team of track.teams) {
               if (team.id) {
                 await teamService.assignTrack(team.id, dbTrack.id);
               }
             }
+            savedTracks.push({ ...track, id: dbTrack.id });
+            continue;
           }
         }
+        savedTracks.push(track);
       }
 
+      setTracks(savedTracks);
       setConfirmed(true);
       localStorage.setItem(`trackDrawConfirmed_${parsedEventId}`, 'true');
-      localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(tracks));
-      
+      localStorage.setItem(`trackDraw_${parsedEventId}`, JSON.stringify(savedTracks));
+
       setToast('Draw results have been confirmed and published to the Database!');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {
@@ -244,6 +260,27 @@ const TrackDraw = () => {
   };
 
   const handleResetDraw = async () => {
+    if (roundsAdvanced) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Draw can no longer be reset',
+        message: 'Teams have already been promoted to a later round based on this draw. '
+          + 'Resetting it now would erase those results. Cancel the event instead if it has to start over.',
+        onConfirm: null,
+        type: 'warning',
+      });
+      return;
+    }
+    if (!isAdmin) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Administrator only',
+        message: 'Resetting the draw erases tracks, mentors, submissions, scores and rankings for this event. Only an administrator can do that.',
+        onConfirm: null,
+        type: 'warning',
+      });
+      return;
+    }
     if (isLocked) {
         setModalConfig({
           isOpen: true,
@@ -284,7 +321,7 @@ const TrackDraw = () => {
       
     } catch(e) {
       console.error(e);
-      showToast('Encountered an issue during reset: ' + e.message, 'warning');
+      setToast('Encountered an issue during reset: ' + e.message);
     }
 
     setConfirmed(false);
@@ -318,9 +355,16 @@ const TrackDraw = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontWeight: '600', fontSize: '14px' }}>
               <Lock size={16} /> Confirmed & Published
             </div>
-            <button onClick={handleResetDraw} className="btn btn-secondary" style={{ padding: '8px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
-              Reset Draw
-            </button>
+            {isAdmin && !roundsAdvanced && (
+              <button onClick={handleResetDraw} className="btn btn-secondary" style={{ padding: '8px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                Reset Draw
+              </button>
+            )}
+            {roundsAdvanced && (
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                Teams have advanced to a later round — the draw can no longer be reset.
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -341,7 +385,7 @@ const TrackDraw = () => {
           <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px', maxWidth: '500px', margin: '0 auto 24px' }}>
             You must configure the Sub-topics Bank before conducting the draw.
           </p>
-          <button className="btn btn-primary" onClick={() => navigate(`/admin/events/edit/${parsedEventId}`)} style={{ background: 'var(--warning)', color: '#000' }}>
+          <button className="btn btn-primary" onClick={() => navigate(`/admin/event/${eventId}/edit`)} style={{ background: 'var(--warning)', color: '#000' }}>
             <Target size={18} /> Go to Event Settings
           </button>
         </div>

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Gift, Award, Target, CheckCircle2 } from 'lucide-react';
+import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Target, CheckCircle2 } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
+import { teamService } from '../../api/teamService';
+import { trackService } from '../../api/trackService';
 
 const EventArchive = () => {
   const navigate = useNavigate();
@@ -11,6 +13,8 @@ const EventArchive = () => {
   
   const [eventData, setEventData] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [allRoundsData, setAllRoundsData] = useState({});
+  const [selectedRoundTab, setSelectedRoundTab] = useState('final');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -21,24 +25,84 @@ const EventArchive = () => {
         const evt = evts.find(e => String(e.id) === String(eventId));
         
         if (evt) {
-          const roundsRes = await eventService.getEventRounds(evt.id);
+          const [roundsRes, teamsRes, topicsRes, tracksRes] = await Promise.all([
+            eventService.getEventRounds(evt.id),
+            teamService.getTeamsByEvent(evt.id),
+            trackService.getTopicsByEvent(evt.id),
+            trackService.getTracksByEvent(evt.id)
+          ]);
           evt.rounds = roundsRes.data || [];
+          const teams = teamsRes.data || teamsRes || [];
+          const topics = topicsRes.data || topicsRes || [];
+          const tracks = tracksRes.data || tracksRes || [];
           setEventData(evt);
 
-          // Find the last round for final standings
+          const trackIdMap = {};
+          tracks.forEach(tr => {
+            trackIdMap[tr.id] = tr.name;
+          });
+
+          const trackToTopicMap = {};
+          topics.forEach(tp => {
+            trackToTopicMap[tp.trackId] = tp.name;
+          });
+
+          const teamTrackMap = {};
+          const teamTopicMap = {};
+          teams.forEach(t => {
+            teamTrackMap[t.id] = trackIdMap[t.trackId] || 'Global';
+            // map topic from direct topicId, or fallback to the topic linked to the track
+            const topicByDirectId = topics.find(tp => tp.id === t.topicId);
+            teamTopicMap[t.id] = topicByDirectId?.name || trackToTopicMap[t.trackId] || 'No Topic';
+          });
+
           if (evt.rounds && evt.rounds.length > 0) {
-             const finalRound = evt.rounds[evt.rounds.length - 1];
-             const standingsRes = await standingsService.getStandings(finalRound.id);
-             const dbStandings = standingsRes?.data || standingsRes || [];
+             const standingsPromises = evt.rounds.map(r => standingsService.getStandings(r.id));
+             const allStandingsRes = await Promise.all(standingsPromises);
              
-             // Sort and assign ranks
-             dbStandings.sort((a, b) => (b.score || 0) - (a.score || 0));
-             const formattedBoard = dbStandings.map((s, idx) => ({
+             const roundsDataMap = {};
+             
+             evt.rounds.forEach((r, idx) => {
+               const dbStandings = allStandingsRes[idx]?.data || allStandingsRes[idx] || [];
+               
+               const formattedBoard = dbStandings.map(s => ({
+                   teamId: s.teamId,
+                   name: s.teamName,
+                   score: s.score || 0,
+                   promoted: !!s.promoted,
+                   trackName: teamTrackMap[s.teamId] || 'Global',
+                   topicName: teamTopicMap[s.teamId] || 'No Topic'
+               }));
+               formattedBoard.sort((a, b) => b.score - a.score);
+               
+               const byTrack = {};
+               formattedBoard.forEach(item => {
+                 if (!byTrack[item.trackName]) byTrack[item.trackName] = [];
+                 byTrack[item.trackName].push(item);
+               });
+               
+               Object.keys(byTrack).forEach(track => {
+                 byTrack[track].forEach((item, i) => {
+                   item.rank = i + 1;
+                 });
+               });
+               
+               roundsDataMap[r.id] = byTrack;
+             });
+             
+             setAllRoundsData(roundsDataMap);
+
+             // Fallback final leaderboard is just a flat list of the final round
+             const finalStandings = allStandingsRes[allStandingsRes.length - 1]?.data || allStandingsRes[allStandingsRes.length - 1] || [];
+             finalStandings.sort((a, b) => (b.score || 0) - (a.score || 0));
+             const formattedFinal = finalStandings.map((s, idx) => ({
                  rank: idx + 1,
                  name: s.teamName,
-                 score: s.score || 0
+                 score: s.score || 0,
+                 trackName: teamTrackMap[s.teamId] || 'Global',
+                 topicName: teamTopicMap[s.teamId] || 'No Topic'
              }));
-             setLeaderboard(formattedBoard);
+             setLeaderboard(formattedFinal);
           }
         }
       } catch (err) {
@@ -173,42 +237,135 @@ const EventArchive = () => {
         {/* Leaderboard Tab */}
         {activeTab === 'leaderboard' && (
           <div className="animate-fade-in">
-            <h2 style={{ fontSize: '24px', marginBottom: '24px' }}>Final Leaderboard</h2>
-            <div className="glass-panel" style={{ borderRadius: '16px', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'var(--bg-hover)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
-                    <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', width: '100px' }}>Rank</th>
-                    <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
-                    <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Final Score</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leaderboard.length === 0 ? (
-                    <tr>
-                      <td colSpan="3" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                        No results available yet.
-                      </td>
-                    </tr>
-                  ) : leaderboard.map((team) => (
-                    <tr key={team.rank} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s ease', cursor: 'default' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-subtle)'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
-                      <td style={{ padding: '16px 24px' }}>
-                        {team.rank === 1 && <Trophy size={20} color="#ffd700" />}
-                        {team.rank === 2 && <Medal size={20} color="#c0c0c0" />}
-                        {team.rank === 3 && <Medal size={20} color="#cd7f32" />}
-                        {team.rank > 3 && <span style={{ color: 'var(--text-secondary)', fontWeight: '600', marginLeft: '8px' }}>#{team.rank}</span>}
-                      </td>
-                      <td style={{ padding: '16px 24px', fontWeight: team.rank <= 3 ? '700' : '500', color: team.rank === 1 ? '#ffd700' : 'var(--text-primary)' }}>
-                        {team.name}
-                      </td>
-                      <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: '700', color: team.rank <= 3 ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                        {team.score.toFixed(1)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
+              <button 
+                className={`btn ${selectedRoundTab === 'final' ? 'btn-primary' : 'btn-secondary'}`} 
+                onClick={() => setSelectedRoundTab('final')}
+                style={{ borderRadius: '20px', padding: '6px 16px', fontSize: '14px', flexShrink: 0 }}
+              >
+                Final Overall Ranking
+              </button>
+              {eventData.rounds && eventData.rounds.map((r, idx) => (
+                <button 
+                  key={r.id}
+                  className={`btn ${selectedRoundTab === r.id ? 'btn-primary' : 'btn-secondary'}`} 
+                  onClick={() => setSelectedRoundTab(r.id)}
+                  style={{ borderRadius: '20px', padding: '6px 16px', fontSize: '14px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  Round {idx + 1}: {r.name}
+                </button>
+              ))}
             </div>
+
+            {selectedRoundTab === 'final' ? (
+              <div className="glass-panel" style={{ borderRadius: '16px', overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-hover)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', width: '100px' }}>Rank</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Team Name</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Track</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500' }}>Topic</th>
+                      <th style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontWeight: '500', textAlign: 'right' }}>Final Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leaderboard.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          No results available yet.
+                        </td>
+                      </tr>
+                    ) : leaderboard.map((team) => (
+                      <tr key={team.rank} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s ease', cursor: 'default' }} onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-subtle)'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
+                        <td style={{ padding: '16px 24px' }}>
+                          {team.rank === 1 && <Trophy size={20} color="#ffd700" />}
+                          {team.rank === 2 && <Medal size={20} color="#c0c0c0" />}
+                          {team.rank === 3 && <Medal size={20} color="#cd7f32" />}
+                          {team.rank > 3 && <span style={{ color: 'var(--text-secondary)', fontWeight: '600', marginLeft: '8px' }}>#{team.rank}</span>}
+                        </td>
+                        <td style={{ padding: '16px 24px', fontWeight: team.rank <= 3 ? '700' : '500', color: team.rank === 1 ? '#ffd700' : 'var(--text-primary)' }}>
+                          {team.name}
+                        </td>
+                        <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                          {team.trackName}
+                        </td>
+                        <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                          <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
+                            {team.topicName}
+                          </span>
+                        </td>
+                        <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: '700', color: team.rank <= 3 ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                          {team.score.toFixed(1)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                {allRoundsData[selectedRoundTab] && Object.keys(allRoundsData[selectedRoundTab]).length > 0 ? (
+                  Object.keys(allRoundsData[selectedRoundTab]).map(trackName => (
+                    <div key={trackName} className="glass-panel" style={{ borderRadius: '16px', overflow: 'hidden' }}>
+                      <div style={{ padding: '16px 24px', background: 'var(--bg-hover)', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Target size={18} color="var(--primary)" />
+                        <h3 style={{ margin: 0, fontSize: '16px' }}>{trackName}</h3>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--bg-subtle)', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '80px' }}>Rank</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Team Name</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500' }}>Topic</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', width: '120px' }}>Status</th>
+                            <th style={{ padding: '12px 24px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '500', textAlign: 'right', width: '100px' }}>Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allRoundsData[selectedRoundTab][trackName].map((team) => (
+                            <tr key={team.teamId} style={{ 
+                              borderBottom: '1px solid var(--border-color)', 
+                              background: team.promoted ? 'rgba(34, 197, 94, 0.05)' : 'transparent',
+                              transition: 'background 0.2s ease', 
+                              cursor: 'default' 
+                            }}>
+                              <td style={{ padding: '16px 24px' }}>
+                                <span style={{ color: team.rank <= 3 ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: '600' }}>#{team.rank}</span>
+                              </td>
+                              <td style={{ padding: '16px 24px', fontWeight: team.promoted ? '700' : '500' }}>
+                                {team.name}
+                              </td>
+                              <td style={{ padding: '16px 24px', color: 'var(--text-secondary)' }}>
+                                <span style={{ padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: '6px', fontSize: '12px', fontWeight: '500' }}>
+                                  {team.topicName}
+                                </span>
+                              </td>
+                              <td style={{ padding: '16px 24px' }}>
+                                {team.promoted ? (
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--success)', background: 'rgba(34, 197, 94, 0.1)', padding: '4px 8px', borderRadius: '12px', fontWeight: '600' }}>
+                                    <CheckCircle2 size={14} /> Advanced
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>-</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: '700' }}>
+                                {team.score.toFixed(1)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))
+                ) : (
+                  <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                    No results available for this round yet.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

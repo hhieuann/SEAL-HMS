@@ -42,7 +42,7 @@ async function clearData() {
     }
 
     console.log('\n✅ Successfully cleared all events, teams, and tournament data!');
-    console.log('✅ Accounts (Admin, Staff, Student, Lecturer, Guest Judge) have been PRESERVED.');
+    console.log('Accounts (Admin, Staff, Student, Lecturer) have been preserved.');
   } catch (err) {
     console.error('Error during data clearing:', err);
   } finally {

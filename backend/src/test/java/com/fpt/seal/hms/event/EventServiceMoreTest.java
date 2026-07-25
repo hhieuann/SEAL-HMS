@@ -57,6 +57,7 @@ class EventServiceMoreTest {
     @Mock private RoundRankingRepository roundRankingRepository;
     @Mock private SubmissionRepository submissionRepository;
     @Mock private ScoreRepository scoreRepository;
+    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     @InjectMocks private EventService eventService;
 
     private Event event(long id, EventStatus status) {
@@ -349,9 +350,9 @@ class EventServiceMoreTest {
     // ---------- getAssignedEvents ----------
 
     @Test
-    void getAssignedEvents_mapsEventsForJudge() {
+    void getAssignedEvents_mapsEventsForExpert() {
         Event e = event(1L, EventStatus.ONGOING);
-        when(eventRepository.findEventsAssignedToJudgeByEmail("j@x.y")).thenReturn(List.of(e));
+        when(eventRepository.findEventsAssignedToExpertByEmail("j@x.y")).thenReturn(List.of(e));
         when(teamRepository.countByEventId(1L)).thenReturn(5L);
         when(roundService.getRoundsByEventId(1L)).thenReturn(List.of());
 

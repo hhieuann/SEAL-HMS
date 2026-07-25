@@ -110,23 +110,58 @@ class TeamServiceMoreTest {
             t.setId(5L);
             return t;
         });
-        when(accountRepository.findById(20L)).thenReturn(Optional.of(account(20L)));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
 
-        TeamResponse res = teamService.createTeam(1L, teamRequest());
+        TeamResponse res = teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn");
 
         assertThat(res.getName()).isEqualTo("Byte Me");
         assertThat(res.getStatus()).isEqualTo(TeamStatus.CREATED);
         verify(teamMemberRepository).save(argThat(m ->
                 m.getRole() == MemberRole.LEADER && m.getStatus() == MemberStatus.ACCEPTED));
+        // the body leaderAccountId is ignored: the leader is the authenticated account (20)
+        verify(teamMemberRepository).save(argThat(m -> m.getAccount().getId() == 20L));
+    }
+
+    @Test
+    void createTeam_studentCannotSpoofAnotherLeaderId() {
+        // request.leaderAccountId = 20 (spoof) but the authenticated student is account 99
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u99@fpt.edu.vn")).thenReturn(Optional.of(account(99L)));
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(99L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        teamService.createTeam(1L, teamRequest(), "u99@fpt.edu.vn"); // teamRequest sets leaderAccountId=20
+
+        // leader is the authenticated user (99), not the spoofed 20
+        verify(teamMemberRepository).save(argThat(m -> m.getAccount().getId() == 99L));
+        verify(accountRepository, never()).findById(20L);
+    }
+
+    @Test
+    void createTeam_coordinatorMayCreateOnBehalfWithLeaderAccountId() {
+        Account admin = account(1L);
+        admin.setRole(Role.ADMIN);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("admin@seal-hms.local")).thenReturn(Optional.of(admin));
+        when(accountRepository.findById(20L)).thenReturn(Optional.of(account(20L))); // the target student
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        teamService.createTeam(1L, teamRequest(), "admin@seal-hms.local"); // leaderAccountId=20 honoured for ADMIN
+
+        verify(teamMemberRepository).save(argThat(m -> m.getAccount().getId() == 20L));
     }
 
     @Test
     void createTeam_rejected_whenCreatorAlreadyInATeamOfThisEvent() {
         when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
         when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED))
                 .thenReturn(List.of(new TeamMember()));
 
-        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest()))
+        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("already a member of another team");
         verify(teamRepository, never()).save(any());
@@ -137,9 +172,10 @@ class TeamServiceMoreTest {
         Event notStarted = openEvent();
         notStarted.setRegistrationStartDate(LocalDate.now().plusDays(1));
         when(eventRepository.findById(1L)).thenReturn(Optional.of(notStarted));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
         when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(anyLong(), anyLong(), any())).thenReturn(List.of());
 
-        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest()))
+        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("not started");
 
@@ -147,7 +183,7 @@ class TeamServiceMoreTest {
         closed.setRegistrationEndDate(LocalDate.now().minusDays(1));
         when(eventRepository.findById(1L)).thenReturn(Optional.of(closed));
 
-        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest()))
+        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("closed");
     }
@@ -155,10 +191,11 @@ class TeamServiceMoreTest {
     @Test
     void createTeam_rejected_whenEventFull() {
         when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
         when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(anyLong(), anyLong(), any())).thenReturn(List.of());
         when(teamRepository.countByEventId(1L)).thenReturn(10L); // == maxTeams
 
-        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest()))
+        assertThatThrownBy(() -> teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("maximum number of teams");
     }
@@ -167,7 +204,7 @@ class TeamServiceMoreTest {
     void createTeam_throws_whenEventMissing() {
         when(eventRepository.findById(9L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> teamService.createTeam(9L, teamRequest()))
+        assertThatThrownBy(() -> teamService.createTeam(9L, teamRequest(), "u20@fpt.edu.vn"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -453,6 +490,7 @@ class TeamServiceMoreTest {
         when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
         Account sender = account(20L);
         when(accountRepository.findByEmail(sender.getEmail())).thenReturn(Optional.of(sender));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 20L)).thenReturn(Optional.of(new TeamMember())); // sender is a member
         when(accountService.getFullName(sender)).thenReturn("An Nguyen");
         when(mentorMessageRepository.save(any(MentorMessage.class))).thenAnswer(inv -> {
             MentorMessage m = inv.getArgument(0);
@@ -473,6 +511,7 @@ class TeamServiceMoreTest {
         when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
         Account sender = account(20L); // u20@fpt.edu.vn
         when(accountRepository.findByEmail(sender.getEmail())).thenReturn(Optional.of(sender));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 20L)).thenReturn(Optional.of(new TeamMember()));
         when(accountService.getFullName(sender)).thenReturn(null);
         when(mentorMessageRepository.save(any(MentorMessage.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -486,6 +525,8 @@ class TeamServiceMoreTest {
         Team t = team(5L, TeamStatus.IN_PROGRESS);
         when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
         Account sender = account(20L);
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(sender));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 20L)).thenReturn(Optional.of(new TeamMember()));
         MentorMessage m = new MentorMessage();
         m.setId(1L);
         m.setTeam(t);
@@ -494,10 +535,69 @@ class TeamServiceMoreTest {
         when(mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(5L)).thenReturn(List.of(m));
         when(accountService.getFullName(sender)).thenReturn("An");
 
-        List<MentorMessageDto> out = teamService.getMentorMessages(5L);
+        List<MentorMessageDto> out = teamService.getMentorMessages(5L, "u20@fpt.edu.vn");
 
         assertThat(out).hasSize(1);
         assertThat(out.get(0).getMessage()).isEqualTo("First");
+    }
+
+    // ---------- mentor chat authorization (IDOR) ----------
+
+    @Test
+    void getMentorMessages_rejectsNonMemberNonMentor() {
+        Team t = team(5L, TeamStatus.IN_PROGRESS); // no mentor
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
+        Account outsider = account(77L); // STUDENT, not a member
+        when(accountRepository.findByEmail("outsider@fpt.edu.vn")).thenReturn(Optional.of(outsider));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 77L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> teamService.getMentorMessages(5L, "outsider@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not allowed to access");
+        verify(mentorMessageRepository, never()).findByTeamIdOrderByCreatedAtAsc(any());
+    }
+
+    @Test
+    void sendMentorMessage_rejectsOutsider() {
+        Team t = team(5L, TeamStatus.IN_PROGRESS);
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
+        Account outsider = account(77L);
+        when(accountRepository.findByEmail("outsider@fpt.edu.vn")).thenReturn(Optional.of(outsider));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 77L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> teamService.sendMentorMessageByEmail(5L, "outsider@fpt.edu.vn", "sneaky"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not allowed to access");
+        verify(mentorMessageRepository, never()).save(any());
+    }
+
+    @Test
+    void getMentorMessages_allowsTheAssignedMentor() {
+        Team t = team(5L, TeamStatus.IN_PROGRESS);
+        Account mentorAcc = account(30L);
+        mentorAcc.setEmail("mentor@fpt.edu.vn");
+        Lecturer mentor = new Lecturer();
+        mentor.setId(9L);
+        mentor.setAccount(mentorAcc);
+        t.setMentor(mentor);
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
+        when(accountRepository.findByEmail("mentor@fpt.edu.vn")).thenReturn(Optional.of(mentorAcc));
+        when(teamMemberRepository.findByTeamIdAndAccountId(5L, 30L)).thenReturn(Optional.empty()); // not a member, but the mentor
+        when(mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(5L)).thenReturn(List.of());
+
+        assertThat(teamService.getMentorMessages(5L, "mentor@fpt.edu.vn")).isEmpty(); // allowed
+    }
+
+    @Test
+    void getMentorMessages_allowsAdminStaff() {
+        Team t = team(5L, TeamStatus.IN_PROGRESS);
+        Account admin = account(1L);
+        admin.setRole(Role.ADMIN);
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
+        when(accountRepository.findByEmail("admin@seal-hms.local")).thenReturn(Optional.of(admin));
+        when(mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(5L)).thenReturn(List.of());
+
+        assertThat(teamService.getMentorMessages(5L, "admin@seal-hms.local")).isEmpty(); // ADMIN bypasses membership
     }
 
     // ---------- reads ----------
@@ -515,5 +615,60 @@ class TeamServiceMoreTest {
 
         assertThatThrownBy(() -> teamService.getTeamById(9L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ---------- invite code ----------
+
+    @Test
+    void createTeam_generatesSixCharInviteCode_fromUnambiguousAlphabet() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        when(teamRepository.existsByInviteCode(any())).thenReturn(false);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        TeamResponse res = teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn");
+
+        assertThat(res.getInviteCode()).hasSize(6)
+                // excludes look-alike characters (0/O, 1/I) to avoid typos when sharing
+                .matches("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}");
+    }
+
+    @Test
+    void createTeam_retriesInviteCode_onCollision() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        // first two generated codes already exist, the third is free
+        when(teamRepository.existsByInviteCode(any())).thenReturn(true, true, false);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        TeamResponse res = teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn");
+
+        assertThat(res.getInviteCode()).hasSize(6);
+        verify(teamRepository, times(3)).existsByInviteCode(any());
+    }
+
+    @Test
+    void getTeamByInviteCode_findsTeam_caseInsensitively() {
+        Team t = team(5L, TeamStatus.CREATED);
+        t.setInviteCode("AB23CD");
+        when(teamRepository.findByInviteCode("AB23CD")).thenReturn(Optional.of(t));
+
+        TeamResponse res = teamService.getTeamByInviteCode("ab23cd"); // lower-case input
+
+        assertThat(res.getId()).isEqualTo(5L);
+        assertThat(res.getInviteCode()).isEqualTo("AB23CD");
+    }
+
+    @Test
+    void getTeamByInviteCode_throws_whenUnknownCode() {
+        when(teamRepository.findByInviteCode("ZZZZZZ")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> teamService.getTeamByInviteCode("ZZZZZZ"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("No team found with invite code");
     }
 }

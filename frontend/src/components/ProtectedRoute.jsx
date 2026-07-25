@@ -1,5 +1,4 @@
-import React from 'react';
-import { Navigate, Outlet, useLocation, Link } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
 const ProtectedRoute = ({ allowedRoles, children }) => {
   const location = useLocation();

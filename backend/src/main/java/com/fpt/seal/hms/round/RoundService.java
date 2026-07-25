@@ -164,18 +164,39 @@ public class RoundService {
         }
     }
 
+    /**
+     * Completing a round eliminates whoever was not promoted out of it.
+     *
+     * The final round is the exception: there is no next round to be promoted into, so every
+     * team's {@code isPromoted} is false and eliminating on that basis would mark the whole
+     * finals field — the champion included — as ELIMINATED. Teams that reach the end of the
+     * event finish as COMPLETED instead.
+     */
     private void eliminateNonPromotedTeams(Round round) {
+        boolean isFinalRound = isFinalRound(round);
         List<RoundRanking> rankings = roundRankingRepository.findByRoundId(round.getId());
         for (RoundRanking rr : rankings) {
             com.fpt.seal.hms.team.entity.Team team = rr.getTeam();
-            if (rr.getIsPromoted() == null || !rr.getIsPromoted()) {
-                if (team.getStatus() != com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED && 
-                    team.getStatus() != com.fpt.seal.hms.common.enums.TeamStatus.DISQUALIFIED) {
-                    team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED);
-                    teamRepository.save(team);
-                }
+            if (team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED
+                    || team.getStatus() == com.fpt.seal.hms.common.enums.TeamStatus.DISQUALIFIED) {
+                continue; // already out on its own merits — leave the reason intact
+            }
+            if (isFinalRound) {
+                team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.COMPLETED);
+                teamRepository.save(team);
+            } else if (rr.getIsPromoted() == null || !rr.getIsPromoted()) {
+                team.setStatus(com.fpt.seal.hms.common.enums.TeamStatus.ELIMINATED);
+                teamRepository.save(team);
             }
         }
+    }
+
+    private boolean isFinalRound(Round round) {
+        Integer maxSeq = roundRepository.findMaxRoundSeqByEventId(round.getEvent().getId()).orElse(null);
+        if (maxSeq == null || round.getRoundSeq() == null) {
+            return false;
+        }
+        return round.getRoundSeq() >= maxSeq;
     }
 
     /**

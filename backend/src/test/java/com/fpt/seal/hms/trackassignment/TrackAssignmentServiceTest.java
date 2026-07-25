@@ -31,7 +31,38 @@ class TrackAssignmentServiceTest {
     @Mock private TrackRepository trackRepository;
     @Mock private LecturerRepository lecturerRepository;
     @Mock private TeamRepository teamRepository;
+    @Mock private com.fpt.seal.hms.round.RoundRepository roundRepository;
+    @Mock private com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
     @InjectMocks private TrackAssignmentService service;
+
+    /** A judge assignment on {@code trackId}, not yet marked complete. */
+    private TrackAssignment judgeAssignment(long id, Track onTrack) {
+        TrackAssignment a = new TrackAssignment();
+        a.setId(id);
+        a.setTrack(onTrack);
+        a.setLecturer(lecturer(1L));
+        a.setRole(AssignmentRole.JUDGE);
+        a.setScoringCompleted(false);
+        return a;
+    }
+
+    private com.fpt.seal.hms.roundranking.entity.RoundRanking rankingOnTrack(Track onTrack) {
+        com.fpt.seal.hms.team.entity.Team team = new com.fpt.seal.hms.team.entity.Team();
+        team.setId(900L);
+        team.setTrack(onTrack);
+        var rr = new com.fpt.seal.hms.roundranking.entity.RoundRanking();
+        rr.setTeam(team);
+        return rr;
+    }
+
+    private com.fpt.seal.hms.round.entity.Round roundOfEvent(long roundId, long eventId) {
+        var event = new com.fpt.seal.hms.event.entity.Event();
+        event.setId(eventId);
+        var round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(roundId);
+        round.setEvent(event);
+        return round;
+    }
 
     private Track track(long id) {
         Track t = new Track();
@@ -180,5 +211,58 @@ class TrackAssignmentServiceTest {
         assertThat(service.getByTrack(3L)).hasSize(1);
         assertThat(service.getByEvent(1L)).hasSize(1);
         assertThat(service.getByLecturerEmail("judge@fpt.edu.vn")).hasSize(1);
+    }
+
+    // ---------- getJudgesBlockingRound ----------
+
+    /**
+     * A track nobody advanced into must not hold the event hostage: its judge never sees a
+     * "Complete scoring" button, so waiting on them would deadlock the round.
+     */
+    @Test
+    void judgesBlockingRound_skipsTracksWithNoTeamsInThatRound() {
+        Track busy = track(3L);
+        Track empty = track(4L);
+        when(roundRepository.findById(50L)).thenReturn(Optional.of(roundOfEvent(50L, 1L)));
+        when(roundRankingRepository.findByRoundId(50L)).thenReturn(java.util.List.of(rankingOnTrack(busy)));
+        when(assignmentRepository.findByEventId(1L))
+                .thenReturn(java.util.List.of(judgeAssignment(1L, busy), judgeAssignment(2L, empty)));
+
+        var blocking = service.getJudgesBlockingRound(50L);
+
+        assertThat(blocking).extracting(TrackAssignmentResponse::trackId).containsExactly(3L);
+    }
+
+    @Test
+    void judgesBlockingRound_skipsJudgesWhoAlreadyCompleted() {
+        Track busy = track(3L);
+        TrackAssignment done = judgeAssignment(1L, busy);
+        done.setScoringCompleted(true);
+        when(roundRepository.findById(50L)).thenReturn(Optional.of(roundOfEvent(50L, 1L)));
+        when(roundRankingRepository.findByRoundId(50L)).thenReturn(java.util.List.of(rankingOnTrack(busy)));
+        when(assignmentRepository.findByEventId(1L)).thenReturn(java.util.List.of(done));
+
+        assertThat(service.getJudgesBlockingRound(50L)).isEmpty();
+    }
+
+    /** Mentors are not part of the scoring gate. */
+    @Test
+    void judgesBlockingRound_ignoresMentorAssignments() {
+        Track busy = track(3L);
+        TrackAssignment mentor = judgeAssignment(1L, busy);
+        mentor.setRole(AssignmentRole.MENTOR);
+        when(roundRepository.findById(50L)).thenReturn(Optional.of(roundOfEvent(50L, 1L)));
+        when(roundRankingRepository.findByRoundId(50L)).thenReturn(java.util.List.of(rankingOnTrack(busy)));
+        when(assignmentRepository.findByEventId(1L)).thenReturn(java.util.List.of(mentor));
+
+        assertThat(service.getJudgesBlockingRound(50L)).isEmpty();
+    }
+
+    @Test
+    void judgesBlockingRound_throwsWhenRoundMissing() {
+        when(roundRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getJudgesBlockingRound(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 }

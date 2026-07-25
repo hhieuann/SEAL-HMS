@@ -21,6 +21,14 @@ public interface TrackAssignmentRepository extends JpaRepository<TrackAssignment
 
     boolean existsByTrack_IdAndLecturer_IdAndRole(Long trackId, Long lecturerId, AssignmentRole role);
 
+    boolean existsByTrack_IdAndLecturer_Account_EmailAndRole(
+            Long trackId, String email, AssignmentRole role);
+
+    boolean existsByTrack_Event_IdAndLecturer_Account_EmailAndRole(
+            Long eventId, String email, AssignmentRole role);
+
+    boolean existsByLecturer_Account_EmailAndRole(String email, AssignmentRole role);
+
     @Query("SELECT a FROM TrackAssignment a WHERE a.track.event.id = :eventId")
     List<TrackAssignment> findByEventId(@Param("eventId") Long eventId);
 }

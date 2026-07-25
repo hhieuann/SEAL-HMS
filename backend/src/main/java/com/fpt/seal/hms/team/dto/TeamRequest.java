@@ -15,6 +15,7 @@ public class TeamRequest {
 
     private Long chapterId;
 
-    @NotNull(message = "Leader Account ID is required to create a team")
+    // Optional: the leader is normally the authenticated user. Only ADMIN/STAFF may set
+    // this to create a team on a student's behalf — a student's value is ignored.
     private Long leaderAccountId;
 }

@@ -4,6 +4,12 @@ import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
 import com.fpt.seal.hms.common.enums.AccountStatus;
 import com.fpt.seal.hms.common.enums.Role;
+import com.fpt.seal.hms.lecturer.Lecturer;
+import com.fpt.seal.hms.lecturer.LecturerRepository;
+import com.fpt.seal.hms.staff.StaffRepository;
+import com.fpt.seal.hms.staff.entity.Staff;
+import com.fpt.seal.hms.student.Student;
+import com.fpt.seal.hms.student.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +33,9 @@ public class AdminSeeder implements CommandLineRunner {
 
     private final AccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
+    private final StaffRepository staffRepository;
+    private final LecturerRepository lecturerRepository;
+    private final StudentRepository studentRepository;
 
     @Value("${app.admin.email:admin@seal-hms.local}")
     private String adminEmail;
@@ -52,33 +61,85 @@ public class AdminSeeder implements CommandLineRunner {
     @Value("${app.student.password:Student@12345}")
     private String studentPassword;
 
-    @Value("${app.guest_judge.email:judge@seal-hms.local}")
-    private String guestJudgeEmail;
-
-    @Value("${app.guest_judge.password:Judge@12345}")
-    private String guestJudgePassword;
-
     @Override
     @Transactional
     public void run(String... args) {
         seedIfMissing(Role.ADMIN, adminEmail, adminPassword);
-        seedIfMissing(Role.STAFF, staffEmail, staffPassword);
-        seedIfMissing(Role.LECTURER, lecturerEmail, lecturerPassword);
-        seedIfMissing(Role.STUDENT, studentEmail, studentPassword);
-        seedIfMissing(Role.GUEST_JUDGE, guestJudgeEmail, guestJudgePassword);
+        Account staff = seedIfMissing(Role.STAFF, staffEmail, staffPassword);
+        Account lecturer = seedIfMissing(Role.LECTURER, lecturerEmail, lecturerPassword);
+        Account student = seedIfMissing(Role.STUDENT, studentEmail, studentPassword);
+
+        seedStaffProfileIfMissing(staff);
+        seedLecturerProfileIfMissing(lecturer);
+        seedStudentProfileIfMissing(student);
     }
 
-    /** Create an ACTIVE account with the given role only when none of that role exists. */
-    private void seedIfMissing(Role role, String email, String rawPassword) {
-        if (accountRepository.existsByRole(role)) {
-            return; // an account of this role already exists — nothing to seed
+    /**
+     * Return the configured demo account when it already exists, or create it when
+     * no account of the requested role exists. Returning the existing account lets
+     * startup repair profile rows that were missing in older databases.
+     */
+    private Account seedIfMissing(Role role, String email, String rawPassword) {
+        Account configuredAccount = accountRepository.findByEmail(email).orElse(null);
+        if (configuredAccount != null) {
+            if (configuredAccount.getRole() != role) {
+                log.warn("Configured seed account '{}' has role {} instead of {}; profile seed skipped",
+                        email, configuredAccount.getRole(), role);
+                return null;
+            }
+            return configuredAccount;
         }
+
+        if (accountRepository.existsByRole(role)) {
+            return null; // a non-demo account already fulfils this role
+        }
+
         Account account = new Account();
         account.setEmail(email);
         account.setPassword(passwordEncoder.encode(rawPassword));
         account.setRole(role);
         account.setStatus(AccountStatus.ACTIVE);
-        accountRepository.save(account);
+        account = accountRepository.save(account);
         log.warn("Seeded default {} '{}' (status ACTIVE). CHANGE THE PASSWORD after first login!", role, email);
+        return account;
+    }
+
+    private void seedStaffProfileIfMissing(Account account) {
+        if (account == null || staffRepository.findByAccount_Id(account.getId()).isPresent()) {
+            return;
+        }
+        Staff profile = new Staff();
+        profile.setAccount(account);
+        profile.setFullName("Demo Event Staff");
+        profile.setDepartment("SEAL Hackathon Operations");
+        profile.setCampus("FPT University HCMC");
+        staffRepository.save(profile);
+        log.info("Created missing staff profile for '{}'", account.getEmail());
+    }
+
+    private void seedLecturerProfileIfMissing(Account account) {
+        if (account == null || lecturerRepository.existsByAccount_Id(account.getId())) {
+            return;
+        }
+        Lecturer profile = new Lecturer();
+        profile.setAccount(account);
+        profile.setFullName("Demo Lecturer");
+        profile.setDepartment("Software Engineering");
+        profile.setCampus("FPT University HCMC");
+        lecturerRepository.save(profile);
+        log.info("Created missing lecturer profile for '{}'", account.getEmail());
+    }
+
+    private void seedStudentProfileIfMissing(Account account) {
+        if (account == null || studentRepository.existsByAccount_Id(account.getId())) {
+            return;
+        }
+        Student profile = new Student();
+        profile.setAccount(account);
+        profile.setFirstName("Demo");
+        profile.setLastName("Student");
+        profile.setCampus("FPT University HCMC");
+        studentRepository.save(profile);
+        log.info("Created missing student profile for '{}'", account.getEmail());
     }
 }

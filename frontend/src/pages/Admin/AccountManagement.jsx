@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { UserX, Search, Plus, Mail, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserX, Search, Eye, CheckCircle, XCircle, Clock, X, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const AccountManagement = () => {
   const [tab, setTab] = useState('pending');
@@ -11,6 +12,8 @@ const AccountManagement = () => {
   const [newAccount, setNewAccount] = useState({ fullName: '', email: '', department: '', campus: '', phone: '' });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  // Failures outside the create form need their own dialog — `error` only renders there.
+  const [failureMessage, setFailureMessage] = useState('');
   const [shaking, setShaking] = useState(false);
   const [tempPassword, setTempPassword] = useState(null); // shown after successful creation
   const [copied, setCopied] = useState(false);
@@ -76,12 +79,6 @@ const AccountManagement = () => {
     }
   };
 
-  // Opens the admin's mail client addressed to the user — no server-side mail needed.
-  const handleSendEmail = (u) => {
-    const subject = encodeURIComponent('[SEAL Hackathon] Notification');
-    window.location.href = `mailto:${u.email}?subject=${subject}`;
-  };
-
   const confirmSuspend = async () => {
     if (!suspendAccount) return;
     const acc = suspendAccount;
@@ -92,7 +89,7 @@ const AccountManagement = () => {
       loadData();
     } catch (err) {
       console.error('Failed to suspend account', err);
-      alert('Error: ' + (err.response?.data?.message || err.message));
+      setFailureMessage(err.response?.data?.message || err.message || 'Could not suspend this account.');
     } finally {
       setProcessingId(null);
     }
@@ -117,7 +114,7 @@ const AccountManagement = () => {
       return;
     }
 
-    const phoneRegex = /^\+?[0-9\s\-]{10,20}$/;
+    const phoneRegex = /^\+?[0-9\s-]{10,20}$/;
     if (!phoneRegex.test(newAccount.phone.trim())) {
       setError('Phone number must contain only 10-20 digits (spaces/hyphens allowed).');
       setShaking(true);
@@ -172,10 +169,7 @@ const AccountManagement = () => {
     STUDENT: '#3b82f6', 
     LECTURER: '#10b981', 
     ADMIN: '#ef4444', 
-    STAFF: '#f59e0b', 
-    JUDGE: '#8b5cf6', 
-    GUEST_JUDGE: '#d946ef', 
-    MENTOR: '#06b6d4' 
+    STAFF: '#f59e0b'
   };
 
   const filteredPending = pendingList.filter(a => 
@@ -221,9 +215,6 @@ const AccountManagement = () => {
               <option value="LECTURER">Lecturer</option>
               <option value="STAFF">Staff</option>
               <option value="ADMIN">Admin</option>
-              <option value="JUDGE">Judge</option>
-              <option value="GUEST_JUDGE">Guest Judge</option>
-              <option value="MENTOR">Mentor</option>
             </select>
           </div>
         </div>
@@ -236,7 +227,7 @@ const AccountManagement = () => {
                   <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>{h}</th>
                 ))
               ) : (
-                ['User Info', 'Global Role', 'Joined Date', 'Status', 'Actions'].map(h => (
+                ['User Info', 'Global Role', 'Joined Date', 'Actions'].map(h => (
                   <th key={h} style={{ padding: '16px 24px', textAlign: 'left', fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.5px' }}>{h}</th>
                 ))
               )}
@@ -275,7 +266,7 @@ const AccountManagement = () => {
                     {u.proof}
                   </span>
                 </td>
-                <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.registered}</td>
+                <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.joined}</td>
                 <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
@@ -325,14 +316,8 @@ const AccountManagement = () => {
                 </td>
                 <td style={{ padding: '16px 24px', fontSize: '13px', color: 'var(--text-secondary)' }}>{u.joined}</td>
                 <td style={{ padding: '16px 24px' }}>
-                  <span style={{ fontSize: '12px', padding: '4px 8px', borderRadius: '6px', fontWeight: '600', background: u.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: u.status === 'active' ? 'var(--success)' : 'var(--danger)', textTransform: 'capitalize' }}>
-                    {u.status}
-                  </span>
-                </td>
-                <td style={{ padding: '16px 24px' }}>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => setProfileAccount(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="View Profile"><Eye size={14} /></button>
-                    <button onClick={() => handleSendEmail(u)} style={{ padding: '6px', background: 'var(--bg-hover)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer' }} title="Send Email"><Mail size={14} /></button>
                     <button onClick={() => setSuspendAccount(u)} disabled={processingId === u.id} style={{ padding: '6px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer' }} title="Suspend Account"><UserX size={14} /></button>
                   </div>
                 </td>
@@ -548,7 +533,7 @@ const AccountManagement = () => {
             {profileAccount.proofUrl && (
               <button onClick={() => { const url = profileAccount.proofUrl; setProfileAccount(null); setShowProofUrl(url); }} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: '20px' }}>View Verification Proof</button>
             )}
-            <button onClick={() => handleSendEmail(profileAccount)} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '10px' }}><Mail size={16} /> Send Email</button>
+            <button onClick={() => setProfileAccount(null)} className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', marginTop: '16px' }}>Close</button>
           </div>
         </div>
       )}
@@ -570,6 +555,15 @@ const AccountManagement = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!failureMessage}
+        title="Action failed"
+        message={failureMessage}
+        type="error"
+        onConfirm={null}
+        onClose={() => setFailureMessage('')}
+      />
     </div>
   );
 };

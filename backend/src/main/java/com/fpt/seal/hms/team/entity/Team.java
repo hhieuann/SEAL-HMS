@@ -54,6 +54,9 @@ public class Team extends BaseEntity {
     @Column(nullable = false, length = 20)
     private TeamStatus status = TeamStatus.CREATED;
 
+    @Column(name = "invite_code", length = 6, unique = true)
+    private String inviteCode;
+
     @Column(name = "event_score", precision = 8, scale = 2)
     private BigDecimal eventScore;
 

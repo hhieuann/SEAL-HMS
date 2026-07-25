@@ -51,6 +51,7 @@ class EventServiceBranchTest {
     @Mock private RoundRankingRepository roundRankingRepository;
     @Mock private SubmissionRepository submissionRepository;
     @Mock private ScoreRepository scoreRepository;
+    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     @InjectMocks private EventService eventService;
 
     private Event savedAs(long id) {

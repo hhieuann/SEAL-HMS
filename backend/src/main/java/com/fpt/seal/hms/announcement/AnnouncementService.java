@@ -4,17 +4,17 @@ import com.fpt.seal.hms.announcement.dto.AnnouncementRequest;
 import com.fpt.seal.hms.announcement.dto.AnnouncementResponse;
 import com.fpt.seal.hms.announcement.entity.Announcement;
 import com.fpt.seal.hms.auditlog.AuditLogService;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.event.EventRepository;
 import com.fpt.seal.hms.event.entity.Event;
+import com.fpt.seal.hms.team.TeamRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
-import com.fpt.seal.hms.trackassignment.TrackAssignment;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import java.util.stream.Collectors;
 
 import java.util.List;
 
@@ -26,6 +26,7 @@ public class AnnouncementService {
     private final EventRepository eventRepository;
     private final AuditLogService auditLogService;
     private final TrackAssignmentRepository trackAssignmentRepository;
+    private final TeamRepository teamRepository;
 
     @Transactional
     public AnnouncementResponse create(String authorEmail, AnnouncementRequest req) {
@@ -55,19 +56,14 @@ public class AnnouncementService {
                 if ("ALL".equalsIgnoreCase(a.getTargetRole()) || a.getTargetRole() == null) return true;
                 
                 if (role.equals("ROLE_STUDENT") && "STUDENT".equalsIgnoreCase(a.getTargetRole())) return true;
-                if (role.equals("ROLE_GUEST_JUDGE") && "JUDGE".equalsIgnoreCase(a.getTargetRole())) return true;
                 
                 if (role.equals("ROLE_LECTURER")) {
                     if ("LECTURER".equalsIgnoreCase(a.getTargetRole())) return true;
-                    // Check assignments for this lecturer
-                    if (eventId != null) {
-                        List<TrackAssignment> assignments = trackAssignmentRepository.findByLecturer_Account_Email(auth.getName())
-                                .stream().filter(ta -> ta.getTrack() != null && ta.getTrack().getEvent() != null && ta.getTrack().getEvent().getId().equals(eventId)).toList();
-                        boolean isMentor = assignments.stream().anyMatch(ta -> ta.getRole().name().equals("MENTOR"));
-                        boolean isJudge = assignments.stream().anyMatch(ta -> ta.getRole().name().equals("JUDGE"));
-                        if (isMentor && "MENTOR".equalsIgnoreCase(a.getTargetRole())) return true;
-                        if (isJudge && "JUDGE".equalsIgnoreCase(a.getTargetRole())) return true;
-                    }
+                    Long assignmentEventId = a.getEvent() != null ? a.getEvent().getId() : eventId;
+                    if ("JUDGE".equalsIgnoreCase(a.getTargetRole())
+                            && hasJudgeAssignment(auth.getName(), assignmentEventId)) return true;
+                    if ("MENTOR".equalsIgnoreCase(a.getTargetRole())
+                            && hasMentorAssignment(auth.getName(), assignmentEventId)) return true;
                 }
                 return false;
             }).toList();
@@ -102,5 +98,21 @@ public class AnnouncementService {
         }
         return eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found: " + eventId));
+    }
+
+    private boolean hasJudgeAssignment(String email, Long eventId) {
+        if (eventId == null) {
+            return trackAssignmentRepository.existsByLecturer_Account_EmailAndRole(
+                    email, AssignmentRole.JUDGE);
+        }
+        return trackAssignmentRepository.existsByTrack_Event_IdAndLecturer_Account_EmailAndRole(
+                eventId, email, AssignmentRole.JUDGE);
+    }
+
+    private boolean hasMentorAssignment(String email, Long eventId) {
+        if (eventId == null) {
+            return teamRepository.existsByMentor_Account_Email(email);
+        }
+        return teamRepository.existsByEvent_IdAndMentor_Account_Email(eventId, email);
     }
 }

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { HelpCircle, ChevronDown, ChevronUp, Info, ShieldAlert, BookOpen, Terminal } from 'lucide-react';
+import { useState } from 'react';
+import { HelpCircle, ChevronDown, ChevronUp, ShieldAlert, BookOpen, Terminal } from 'lucide-react';
 import './Workspace.css';
 
 const FAQ = () => {

@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class TeamResponse {
     private Long id;
     private String name;
+    private String inviteCode;
     private Long chapterId;
     private Long trackId;
     private Long topicId;

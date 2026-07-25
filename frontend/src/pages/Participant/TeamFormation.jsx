@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
 import './Workspace.css';
@@ -15,6 +15,8 @@ const TeamFormation = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [trackName, setTrackName] = useState('');
+  const [chapters, setChapters] = useState([]);
+  const [chapterId, setChapterId] = useState(''); // '' = no chapter
 
   useEffect(() => {
     const eventId = localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId');
@@ -28,6 +30,13 @@ const TeamFormation = () => {
         }
       })
       .catch(() => {}); // Fail silently — subtitle just won't show track name
+  }, []);
+
+  // Load chapters for the optional "join a chapter" dropdown.
+  useEffect(() => {
+    apiClient.get('/api/v1/chapters')
+      .then(res => setChapters(res.data?.data || res.data || []))
+      .catch(() => {}); // no chapters configured -> dropdown just shows the "no chapter" option
   }, []);
 
   const copyToClipboard = () => {
@@ -46,16 +55,17 @@ const TeamFormation = () => {
       const { teamService } = await import('../../api/teamService.js');
       const eventId = parseInt(localStorage.getItem('p_eventId') || localStorage.getItem('p_selectedEventId') || '1');
       const leaderAccountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
-      const response = await teamService.createTeam(eventId, { 
-        name: teamName, 
+      const response = await teamService.createTeam(eventId, {
+        name: teamName,
         leaderAccountId,
+        chapterId: chapterId ? parseInt(chapterId) : null, // null = not affiliated with a chapter
       });
       
       // The API returns { success: true, data: { id, name, ... } }
       // teamService returns the full response.data block.
       const teamResponseData = response.data || response; 
       const realData = teamResponseData.data || teamResponseData; // Extract inner data
-      localStorage.setItem('p_teamInviteCode', realData.inviteCode || `SEAL${realData.id}`);
+      localStorage.setItem('p_teamInviteCode', realData.inviteCode);
       localStorage.setItem('myTeamName', realData.name || teamName);
       localStorage.setItem('p_teamId', realData.id || '1');
       localStorage.setItem('p_hasJoinedEvent', 'true');
@@ -84,10 +94,10 @@ const TeamFormation = () => {
       const { teamService } = await import('../../api/teamService.js');
       const accountId = parseInt(localStorage.getItem('accountId') || localStorage.getItem('userId') || '1');
       
-      const teamIdMatch = inviteCode.match(/^SEAL(\d+)$/i);
-      if (!teamIdMatch) throw new Error('Invalid invite code. Ensure you use the exact code provided by your leader (e.g. SEAL6)');
-      
-      const teamId = parseInt(teamIdMatch[1]);
+      // Look up the team by invite code via the backend API
+      const lookupRes = await teamService.getTeamByInviteCode(inviteCode.toUpperCase());
+      const teamData = lookupRes.data || lookupRes;
+      const teamId = teamData.id;
 
       // Use real backend API to send an invite request
       await teamService.inviteMember(teamId, { accountId });
@@ -210,7 +220,27 @@ const TeamFormation = () => {
               <input type="text" id="teamName" className="task-input" placeholder=" " required style={{ width: '100%', paddingTop: '20px', paddingBottom: '8px' }} />
               <label htmlFor="teamName">Team Name</label>
             </div>
-            
+
+            <div style={{ marginBottom: '20px' }}>
+              <label htmlFor="chapterSelect" style={{ display: 'block', marginBottom: '8px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600' }}>
+                Chapter <span style={{ fontWeight: '400' }}>(optional)</span>
+              </label>
+              <select
+                id="chapterSelect"
+                value={chapterId}
+                onChange={(e) => setChapterId(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid var(--border-color)', background: '#FFFFFF', color: 'var(--text-primary)', fontSize: '14px', outline: 'none' }}
+              >
+                <option value="">No chapter (event ranking only)</option>
+                {chapters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px', lineHeight: '1.5' }}>
+                Pick a chapter to contribute points to the year-long <strong>Chapter Leaderboard</strong>. Leave empty to compete in this event only.
+              </p>
+            </div>
+
             <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', marginBottom: '20px' }}>
               <label style={{ display: 'block', marginBottom: '12px', color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '600' }}>Team Size Constraint</label>
               <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: '8px' }}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Send, Users, MessageSquare } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 
@@ -23,7 +23,7 @@ const MentorChat = () => {
         try {
           const { trackService } = await import('../../api/trackService.js');
           allTracks = (await trackService.getTracksByEvent(eventId))?.data || [];
-        } catch (err) {}
+        } catch { /* ignored on purpose */ }
         setTracks(allTracks);
 
         // Filter teams mentored by current user

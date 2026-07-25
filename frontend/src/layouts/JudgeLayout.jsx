@@ -11,7 +11,7 @@ const JudgeLayout = () => {
     authApi.logout();
   };
 
-  const [activeContext, setActiveContext] = React.useState(() => {
+  const [activeContext] = React.useState(() => {
     const saved = localStorage.getItem('expertContext');
     return saved ? JSON.parse(saved) : { event: 'SEAL Hackathon Spring 2026', role: 'Judge', track: 'Track B - Medical Knowledge RAG' };
   });

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
@@ -27,8 +27,25 @@ const JudgePanel = () => {
   const [completeScoringErrorModal, setCompleteScoringErrorModal] = useState(false);
   const [scoringCompleted, setScoringCompleted] = useState(false);
   const [judgeTrackId, setJudgeTrackId] = useState(null);
+  // No team advanced into this judge's track for the active round — a different situation
+  // from the admin not having defined criteria, and it must not read as an error.
+  const [noTeamsInTrack, setNoTeamsInTrack] = useState(false);
 
   const judgeAccountId = parseInt(localStorage.getItem('userId') || '1');
+
+  // Declared before the effect below, which calls it while seeding the first team.
+  const initScores = (teamId, scoresMap) => {
+    const existing = scoresMap[teamId];
+    if (existing && existing.length > 0) {
+      const init = {};
+      existing.forEach(s => { init[s.criterionId] = parseFloat(s.score); });
+      setScores(init);
+      setFeedback(existing[0]?.comment || '');
+    } else {
+      setScores({});
+      setFeedback('');
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -122,16 +139,19 @@ const JudgePanel = () => {
           console.warn('Could not check scoring completion status', e);
         }
 
-        if (approvedTeams.length > 0) {
-          // Load criteria for this round
-          try {
-            const criteriaRes = await criterionService.getCriteria(round.id);
-            const criteriaList = criteriaRes?.data || [];
-            setCriteria(criteriaList);
-          } catch (e) {
-            console.error(e);
-          }
+        // Criteria are loaded regardless of whether any team reached this track: an empty
+        // criteria list must only ever mean "the admin has not defined them", never
+        // "nobody advanced here".
+        try {
+          const criteriaRes = await criterionService.getCriteria(round.id);
+          setCriteria(criteriaRes?.data || []);
+        } catch (e) {
+          console.error(e);
+        }
 
+        setNoTeamsInTrack(approvedTeams.length === 0);
+
+        if (approvedTeams.length > 0) {
           // Load submissions & existing scores for all approved teams
           const subMap = {};
           const scoresMap = {};
@@ -170,19 +190,6 @@ const JudgePanel = () => {
     };
     load();
   }, []);
-
-  const initScores = (teamId, scoresMap) => {
-    const existing = scoresMap[teamId];
-    if (existing && existing.length > 0) {
-      const init = {};
-      existing.forEach(s => { init[s.criterionId] = parseFloat(s.score); });
-      setScores(init);
-      setFeedback(existing[0]?.comment || '');
-    } else {
-      setScores({});
-      setFeedback('');
-    }
-  };
 
   const handleSelectTeam = (teamId) => {
     setActiveTeamId(teamId);
@@ -239,7 +246,7 @@ const JudgePanel = () => {
       setExistingScores(prev => ({ ...prev, [activeTeamId]: myNewScores }));
       setSubmitToast(`✓ Score submitted: ${total.toFixed(1)} pts for ${activeTeam?.name}`);
       setTimeout(() => setSubmitToast(''), 3500);
-    } catch (e) {
+    } catch {
       setSubmitError('Failed to submit score. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -335,7 +342,16 @@ const JudgePanel = () => {
         )}
       </div>
 
-      {criteria.length === 0 && (
+      {noTeamsInTrack ? (
+        <div style={{ padding: '14px 20px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '12px', marginBottom: '20px', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '14px' }}>
+          <AlertCircle size={18} color="var(--primary)" />
+          <span>
+            <strong>No team advanced into your track</strong> for {currentRound.name}, so there is
+            nothing to score here. You do not need to complete scoring — the organizers can close
+            this round without you.
+          </span>
+        </div>
+      ) : criteria.length === 0 && (
         <div style={{ padding: '14px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '12px', marginBottom: '20px', display: 'flex', gap: '12px', alignItems: 'center', fontSize: '14px' }}>
           <AlertCircle size={18} color="var(--warning)" />
           <span><strong>No criteria defined</strong> for this round. Ask the admin to set up scoring criteria in the <strong>Criteria Manager</strong> first.</span>

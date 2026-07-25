@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Plus, ChevronDown, ChevronUp, Edit2, Trash2, Settings, Target, Check } from 'lucide-react';
+import { Calendar, Plus, ChevronDown, ChevronUp, Edit2, Settings, Target } from 'lucide-react';
 
 const EventsConfig = () => {
   const navigate = useNavigate();
@@ -34,7 +34,7 @@ const EventsConfig = () => {
                   rounds: fetchedRounds.map(r => {
                     let startStr = r.startTime;
                     if (Array.isArray(startStr)) {
-                      const [y, m, d, h, min, s] = startStr;
+                      const [y, m, d, h, min] = startStr;
                       startStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h || 0).padStart(2, '0')}:${String(min || 0).padStart(2, '0')}`;
                     }
                     return { ...r, start: startStr, durationHours: r.durationHours };
@@ -46,6 +46,7 @@ const EventsConfig = () => {
               }
             }));
 
+            // Backend already returns events newest-first (ORDER BY createdAt DESC).
             setEvents(enrichedEvents);
             setExpandedEvent(enrichedEvents[0].id);
           }
@@ -54,7 +55,7 @@ const EventsConfig = () => {
     });
   }, []);
 
-  const statusColor = { ongoing: 'var(--success)', upcoming: 'var(--primary)', completed: 'var(--text-secondary)' };
+  const statusColor = { ongoing: 'var(--success)', upcoming: 'var(--primary)', completed: 'var(--text-secondary)', cancelled: 'var(--danger)' };
 
   return (
     <div className="animate-fade-in">

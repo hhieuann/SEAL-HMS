@@ -1,14 +1,29 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Code, LayoutTemplate, Briefcase, FileCheck, MessageSquare, HelpCircle, LogOut, Trophy, Bell, Lock, Users, X, User, Award } from 'lucide-react';
 import { authApi } from '../api/auth';
 import { teamService } from '../api/teamService';
-import { eventService } from '../api/eventService';
-import { standingsService } from '../api/scoreService';
 import './ParticipantLayout.css';
 
+// Module scope on purpose: a component declared inside ParticipantLayout would be a new
+// component type on every render, so React would remount it each time.
+const LockedItem = ({ icon, label }) => (
+  <div
+    title="Complete setup first: Select an event → choose a track → join or create a team"
+    style={{
+      opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none',
+      display: 'flex', alignItems: 'center', gap: '12px',
+      padding: '10px 16px', borderRadius: '10px',
+      color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500'
+    }}
+  >
+    {icon}
+    <span>{label}</span>
+    <Lock size={13} style={{ marginLeft: 'auto', opacity: 0.7 }} />
+  </div>
+);
+
 const ParticipantLayout = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const [isReady, setIsReady] = useState(localStorage.getItem('p_hasTeam') === 'true');
   const [isEliminated, setIsEliminated] = useState(false);
@@ -16,7 +31,7 @@ const ParticipantLayout = () => {
     try {
       const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
       if (u.name) return u.name;
-    } catch(e) {}
+    } catch { /* ignored on purpose */ }
     return localStorage.getItem('userEmail') ? localStorage.getItem('userEmail').split('@')[0] : 'Participant';
   });
 
@@ -36,7 +51,7 @@ const ParticipantLayout = () => {
         } else {
           setIsEliminated(false);
         }
-      } catch (e) {
+      } catch {
         // If API fails, don't mark as eliminated
         setIsEliminated(false);
       }
@@ -48,7 +63,7 @@ const ParticipantLayout = () => {
       try {
         const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
         if (u.name) setDisplayName(u.name);
-      } catch(e) {}
+      } catch { /* ignored on purpose */ }
     };
     
     checkEliminationFromBackend();
@@ -110,15 +125,15 @@ const ParticipantLayout = () => {
                   localStorage.setItem('p_isLeader', me?.role === 'LEADER' ? 'true' : 'false');
                   localStorage.setItem('p_eventId', evt.id);
                   localStorage.setItem('p_selectedEventId', evt.id);
-                  localStorage.setItem('p_teamInviteCode', team.inviteCode || `SEAL${team.id}`);
+                  localStorage.setItem('p_teamInviteCode', team.inviteCode || '');
                   setIsReady(true);
                   foundActiveTeam = true;
                   window.dispatchEvent(new Event('participant_state_updated'));
                   return; // Done
                 }
-              } catch (e) { /* skip */ }
+              } catch { /* skip */ }
             }
-          } catch (e) { /* skip */ }
+          } catch { /* skip */ }
         }
 
         if (!foundActiveTeam && localStorage.getItem('p_hasTeam') === 'true') {
@@ -150,22 +165,6 @@ const ParticipantLayout = () => {
     authApi.logout();
   };
 
-  const LockedItem = ({ icon, label }) => (
-    <div
-      title="Complete setup first: Select an event → choose a track → join or create a team"
-      style={{
-        opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none',
-        display: 'flex', alignItems: 'center', gap: '12px',
-        padding: '10px 16px', borderRadius: '10px',
-        color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500'
-      }}
-    >
-      {icon}
-      <span>{label}</span>
-      <Lock size={13} style={{ marginLeft: 'auto', opacity: 0.7 }} />
-    </div>
-  );
-
   return (
     <div className="app-container">
       <header className="fpt-topbar">
@@ -182,7 +181,7 @@ const ParticipantLayout = () => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
                 if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}`;
-              } catch(e) {}
+              } catch { /* ignored on purpose */ }
               return `https://ui-avatars.com/api/?name=${encodeURIComponent(localStorage.getItem('userEmail') || 'User')}&background=fff&color=F26F21`;
             })()} alt="User Avatar" className="avatar" style={{ width: '32px', height: '32px', border: 'none', objectFit: 'cover' }} />
             <div className="user-info" style={{ textAlign: 'left' }}>
@@ -213,6 +212,12 @@ const ParticipantLayout = () => {
             <NavLink to="/participant/notifications" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               <Bell size={20} />
               <span>Announcements</span>
+            </NavLink>
+
+            {/* Chapter Leaderboard — visible to every student, no team required */}
+            <NavLink to="/participant/chapter-leaderboard" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              <Award size={20} />
+              <span>Chapter Leaderboard</span>
             </NavLink>
 
             {isReady ? (

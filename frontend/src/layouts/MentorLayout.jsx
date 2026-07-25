@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Code, LogOut, Bell, Ticket, ArrowLeft, User } from 'lucide-react';
+import { Code, LogOut, Bell, Ticket, ArrowLeft } from 'lucide-react';
 import { authApi } from '../api/auth';
 import './MentorLayout.css';
 
@@ -67,9 +67,8 @@ const MentorLayout = () => {
           <NavLink to="/mentor/announcements" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
             <Bell size={18} /> Announcements
           </NavLink>
-          <NavLink to="/mentor/settings" className={({ isActive }) => `mentor-nav-link ${isActive ? 'active' : ''}`}>
-            <User size={18} /> Settings
-          </NavLink>
+          {/* No Settings here: the profile is edited from the Expert Dashboard (home),
+              same as the judge workspace — this event workspace stays task-focused. */}
         </nav>
 
         <div className="mentor-actions">

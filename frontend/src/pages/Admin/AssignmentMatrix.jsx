@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Plus, X, GraduationCap, UserCheck, Loader2 } from 'lucide-react';
 

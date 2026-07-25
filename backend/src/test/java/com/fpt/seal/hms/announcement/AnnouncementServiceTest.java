@@ -4,6 +4,7 @@ import com.fpt.seal.hms.announcement.dto.AnnouncementRequest;
 import com.fpt.seal.hms.announcement.dto.AnnouncementResponse;
 import com.fpt.seal.hms.announcement.entity.Announcement;
 import com.fpt.seal.hms.auditlog.AuditLogService;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.event.EventRepository;
 import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
@@ -33,6 +34,7 @@ class AnnouncementServiceTest {
     @Mock private EventRepository eventRepository;
     @Mock private AuditLogService auditLogService;
     @Mock private TrackAssignmentRepository trackAssignmentRepository;
+    @Mock private com.fpt.seal.hms.team.TeamRepository teamRepository;
     @InjectMocks private AnnouncementService service;
 
     private Authentication authWith(String email, String role) {
@@ -171,15 +173,11 @@ class AnnouncementServiceTest {
                 announcement(1L, "For mentors", "MENTOR"),
                 announcement(2L, "For judges", "JUDGE")));
 
-        var track = new com.fpt.seal.hms.track.entity.Track();
-        var event = new com.fpt.seal.hms.event.entity.Event();
-        event.setId(5L);
-        track.setEvent(event);
-        var assignment = new com.fpt.seal.hms.trackassignment.TrackAssignment();
-        assignment.setTrack(track);
-        assignment.setRole(com.fpt.seal.hms.common.enums.AssignmentRole.MENTOR);
-        when(trackAssignmentRepository.findByLecturer_Account_Email("lect@fpt.edu.vn"))
-                .thenReturn(List.of(assignment));
+        // Mentors are recorded on the team, not in track_assignment.
+        when(teamRepository.existsByEvent_IdAndMentor_Account_Email(5L, "lect@fpt.edu.vn"))
+                .thenReturn(true);
+        when(trackAssignmentRepository.existsByTrack_Event_IdAndLecturer_Account_EmailAndRole(
+                5L, "lect@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(false);
 
         List<AnnouncementResponse> res = service.list(5L, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
 
@@ -199,15 +197,45 @@ class AnnouncementServiceTest {
     }
 
     @Test
-    void list_asGuestJudge_seesJudgeTargeted() {
+    void list_asLecturerJudgingSomewhere_seesJudgeTargeted() {
         when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
                 announcement(1L, "For judges", "JUDGE"),
                 announcement(2L, "Students only", "STUDENT"),
                 announcement(3L, "Everyone", "ALL")));
+        when(trackAssignmentRepository.existsByLecturer_Account_EmailAndRole(
+                "gj@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(true);
 
-        List<AnnouncementResponse> res = service.list(null, authWith("gj@fpt.edu.vn", "ROLE_GUEST_JUDGE"));
+        List<AnnouncementResponse> res = service.list(null, authWith("gj@fpt.edu.vn", "ROLE_LECTURER"));
 
         assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For judges", "Everyone");
+    }
+
+    /** Judge-targeted posts stay hidden from a lecturer who only mentors. */
+    @Test
+    void list_asLecturerWithoutJudgeAssignment_doesNotSeeJudgeTargeted() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "For judges", "JUDGE"),
+                announcement(3L, "Everyone", "ALL")));
+        when(trackAssignmentRepository.existsByLecturer_Account_EmailAndRole(
+                "m@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(false);
+
+        List<AnnouncementResponse> res = service.list(null, authWith("m@fpt.edu.vn", "ROLE_LECTURER"));
+
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("Everyone");
+    }
+
+    @Test
+    void list_asLecturerMentoringSomewhere_seesMentorTargeted() {
+        when(announcementRepository.findAllByOrderByCreatedAtDesc()).thenReturn(List.of(
+                announcement(1L, "For mentors", "MENTOR"),
+                announcement(2L, "For judges", "JUDGE")));
+        when(teamRepository.existsByMentor_Account_Email("m@fpt.edu.vn")).thenReturn(true);
+        when(trackAssignmentRepository.existsByLecturer_Account_EmailAndRole(
+                "m@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(false);
+
+        List<AnnouncementResponse> res = service.list(null, authWith("m@fpt.edu.vn", "ROLE_LECTURER"));
+
+        assertThat(res).extracting(AnnouncementResponse::title).containsExactly("For mentors");
     }
 
     @Test
@@ -235,15 +263,10 @@ class AnnouncementServiceTest {
     void list_asLecturerJudge_seesJudgeTargeted_forAssignedEvent() {
         when(announcementRepository.findByEventIdOrEventIsNullOrderByCreatedAtDesc(5L)).thenReturn(List.of(
                 announcement(1L, "For judges", "JUDGE")));
-        var track = new com.fpt.seal.hms.track.entity.Track();
-        var event = new com.fpt.seal.hms.event.entity.Event();
-        event.setId(5L);
-        track.setEvent(event);
-        var assignment = new com.fpt.seal.hms.trackassignment.TrackAssignment();
-        assignment.setTrack(track);
-        assignment.setRole(com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE);
-        when(trackAssignmentRepository.findByLecturer_Account_Email("lect@fpt.edu.vn"))
-                .thenReturn(List.of(assignment));
+        when(trackAssignmentRepository.existsByTrack_Event_IdAndLecturer_Account_EmailAndRole(
+                5L, "lect@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(true);
+        when(teamRepository.existsByEvent_IdAndMentor_Account_Email(5L, "lect@fpt.edu.vn"))
+                .thenReturn(false);
 
         List<AnnouncementResponse> res = service.list(5L, authWith("lect@fpt.edu.vn", "ROLE_LECTURER"));
 

@@ -331,10 +331,19 @@ class AccountServiceMoreTest {
     }
 
     @Test
-    void register_guestJudgeRole_rejected() {
+    void register_staffRole_rejected() {
         when(accountRepository.existsByEmail(anyString())).thenReturn(false);
 
-        assertThatThrownBy(() -> accountService.register("g@b.c", "pw", Role.GUEST_JUDGE,
+        assertThatThrownBy(() -> accountService.register("g@b.c", "pw", Role.STAFF,
+                null, null, null, null, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void register_adminRole_rejected() {
+        when(accountRepository.existsByEmail(anyString())).thenReturn(false);
+
+        assertThatThrownBy(() -> accountService.register("a@b.c", "pw", Role.ADMIN,
                 null, null, null, null, null))
                 .isInstanceOf(BusinessException.class);
     }
@@ -375,7 +384,7 @@ class AccountServiceMoreTest {
         when(studentRepository.findByAccount_Id(1L)).thenReturn(Optional.of(student));
         assertThat(accountService.getFullName(sv)).isEqualTo("An Nguyen");
 
-        Account lect = account(2L, "l@x.y", Role.GUEST_JUDGE);
+        Account lect = account(2L, "l@x.y", Role.LECTURER);
         Lecturer lecturer = new Lecturer();
         lecturer.setFullName("Judge J");
         when(lecturerRepository.findByAccount_Id(2L)).thenReturn(Optional.of(lecturer));

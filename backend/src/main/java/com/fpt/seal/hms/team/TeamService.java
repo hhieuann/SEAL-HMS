@@ -48,6 +48,8 @@ public class TeamService {
     private final MentorMessageRepository mentorMessageRepository;
     private final com.fpt.seal.hms.account.AccountService accountService;
     private final Random random = new Random();
+    private static final String INVITE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    private static final int INVITE_CODE_LENGTH = 6;
 
     @Transactional(readOnly = true)
     public TeamResponse getTeamById(Long id) {
@@ -62,12 +64,24 @@ public class TeamService {
     }
 
     @Transactional
-    public TeamResponse createTeam(Long eventId, TeamRequest request) {
+    public TeamResponse createTeam(Long eventId, TeamRequest request, String actorEmail) {
         Event event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("Event not found"));
 
+        // The leader is the AUTHENTICATED user — a client cannot register a team under
+        // someone else's account id. Only ADMIN/STAFF may set an explicit leaderAccountId
+        // to create a team on a student's behalf.
+        Account actor = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + actorEmail));
+        boolean isCoordinator = actor.getRole() == com.fpt.seal.hms.common.enums.Role.ADMIN
+                || actor.getRole() == com.fpt.seal.hms.common.enums.Role.STAFF;
+        Account leaderAccount = (isCoordinator && request.getLeaderAccountId() != null)
+                ? accountRepository.findById(request.getLeaderAccountId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Leader account not found"))
+                : actor;
+
         java.util.List<com.fpt.seal.hms.teammember.entity.TeamMember> existingInEvent = teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(
-                request.getLeaderAccountId(), eventId, com.fpt.seal.hms.common.enums.MemberStatus.DECLINED);
+                leaderAccount.getId(), eventId, com.fpt.seal.hms.common.enums.MemberStatus.DECLINED);
         if (!existingInEvent.isEmpty()) {
             throw new BusinessException("You are already a member of another team in this event and cannot create a new one.");
         }
@@ -91,6 +105,7 @@ public class TeamService {
         team.setEvent(event);
         team.setName(request.getName());
         team.setStatus(TeamStatus.CREATED);
+        team.setInviteCode(generateUniqueInviteCode());
 
         if (request.getChapterId() != null) {
             Chapter chapter = chapterRepository.findById(request.getChapterId())
@@ -100,10 +115,8 @@ public class TeamService {
 
         Team savedTeam = teamRepository.save(team);
 
-        // Assign the creator as the LEADER automatically
-        Account leaderAccount = accountRepository.findById(request.getLeaderAccountId())
-                .orElseThrow(() -> new ResourceNotFoundException("Leader account not found"));
-
+        // Assign the resolved leader (authenticated user, or the target account for a
+        // coordinator-created team) as the team LEADER.
         TeamMember leader = new TeamMember();
         leader.setTeam(savedTeam);
         leader.setAccount(leaderAccount);
@@ -325,6 +338,7 @@ public class TeamService {
         TeamResponse response = new TeamResponse();
         response.setId(team.getId());
         response.setName(team.getName());
+        response.setInviteCode(team.getInviteCode());
         response.setChapterId(team.getChapter() != null ? team.getChapter().getId() : null);
         response.setTrackId(team.getTrack() != null ? team.getTrack().getId() : null);
         response.setTopicId(team.getTopic() != null ? team.getTopic().getId() : null);
@@ -363,9 +377,30 @@ public class TeamService {
         teamRepository.saveAll(teams);
     }
 
+    /**
+     * A mentor conversation is private to the team. Only ADMIN/STAFF, a member of the team,
+     * or the team's assigned mentor may read or post — otherwise it is an IDOR.
+     */
+    private Account requireTeamChatAccess(Team team, String actorEmail) {
+        Account actor = accountRepository.findByEmail(actorEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Account not found: " + actorEmail));
+        if (actor.getRole() == com.fpt.seal.hms.common.enums.Role.ADMIN
+                || actor.getRole() == com.fpt.seal.hms.common.enums.Role.STAFF) {
+            return actor;
+        }
+        boolean isMember = teamMemberRepository.findByTeamIdAndAccountId(team.getId(), actor.getId()).isPresent();
+        boolean isMentor = team.getMentor() != null && team.getMentor().getAccount() != null
+                && actorEmail.equalsIgnoreCase(team.getMentor().getAccount().getEmail());
+        if (!isMember && !isMentor) {
+            throw new BusinessException("You are not allowed to access this team's mentor conversation.");
+        }
+        return actor;
+    }
+
     @Transactional(readOnly = true)
-    public List<com.fpt.seal.hms.team.dto.MentorMessageDto> getMentorMessages(Long teamId) {
+    public List<com.fpt.seal.hms.team.dto.MentorMessageDto> getMentorMessages(Long teamId, String actorEmail) {
         Team team = findTeamEntityById(teamId);
+        requireTeamChatAccess(team, actorEmail);
         List<com.fpt.seal.hms.team.entity.MentorMessage> messages = mentorMessageRepository.findByTeamIdOrderByCreatedAtAsc(teamId);
         return messages.stream().map(msg -> {
             com.fpt.seal.hms.team.dto.MentorMessageDto dto = new com.fpt.seal.hms.team.dto.MentorMessageDto();
@@ -387,9 +422,9 @@ public class TeamService {
     @Transactional
     public com.fpt.seal.hms.team.dto.MentorMessageDto sendMentorMessageByEmail(Long teamId, String email, String message) {
         Team team = findTeamEntityById(teamId);
-        Account sender = accountRepository.findByEmail(email)
-                .orElseThrow(() -> new ResourceNotFoundException("Account not found with email: " + email));
-        
+        // Only a member / the mentor / ADMIN-STAFF may post to this team's conversation.
+        Account sender = requireTeamChatAccess(team, email);
+
         com.fpt.seal.hms.team.entity.MentorMessage mentorMessage = new com.fpt.seal.hms.team.entity.MentorMessage();
         mentorMessage.setTeam(team);
         mentorMessage.setSender(sender);
@@ -410,5 +445,26 @@ public class TeamService {
         dto.setMessage(saved.getMessage());
         dto.setCreatedAt(saved.getCreatedAt());
         return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public TeamResponse getTeamByInviteCode(String inviteCode) {
+        Team team = teamRepository.findByInviteCode(inviteCode.toUpperCase())
+                .orElseThrow(() -> new ResourceNotFoundException("No team found with invite code: " + inviteCode));
+        return mapToResponse(team);
+    }
+
+    private String generateUniqueInviteCode() {
+        for (int attempt = 0; attempt < 100; attempt++) {
+            StringBuilder sb = new StringBuilder(INVITE_CODE_LENGTH);
+            for (int i = 0; i < INVITE_CODE_LENGTH; i++) {
+                sb.append(INVITE_CHARS.charAt(random.nextInt(INVITE_CHARS.length())));
+            }
+            String code = sb.toString();
+            if (!teamRepository.existsByInviteCode(code)) {
+                return code;
+            }
+        }
+        throw new BusinessException("Unable to generate a unique invite code. Please try again.");
     }
 }

@@ -1,0 +1,832 @@
+.expert-shell {
+  min-height: 100vh;
+  background: #EEF3F7;
+  color: #1E293B;
+}
+
+.expert-topbar {
+  min-height: 72px;
+  background: #F26F21;
+  color: #FFFFFF;
+  box-shadow: 0 3px 14px rgba(114, 48, 10, 0.2);
+  position: relative;
+  z-index: 10;
+}
+
+.expert-topbar-inner {
+  min-height: 72px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.expert-brand,
+.expert-account {
+  display: flex;
+  align-items: center;
+}
+
+.expert-brand {
+  gap: 12px;
+  min-width: 0;
+}
+
+.expert-brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #FFFFFF;
+  color: #F26F21;
+  flex: 0 0 auto;
+}
+
+.expert-brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.expert-brand-copy strong {
+  font-size: 20px;
+}
+
+.expert-brand-copy span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.expert-brand-divider {
+  width: 1px;
+  height: 30px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.expert-fpt-logo {
+  width: 112px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.expert-account {
+  gap: 10px;
+  min-width: 0;
+}
+
+.expert-icon-button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex: 0 0 auto;
+}
+
+.expert-icon-button:hover,
+.expert-icon-button.is-active {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.expert-logout-button {
+  margin-left: 4px;
+}
+
+.expert-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255, 255, 255, 0.76);
+}
+
+.expert-account-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.expert-account-copy strong {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.expert-account-copy span {
+  margin-top: 3px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.expert-hero {
+  background: #17324D;
+  color: #FFFFFF;
+  border-bottom: 4px solid #F26F21;
+}
+
+.expert-hero-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 38px 24px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+}
+
+.expert-hero-copy {
+  max-width: 720px;
+}
+
+.expert-hero-kicker,
+.expert-section-heading > div > span,
+.expert-settings-heading > span {
+  display: block;
+  color: #F7A56F;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.expert-hero-copy h1 {
+  margin-top: 8px;
+  font-size: 32px;
+  line-height: 1.15;
+  color: #FFFFFF;
+}
+
+.expert-hero-copy h2 {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 500;
+  color: #CFE1EF;
+}
+
+.expert-hero-copy p {
+  margin-top: 14px;
+  max-width: 640px;
+  color: #B8CBD9;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.expert-hero-role {
+  min-width: 220px;
+  padding-left: 28px;
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.expert-hero-role-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #F26F21;
+  color: #FFFFFF;
+  flex: 0 0 auto;
+}
+
+.expert-hero-role > div:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-hero-role span {
+  font-size: 12px;
+  color: #B8CBD9;
+}
+
+.expert-hero-role strong {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
+.expert-stat-band {
+  background: #FFFFFF;
+  border-bottom: 1px solid #DCE4EA;
+}
+
+.expert-stat-band-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.expert-stat-item {
+  min-height: 96px;
+  padding: 22px 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-right: 1px solid #E4EAF0;
+}
+
+.expert-stat-item:first-child {
+  padding-left: 0;
+}
+
+.expert-stat-item:last-child {
+  border-right: 0;
+}
+
+.expert-stat-item > svg {
+  width: 42px;
+  height: 42px;
+  padding: 10px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+
+.expert-stat-orange > svg {
+  color: #C55512;
+  background: #FFF2E8;
+}
+
+.expert-stat-blue > svg {
+  color: #0067A9;
+  background: #EAF5FC;
+}
+
+.expert-stat-green > svg {
+  color: #2F855A;
+  background: #ECF8F0;
+}
+
+.expert-stat-item > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-stat-item strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.expert-stat-item span {
+  margin-top: 6px;
+  color: #64748B;
+  font-size: 13px;
+}
+
+.expert-main {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 34px 24px 56px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 286px;
+  gap: 28px;
+  align-items: start;
+}
+
+.expert-work-section {
+  min-width: 0;
+}
+
+.expert-section-heading {
+  min-height: 48px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.expert-section-heading > div > span,
+.expert-settings-heading > span {
+  color: #C55512;
+}
+
+.expert-section-heading h2 {
+  margin-top: 5px;
+  font-size: 23px;
+  line-height: 1.2;
+}
+
+.expert-role-switch {
+  padding: 4px;
+  border: 1px solid #D7E0E7;
+  border-radius: 8px;
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.expert-role-switch button {
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748B;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.expert-role-switch button:hover {
+  background: #F4F7F9;
+  color: #334155;
+}
+
+.expert-role-switch button.is-active {
+  background: var(--role-accent);
+  color: #FFFFFF;
+}
+
+.expert-assignment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.expert-assignment-card {
+  min-height: 340px;
+  padding: 22px;
+  border: 1px solid #D9E2E8;
+  border-top: 4px solid var(--role-accent);
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 8px 22px rgba(21, 46, 67, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-assignment-card-header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.expert-assignment-role-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--role-accent);
+  background: var(--role-soft);
+}
+
+.expert-assignment-title {
+  min-width: 0;
+}
+
+.expert-assignment-title span {
+  color: var(--role-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.expert-assignment-title h3 {
+  margin-top: 3px;
+  font-size: 18px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.expert-assignment-status {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #F1F5F9;
+  color: #64748B;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.expert-assignment-status.is-active {
+  color: #247247;
+  background: #E8F6ED;
+}
+
+.expert-assignment-scope {
+  margin: 22px 0 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #E7EDF2;
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-assignment-scope span {
+  color: #64748B;
+  font-size: 12px;
+}
+
+.expert-assignment-scope strong {
+  margin-top: 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.expert-assignment-metrics {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.expert-metric {
+  min-height: 38px;
+  padding: 8px 0;
+  border-bottom: 1px solid #EEF2F5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.expert-metric:last-child {
+  border-bottom: 0;
+}
+
+.expert-metric > span {
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expert-metric > strong {
+  color: #334155;
+  text-align: right;
+}
+
+.expert-metric.danger > span,
+.expert-metric.danger > strong {
+  color: #C2413B;
+}
+
+.expert-metric.success > span,
+.expert-metric.success > strong {
+  color: #247247;
+}
+
+.expert-enter-button {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 18px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--role-accent);
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.expert-enter-button:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.expert-enter-button:disabled {
+  background: #E7ECF0;
+  color: #7A8996;
+  cursor: not-allowed;
+}
+
+.expert-empty-state {
+  min-height: 330px;
+  padding: 48px 24px;
+  border: 1px dashed #C8D4DD;
+  border-radius: 8px;
+  background: #F8FAFB;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.expert-empty-icon {
+  width: 62px;
+  height: 62px;
+  margin-bottom: 18px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #FFF2E8;
+  color: #C55512;
+}
+
+.expert-empty-icon.is-loading svg {
+  animation: expert-pulse 1.4s ease-in-out infinite;
+}
+
+.expert-empty-state h3 {
+  font-size: 19px;
+}
+
+.expert-empty-state p {
+  max-width: 460px;
+  margin-top: 8px;
+  color: #64748B;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.expert-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.expert-role-summary,
+.expert-quick-panel {
+  padding: 22px;
+  border: 1px solid #D9E2E8;
+  border-radius: 8px;
+  background: #FFFFFF;
+}
+
+.expert-role-summary {
+  border-top: 4px solid var(--role-accent);
+}
+
+.expert-role-summary-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.expert-role-summary-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: var(--role-accent);
+  background: var(--role-soft);
+  flex: 0 0 auto;
+}
+
+.expert-role-summary-heading span {
+  color: #64748B;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.expert-role-summary-heading h2 {
+  margin-top: 2px;
+  font-size: 18px;
+}
+
+.expert-role-summary > p {
+  margin-top: 16px;
+  color: #64748B;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.expert-role-summary dl {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #E7EDF2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.expert-role-summary dl > div + div {
+  padding-left: 16px;
+  border-left: 1px solid #E7EDF2;
+}
+
+.expert-role-summary dt {
+  color: #64748B;
+  font-size: 11px;
+}
+
+.expert-role-summary dd {
+  margin-top: 3px;
+  color: #1E293B;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.expert-quick-panel > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #0072BC;
+}
+
+.expert-quick-panel h2 {
+  color: #1E293B;
+  font-size: 16px;
+}
+
+.expert-quick-panel p {
+  margin-top: 12px;
+  color: #64748B;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.expert-quick-panel button,
+.expert-back-button {
+  border: 0;
+  background: transparent;
+  color: #C55512;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.expert-quick-panel button {
+  margin-top: 16px;
+}
+
+.expert-settings-page {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 34px 24px 56px;
+}
+
+.expert-back-button {
+  min-height: 38px;
+  margin-bottom: 24px;
+}
+
+.expert-settings-heading {
+  margin-bottom: 26px;
+}
+
+.expert-settings-heading h1 {
+  margin-top: 5px;
+  font-size: 27px;
+}
+
+@keyframes expert-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (max-width: 960px) {
+  .expert-main {
+    grid-template-columns: 1fr;
+  }
+
+  .expert-side-column {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .expert-topbar-inner {
+    padding: 0 16px;
+  }
+
+  .expert-fpt-logo,
+  .expert-brand-divider,
+  .expert-account-copy {
+    display: none;
+  }
+
+  .expert-hero-inner {
+    padding: 30px 18px 32px;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .expert-hero-copy h1 {
+    font-size: 27px;
+  }
+
+  .expert-hero-role {
+    width: 100%;
+    min-width: 0;
+    padding: 18px 0 0;
+    border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .expert-stat-band-inner {
+    padding: 0 18px;
+  }
+
+  .expert-stat-item {
+    padding: 18px 16px;
+  }
+
+  .expert-stat-item:first-child {
+    padding-left: 0;
+  }
+
+  .expert-main,
+  .expert-settings-page {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .expert-section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .expert-role-switch {
+    width: 100%;
+  }
+
+  .expert-role-switch button {
+    flex: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .expert-brand-copy span {
+    display: none;
+  }
+
+  .expert-account {
+    gap: 7px;
+  }
+
+  .expert-stat-band-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .expert-stat-item,
+  .expert-stat-item:first-child {
+    min-height: 76px;
+    padding: 14px 0;
+    border-right: 0;
+    border-bottom: 1px solid #E4EAF0;
+  }
+
+  .expert-stat-item:last-child {
+    border-bottom: 0;
+  }
+
+  .expert-assignment-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .expert-assignment-card {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .expert-assignment-card-header {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .expert-assignment-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .expert-side-column {
+    grid-template-columns: 1fr;
+  }
+}

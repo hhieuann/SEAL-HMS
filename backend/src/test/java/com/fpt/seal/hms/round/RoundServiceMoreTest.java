@@ -370,4 +370,66 @@ class RoundServiceMoreTest {
 
         assertThat(roundService.getRoundsByEventId(1L)).hasSize(1);
     }
+
+    // ---------- completing a round: who is eliminated ----------
+
+    /**
+     * Reaching the end of the event is not elimination. On the final round nobody is promoted
+     * (there is no next round), so eliminating on that basis used to mark the entire finals
+     * field — champion included — as ELIMINATED, and their workspace showed "eliminated".
+     */
+    @Test
+    void underReviewToCompleted_finalRound_finishesTeamsAsCompleted() {
+        Round finals = round(9L, RoundStatus.UNDER_REVIEW);
+        finals.setRoundSeq(3);
+        Team champion = teamOnTrack(60L, null);
+        RoundRanking ranking = rr(1L, champion);
+        ranking.setIsPromoted(false); // nothing to be promoted into
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(finals));
+        when(roundRepository.findMaxRoundSeqByEventId(1L)).thenReturn(Optional.of(3));
+        when(roundRankingRepository.findByRoundId(9L)).thenReturn(List.of(ranking));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.COMPLETED);
+
+        assertThat(champion.getStatus()).isEqualTo(TeamStatus.COMPLETED);
+    }
+
+    @Test
+    void underReviewToCompleted_earlierRound_eliminatesTeamsThatDidNotAdvance() {
+        Round qualifier = round(9L, RoundStatus.UNDER_REVIEW);
+        qualifier.setRoundSeq(1);
+        Team promoted = teamOnTrack(61L, null);
+        Team knockedOut = teamOnTrack(62L, null);
+        RoundRanking up = rr(1L, promoted);
+        up.setIsPromoted(true);
+        RoundRanking out = rr(2L, knockedOut);
+        out.setIsPromoted(false);
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(qualifier));
+        when(roundRepository.findMaxRoundSeqByEventId(1L)).thenReturn(Optional.of(3));
+        when(roundRankingRepository.findByRoundId(9L)).thenReturn(List.of(up, out));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.COMPLETED);
+
+        assertThat(promoted.getStatus()).isEqualTo(TeamStatus.IN_PROGRESS);
+        assertThat(knockedOut.getStatus()).isEqualTo(TeamStatus.ELIMINATED);
+    }
+
+    /** A team already out keeps the status (and reason) it was given. */
+    @Test
+    void underReviewToCompleted_finalRound_leavesDisqualifiedTeamsAlone() {
+        Round finals = round(9L, RoundStatus.UNDER_REVIEW);
+        finals.setRoundSeq(2);
+        Team dq = teamOnTrack(63L, null);
+        dq.setStatus(TeamStatus.DISQUALIFIED);
+        when(roundRepository.findById(9L)).thenReturn(Optional.of(finals));
+        when(roundRepository.findMaxRoundSeqByEventId(1L)).thenReturn(Optional.of(2));
+        when(roundRankingRepository.findByRoundId(9L)).thenReturn(List.of(rr(1L, dq)));
+        when(roundRepository.save(any(Round.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        roundService.updateRoundStatus(9L, RoundStatus.COMPLETED);
+
+        assertThat(dq.getStatus()).isEqualTo(TeamStatus.DISQUALIFIED);
+    }
 }

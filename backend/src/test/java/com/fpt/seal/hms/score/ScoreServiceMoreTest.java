@@ -18,7 +18,11 @@ import com.fpt.seal.hms.score.dto.ScoreResponse;
 import com.fpt.seal.hms.score.entity.Score;
 import com.fpt.seal.hms.submission.SubmissionRepository;
 import com.fpt.seal.hms.submission.entity.Submission;
-import com.fpt.seal.hms.team.TeamRepository;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
+import com.fpt.seal.hms.team.entity.Team;
+import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -50,20 +54,44 @@ class ScoreServiceMoreTest {
     @Mock private AccountRepository accountRepository;
     @Mock private CriterionRepository criterionRepository;
     @Mock private RoundRankingRepository roundRankingRepository;
-    @Mock private TeamRepository teamRepository;
     @Mock private LecturerRepository lecturerRepository;
+    @Mock private TrackAssignmentRepository trackAssignmentRepository;
     @InjectMocks private ScoreService scoreService;
+
+    /** Track the graded team sits in; grading requires a JUDGE assignment on it. */
+    private static final long TRACK_ID = 500L;
+
+    @BeforeEach
+    void allowAssignedJudgeByDefault() {
+        when(trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                eq(TRACK_ID), anyString(), eq(AssignmentRole.JUDGE))).thenReturn(true);
+    }
 
     private Submission submission(long id, Round round, RoundRanking rr) {
         Submission s = new Submission();
         s.setId(id);
         rr.setRound(round);
+        if (rr.getTeam() == null) {
+            rr.setTeam(teamOnTrack());
+        }
         s.setRoundRanking(rr);
         return s;
     }
 
+    private Team teamOnTrack() {
+        Track track = new Track();
+        track.setId(TRACK_ID);
+        Team team = new Team();
+        team.setId(900L);
+        team.setTrack(track);
+        return team;
+    }
+
+    private static final long ROUND_ID = 100L;
+
     private Round round(RoundStatus status, LocalDateTime start, Double hours) {
         Round r = new Round();
+        r.setId(ROUND_ID);
         r.setStatus(status);
         r.setStartTime(start);
         r.setDurationHours(hours);
@@ -75,6 +103,7 @@ class ScoreServiceMoreTest {
         c.setId(id);
         c.setMaxScore(max == null ? null : new BigDecimal(max));
         c.setWeight(new BigDecimal(weight));
+        c.setRound(round(RoundStatus.COMPLETED, null, null)); // same round id as the submission
         return c;
     }
 
@@ -112,7 +141,7 @@ class ScoreServiceMoreTest {
         Submission sub = submission(1L, round, new RoundRanking());
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
 
-        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8")))
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("deadline has not passed");
     }
@@ -123,7 +152,7 @@ class ScoreServiceMoreTest {
         Submission sub = submission(1L, round, new RoundRanking());
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
 
-        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8")))
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("not configured");
     }
@@ -135,14 +164,123 @@ class ScoreServiceMoreTest {
         Criterion c = criterion(1L, "10", "1.0");
         Submission sub = submission(1L, round, new RoundRanking());
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "8")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn");
 
         verify(scoreRepository).save(any(Score.class));
+    }
+
+    @Test
+    void grade_usesAuthenticatedJudge_notTheBodyJudgeAccountId() {
+        // The request carries judgeAccountId=999 (spoof) but the judge must come from the
+        // authenticated email; the score is recorded under that account, not 999.
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account realJudge = judge(7L);
+        Criterion c = criterion(1L, "10", "1.0");
+        RoundRanking rr = new RoundRanking();
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(realJudge));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+        when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
+        when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, realJudge, c, "8")));
+
+        GradeSubmissionRequest req = gradeReq(999L, 1L, "8"); // body claims judge 999
+        scoreService.gradeSubmission(1L, req, "judge7@fpt.edu.vn");
+
+        org.mockito.ArgumentCaptor<Score> cap = org.mockito.ArgumentCaptor.forClass(Score.class);
+        verify(scoreRepository).save(cap.capture());
+        assertThat(cap.getValue().getJudgeAccount().getId()).isEqualTo(7L); // authenticated judge, not 999
+        verify(accountRepository, never()).findById(999L);
+    }
+
+    @Test
+    void grade_throws_whenActorEmailHasNoAccount() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Submission sub = submission(1L, round, new RoundRanking());
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("ghost@x.y")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "ghost@x.y"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    /**
+     * Judging authority comes from the track assignment: a lecturer who is not the assigned
+     * judge for the submission's track cannot score it, even though the endpoint lets any
+     * LECTURER in.
+     */
+    @Test
+    void grade_rejectsLecturerWhoIsNotTheAssignedJudgeForTheTrack() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Submission sub = submission(1L, round, new RoundRanking());
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("outsider@fpt.edu.vn")).thenReturn(Optional.of(judge(9L)));
+        when(trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                TRACK_ID, "outsider@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(false);
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(
+                1L, gradeReq(7L, 1L, "8"), "outsider@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not assigned as a Judge");
+        verify(scoreRepository, never()).save(any());
+    }
+
+    /** A team still waiting on the track draw cannot be graded at all. */
+    @Test
+    void grade_rejectsWhenTeamHasNoTrackYet() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        RoundRanking rr = new RoundRanking();
+        Team trackless = new Team();
+        trackless.setId(901L);
+        rr.setTeam(trackless);
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(judge(7L)));
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(
+                1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not assigned to a track");
+    }
+
+    @Test
+    void grade_rejectsNegativeScore() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Account j = judge(7L);
+        Criterion c = criterion(1L, "10", "1.0");
+        Submission sub = submission(1L, round, new RoundRanking());
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "-5"), "judge7@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("negative");
+        verify(scoreRepository, never()).save(any());
+    }
+
+    @Test
+    void grade_rejectsCriterionFromADifferentRound() {
+        Round round = round(RoundStatus.COMPLETED, null, null); // id 100
+        Account j = judge(7L);
+        Criterion c = criterion(1L, "10", "1.0");
+        Round otherRound = new Round();
+        otherRound.setId(999L); // criterion belongs to a different round
+        c.setRound(otherRound);
+        Submission sub = submission(1L, round, new RoundRanking());
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
+        when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("does not belong to this submission's round");
+        verify(scoreRepository, never()).save(any());
     }
 
     @Test
@@ -150,10 +288,10 @@ class ScoreServiceMoreTest {
         Round round = round(RoundStatus.COMPLETED, null, null);
         Submission sub = submission(1L, round, new RoundRanking());
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(judge(7L)));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(judge(7L)));
         when(criterionRepository.findById(1L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8")))
+        assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -167,12 +305,12 @@ class ScoreServiceMoreTest {
         RoundRanking rr = new RoundRanking();
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "8")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -188,12 +326,12 @@ class ScoreServiceMoreTest {
         rr.setPenaltyPoints(new BigDecimal("20")); // penalty branch
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "10")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "10"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "10"), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -260,12 +398,12 @@ class ScoreServiceMoreTest {
         RoundRanking rr = new RoundRanking();
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of()); // no scores back -> early return
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn");
 
         verify(roundRankingRepository, never()).save(any()); // nothing to recalc
     }
@@ -278,14 +416,14 @@ class ScoreServiceMoreTest {
         RoundRanking rr = new RoundRanking();
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         Score nullScore = persisted(sub, j, c, "0");
         nullScore.setScore(null); // score null -> ZERO branch in recalc
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(nullScore));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -300,15 +438,16 @@ class ScoreServiceMoreTest {
         c.setId(1L);
         c.setMaxScore(new BigDecimal("10"));
         c.setWeight(null); // weight null -> ZERO branch
+        c.setRound(round); // same round as the submission
         RoundRanking rr = new RoundRanking();
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "8")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
         verify(roundRankingRepository).save(cap.capture());
@@ -324,12 +463,12 @@ class ScoreServiceMoreTest {
         RoundRanking rr = new RoundRanking();
         Submission sub = submission(1L, round, rr);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
-        when(accountRepository.findById(7L)).thenReturn(Optional.of(j));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(j));
         when(criterionRepository.findById(1L)).thenReturn(Optional.of(c));
         when(scoreRepository.findBySubmissionIdAndJudgeAccountIdAndCriterionId(anyLong(), anyLong(), anyLong())).thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c, "999")));
 
-        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "999"));
+        scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "999"), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);
         verify(scoreRepository).save(cap.capture());

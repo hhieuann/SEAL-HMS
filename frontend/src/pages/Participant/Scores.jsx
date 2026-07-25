@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, Star, Award, MessageSquare, Target, TrendingUp, Medal, Clock, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Trophy, MessageSquare, Target, TrendingUp, Clock, AlertCircle } from 'lucide-react';
 import './Workspace.css';
 
 const Scores = () => {
@@ -11,7 +11,8 @@ const Scores = () => {
   
   const [myScore, setMyScore] = useState(0);
   const [criteriaAvg, setCriteriaAvg] = useState({});
-  const [feedbacks, setFeedbacks] = useState([]);
+  // Feedback text is rendered per judge from `judgeEvaluations`; only the setter is kept.
+  const [, setFeedbacks] = useState([]);
   const [judgeEvaluations, setJudgeEvaluations] = useState([]);
   const [isScorePending, setIsScorePending] = useState(false);
   
@@ -43,7 +44,7 @@ const Scores = () => {
               myTeamsList = tList;
               break;
             }
-          } catch (err) {}
+          } catch { /* ignored on purpose */ }
         }
         
         if (!evt && evts.length > 0) evt = evts[0];
@@ -53,7 +54,7 @@ const Scores = () => {
           try {
             const teamsData = await teamService.getTeamsByEvent(evt.id);
             myTeamsList = teamsData?.data || teamsData || [];
-          } catch (err) {}
+          } catch { /* ignored on purpose */ }
         }
 
         if (evt) {
@@ -96,13 +97,13 @@ const Scores = () => {
         try {
           const critRes = await criterionService.getCriteria(round.id);
           if (critRes?.data) round.criteria = critRes.data;
-        } catch (e) {}
+        } catch { /* ignored on purpose */ }
 
         let subId = null;
         try {
           const subRes = await submissionService.getSubmission(round.id, teamId);
           if (subRes?.data?.id) subId = subRes.data.id;
-        } catch (e) {}
+        } catch { /* ignored on purpose */ }
 
         if (subId) {
           const scoresRes = await scoreService.getScores(subId);
@@ -169,7 +170,7 @@ const Scores = () => {
                 const trackAssig = await trackService.getTrackAssignments(myTrackId);
                 const assignments = trackAssig?.data || trackAssig || [];
                 expectedJudgesCount = assignments.filter(a => a.role === 'JUDGE').length;
-             } catch(e) {}
+             } catch { /* ignored on purpose */ }
           }
           
           const actualJudgesCount = Object.keys(judgeMap).length;
@@ -214,14 +215,13 @@ const Scores = () => {
             }));
 
             let finalLeaderboard = [];
-            const isFinalsRound = savedRoundIdx === (evt.rounds.length - 1);
-            
+
             // Try loading tracks from DB (works on any browser, not just admin's)
             let dbTracks = [];
             try {
               const { trackService } = await import('../../api/trackService');
               dbTracks = (await trackService.getTracksByEvent(evt.id))?.data || [];
-            } catch (e) {}
+            } catch { /* ignored on purpose */ }
 
             if (savedRoundIdx > 0) {
               // Round 2+: Only show teams that have scores for THIS round (= teams that advanced)

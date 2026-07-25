@@ -11,8 +11,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 100;
 }
 
@@ -332,6 +331,8 @@
   border-right: none;
   border-bottom: none;
   margin-top: auto;
+  background-color: var(--primary);
+  color: #ffffff;
 }
 
 .footer-content {
@@ -344,46 +345,52 @@
 }
 
 .footer-brand p {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
   line-height: 1.6;
   margin-top: 16px;
   max-width: 400px;
 }
 
-.footer-links {
+.footer-contact-info {
   display: flex;
-  gap: 80px;
+  flex-direction: column;
+  gap: 16px;
   justify-content: flex-end;
 }
 
-.link-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.link-group h4 {
-  font-size: 16px;
+.footer-contact-info h4 {
+  font-size: 18px;
   margin-bottom: 8px;
+  color: #ffffff;
 }
 
-.link-group a {
-  color: var(--text-secondary);
+.contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
+  line-height: 1.5;
+}
+
+.contact-item a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: none;
   transition: var(--transition);
 }
 
-.link-group a:hover {
-  color: var(--primary);
+.contact-item a:hover {
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 .footer-bottom {
   max-width: 1400px;
   margin: 0 auto;
   padding-top: 24px;
-  border-top: 1px solid var(--border-color);
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
   text-align: center;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
 }

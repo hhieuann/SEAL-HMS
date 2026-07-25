@@ -52,8 +52,7 @@ public class AccountService {
             throw new BusinessException("Email already registered: " + email);
         }
         // Self-registration must not grant privileged roles. Only STUDENT/LECTURER
-        // can be self-registered; ADMIN/STAFF/GUEST_JUDGE are assigned by an admin
-        // afterwards via PATCH /accounts/{id}/role.
+        // can be self-registered; ADMIN/STAFF are assigned by an admin afterwards.
         Role assignedRole = (role != null) ? role : Role.STUDENT;
         if (assignedRole != Role.STUDENT && assignedRole != Role.LECTURER) {
             throw new BusinessException("Self-registration is only allowed for STUDENT or LECTURER");
@@ -252,7 +251,7 @@ public class AccountService {
                     campus[0] = student.getCampus();
                     proof[0] = student.getProofUrl();
                 }
-            } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
+            } else if (acc.getRole() == Role.LECTURER) {
                 var lecturer = lecturerByAccount.get(acc.getId());
                 if (lecturer != null) {
                     fullName[0] = lecturer.getFullName();
@@ -281,7 +280,8 @@ public class AccountService {
                     proof[0],
                     department[0],
                     phone[0],
-                    acc.getAvatarUrl()
+                    acc.getAvatarUrl(),
+                    acc.getCreatedAt()
             );
         }).toList();
     }
@@ -335,7 +335,7 @@ public class AccountService {
                                (s.getLastName() != null ? s.getLastName() : "")).trim())
                     .filter(name -> !name.isEmpty())
                     .orElse(null);
-        } else if (acc.getRole() == Role.LECTURER || acc.getRole() == Role.GUEST_JUDGE) {
+        } else if (acc.getRole() == Role.LECTURER) {
             return lecturerRepository.findByAccount_Id(acc.getId())
                     .map(com.fpt.seal.hms.lecturer.Lecturer::getFullName)
                     .orElse(null);

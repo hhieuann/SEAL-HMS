@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Plus, Upload, MoreVertical, Send, Clock, BookOpen, ExternalLink, AlertTriangle, Check, X, Target, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, FileText, CheckSquare, MessageSquare, Upload, Send, Clock, BookOpen, AlertTriangle, X, Target, AlertCircle } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import './Workspace.css';
 
@@ -32,7 +32,6 @@ const Workspace = () => {
   });
 
   const [showNotification, setShowNotification] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const tId = localStorage.getItem('p_teamId') || 'temp';
   const currentUserEmail = localStorage.getItem('userEmail') || 'User';
@@ -73,14 +72,6 @@ const Workspace = () => {
     localStorage.setItem(`ws_resources_${tId}`, JSON.stringify(newResources));
   };
 
-  const handleInviteLink = () => {
-    const inviteCode = localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`;
-    const link = `${window.location.origin}/participant/team-formation?inviteCode=${inviteCode}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const checkTrackDraw = (trackDrawStr, isRealTime = false) => {
     if (trackDrawStr) {
       try {
@@ -114,7 +105,7 @@ const Workspace = () => {
             setTimeout(() => setShowNotification(false), 8000);
           }
         }
-      } catch (e) {}
+      } catch { /* ignored on purpose */ }
     }
   };
 
@@ -136,7 +127,7 @@ const Workspace = () => {
             const membersRes = await teamService.getMembers(tId);
             // Only show members who are actively in the team
             tData.members = (membersRes.data || []).filter(m => m.status !== 'INVITED');
-          } catch (e) {
+          } catch {
             tData.members = [];
           }
           setTeamData(tData);
@@ -161,7 +152,6 @@ const Workspace = () => {
             eventService.getEventRounds(evt.id).then(roundRes => {
               const rounds = roundRes.data || [];
               if (rounds.length > 0) {
-                let activeRoundIdx = 0;
                 let lastStartedIdx = -1;
                 for (let i = rounds.length - 1; i >= 0; i--) {
                   if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
@@ -176,8 +166,8 @@ const Workspace = () => {
                   setHasRoundStarted(false);
                 }
                 
-                activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
-                
+                const activeRoundIdx = lastStartedIdx !== -1 ? lastStartedIdx : 0;
+
                 const round = rounds[activeRoundIdx] || rounds[0];
                 const rName = round.name || 'Main Event';
                 setCurrentRoundName(rName);
@@ -243,7 +233,7 @@ const Workspace = () => {
         const now = new Date();
         const diffMs = endD - now;
         
-        let newRemaining = '0h0m0s';
+        let newRemaining;
         if (diffMs > 0) {
           const h = Math.floor(diffMs / (1000 * 60 * 60));
           const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -498,7 +488,7 @@ const Workspace = () => {
             <div className="panel-header">
               <h3 className="panel-title"><Users size={18} /> Team Members ({(teamData && teamData.members) ? teamData.members.length : 0}/5)</h3>
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || `SEAL${tId}`}</strong></span>
+                <span style={{ fontSize: '12px', background: 'var(--bg-hover)', padding: '4px 8px', borderRadius: '6px' }}>Code: <strong style={{ color: 'var(--text-primary)', letterSpacing: '1px' }}>{localStorage.getItem('p_teamInviteCode') || '—'}</strong></span>
                 <button 
                   onClick={() => navigate('/participant/team-management')}
                   style={{ fontSize: '13px', color: 'var(--primary)', padding: 0, background: 'transparent', border: 'none', outline: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}

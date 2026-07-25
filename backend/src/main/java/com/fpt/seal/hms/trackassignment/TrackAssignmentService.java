@@ -4,8 +4,13 @@ import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.lecturer.Lecturer;
 import com.fpt.seal.hms.lecturer.LecturerRepository;
+import com.fpt.seal.hms.round.RoundRepository;
+import com.fpt.seal.hms.round.entity.Round;
+import com.fpt.seal.hms.roundranking.RoundRankingRepository;
+import com.fpt.seal.hms.roundranking.entity.RoundRanking;
 import com.fpt.seal.hms.track.TrackRepository;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.dto.ExpertAssignmentResponse;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentRequest;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentResponse;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,6 +29,8 @@ public class TrackAssignmentService {
     private final TrackRepository trackRepository;
     private final LecturerRepository lecturerRepository;
     private final com.fpt.seal.hms.team.TeamRepository teamRepository;
+    private final RoundRepository roundRepository;
+    private final RoundRankingRepository roundRankingRepository;
 
     @Transactional
     public TrackAssignmentResponse assign(Long trackId, TrackAssignmentRequest req) {
@@ -73,6 +81,50 @@ public class TrackAssignmentService {
     @Transactional(readOnly = true)
     public List<TrackAssignmentResponse> getByLecturerEmail(String email) {
         return assignmentRepository.findByLecturer_Account_Email(email).stream()
+                .map(TrackAssignmentResponse::from)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpertAssignmentResponse> getExpertAssignments(String email) {
+        List<ExpertAssignmentResponse> responsibilities = new java.util.ArrayList<>();
+
+        assignmentRepository.findByLecturer_Account_Email(email).stream()
+                .filter(assignment -> assignment.getRole()
+                        == com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE)
+                .map(ExpertAssignmentResponse::fromJudge)
+                .forEach(responsibilities::add);
+
+        teamRepository.findByMentor_Account_Email(email).stream()
+                .map(ExpertAssignmentResponse::fromMentor)
+                .forEach(responsibilities::add);
+
+        return responsibilities;
+    }
+
+    /**
+     * Judges that still block closing a round: assigned to a track that has at least one team
+     * competing in this round, and who have not marked scoring complete.
+     *
+     * A track nobody advanced into is skipped. Its judge has nothing to score, so the
+     * "Complete scoring" button never appears for them and waiting on it would deadlock the
+     * event.
+     */
+    @Transactional(readOnly = true)
+    public List<TrackAssignmentResponse> getJudgesBlockingRound(Long roundId) {
+        Round round = roundRepository.findById(roundId)
+                .orElseThrow(() -> new ResourceNotFoundException("Round not found: " + roundId));
+
+        Set<Long> trackIdsWithTeams = roundRankingRepository.findByRoundId(roundId).stream()
+                .map(RoundRanking::getTeam)
+                .filter(team -> team != null && team.getTrack() != null)
+                .map(team -> team.getTrack().getId())
+                .collect(Collectors.toSet());
+
+        return assignmentRepository.findByEventId(round.getEvent().getId()).stream()
+                .filter(a -> a.getRole() == com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE)
+                .filter(a -> !Boolean.TRUE.equals(a.getScoringCompleted()))
+                .filter(a -> trackIdsWithTeams.contains(a.getTrack().getId()))
                 .map(TrackAssignmentResponse::from)
                 .collect(Collectors.toList());
     }

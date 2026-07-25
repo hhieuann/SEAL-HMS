@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from './components/ProtectedRoute';
 import Forbidden403 from './pages/Auth/Forbidden403';
@@ -9,6 +9,7 @@ import EventForm from './pages/Admin/EventForm';
 import PerformingTeams from './pages/Admin/PerformingTeams';
 import EventsConfig from './pages/Admin/EventsConfig';
 import AccountManagement from './pages/Admin/AccountManagement';
+import ChapterManagement from './pages/Admin/ChapterManagement';
 import AssignmentMatrix from './pages/Admin/AssignmentMatrix';
 import RoundTransition from './pages/Admin/RoundTransition';
 import AnalyticsLog from './pages/Admin/AnalyticsLog';
@@ -33,6 +34,7 @@ import MySubmission from './pages/Participant/MySubmission';
 import Scores from './pages/Participant/Scores';
 import Notifications from './pages/Participant/Notifications';
 import ContactMentor from './pages/Participant/ContactMentor';
+import ChapterLeaderboard from './pages/Participant/ChapterLeaderboard';
 import FAQ from './pages/Participant/FAQ';
 import EventArchive from './pages/Participant/EventArchive';
 
@@ -77,6 +79,7 @@ function App() {
           <Route path="submission" element={<MySubmission />} />
           <Route path="scores" element={<Scores />} />
           <Route path="mentor" element={<ContactMentor />} />
+          <Route path="chapter-leaderboard" element={<ChapterLeaderboard />} />
           <Route path="faq" element={<FAQ />} />
           <Route path="archive/:eventId" element={<EventArchive />} />
           <Route path="settings" element={<Settings />} />
@@ -91,6 +94,7 @@ function App() {
             <Route path="create" element={<EventForm />} />
           </Route>
           <Route path="accounts" element={<AccountManagement />} />
+          <Route path="chapters" element={<ChapterManagement />} />
           <Route path="activity-log" element={<AnalyticsLog />} />
           
         </Route>
@@ -110,21 +114,23 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* Judge & Mentor & Staff Routes */}
-        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER', 'STAFF']}><ExpertDashboard /></ProtectedRoute>} />
+        {/* Lecturer responsibilities and Staff operations */}
+        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['LECTURER', 'STAFF']}><ExpertDashboard /></ProtectedRoute>} />
         
-        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE', 'LECTURER']}><JudgeLayout /></ProtectedRoute>}>
+        <Route path="/judge" element={<ProtectedRoute allowedRoles={['LECTURER']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
           <Route path="announcements" element={<Notifications />} />
         </Route>
 
         {/* Mentor Routes */}
-        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['MENTOR', 'LECTURER']}><MentorLayout /></ProtectedRoute>}>
+        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['LECTURER']}><MentorLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />
-          <Route path="settings" element={<Settings />} />
+          {/* Profile settings live on the Expert Dashboard, not in the event workspace.
+              Anything else (e.g. the old /mentor/settings bookmark) falls back to tickets. */}
+          <Route path="*" element={<Navigate to="/mentor/tickets" replace />} />
         </Route>
       </Routes>
     </Router>
