@@ -36,5 +36,5 @@ Run on "finalize" actions; never let derived values be edited directly.
 
 ## Authentication
 Stateless JWT. `JwtAuthenticationFilter` validates the token and sets the `SecurityContext`.
-Authorize with `@PreAuthorize("hasRole('ADMIN')")` etc. Roles: ADMIN, STAFF, LECTURER, STUDENT, GUEST_JUDGE.
+Authorize with `@PreAuthorize("hasRole('ADMIN')")` etc. Roles: ADMIN, STAFF, LECTURER, STUDENT. Judge and Mentor are per-event responsibilities of a LECTURER (see `AssignmentRole`), not account roles.
 Admin & Staff are plain accounts distinguished by role (no profile tables) — per supervisor's instruction.

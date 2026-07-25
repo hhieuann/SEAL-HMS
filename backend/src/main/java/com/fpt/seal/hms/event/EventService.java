@@ -51,7 +51,7 @@ public class EventService {
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAssignedEvents(String email) {
-        return eventRepository.findEventsAssignedToJudgeByEmail(email).stream()
+        return eventRepository.findEventsAssignedToExpertByEmail(email).stream()
                 .map(event -> {
                     event = autoProgressEventStatus(event);
                     EventResponse response = mapToResponse(event);

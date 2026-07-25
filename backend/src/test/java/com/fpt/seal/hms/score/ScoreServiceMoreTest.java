@@ -18,7 +18,11 @@ import com.fpt.seal.hms.score.dto.ScoreResponse;
 import com.fpt.seal.hms.score.entity.Score;
 import com.fpt.seal.hms.submission.SubmissionRepository;
 import com.fpt.seal.hms.submission.entity.Submission;
-import com.fpt.seal.hms.team.TeamRepository;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
+import com.fpt.seal.hms.team.entity.Team;
+import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -50,16 +54,37 @@ class ScoreServiceMoreTest {
     @Mock private AccountRepository accountRepository;
     @Mock private CriterionRepository criterionRepository;
     @Mock private RoundRankingRepository roundRankingRepository;
-    @Mock private TeamRepository teamRepository;
     @Mock private LecturerRepository lecturerRepository;
+    @Mock private TrackAssignmentRepository trackAssignmentRepository;
     @InjectMocks private ScoreService scoreService;
+
+    /** Track the graded team sits in; grading requires a JUDGE assignment on it. */
+    private static final long TRACK_ID = 500L;
+
+    @BeforeEach
+    void allowAssignedJudgeByDefault() {
+        when(trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                eq(TRACK_ID), anyString(), eq(AssignmentRole.JUDGE))).thenReturn(true);
+    }
 
     private Submission submission(long id, Round round, RoundRanking rr) {
         Submission s = new Submission();
         s.setId(id);
         rr.setRound(round);
+        if (rr.getTeam() == null) {
+            rr.setTeam(teamOnTrack());
+        }
         s.setRoundRanking(rr);
         return s;
+    }
+
+    private Team teamOnTrack() {
+        Track track = new Track();
+        track.setId(TRACK_ID);
+        Team team = new Team();
+        team.setId(900L);
+        team.setTrack(track);
+        return team;
     }
 
     private static final long ROUND_ID = 100L;
@@ -182,6 +207,45 @@ class ScoreServiceMoreTest {
 
         assertThatThrownBy(() -> scoreService.gradeSubmission(1L, gradeReq(7L, 1L, "8"), "ghost@x.y"))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    /**
+     * Judging authority comes from the track assignment: a lecturer who is not the assigned
+     * judge for the submission's track cannot score it, even though the endpoint lets any
+     * LECTURER in.
+     */
+    @Test
+    void grade_rejectsLecturerWhoIsNotTheAssignedJudgeForTheTrack() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        Submission sub = submission(1L, round, new RoundRanking());
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("outsider@fpt.edu.vn")).thenReturn(Optional.of(judge(9L)));
+        when(trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                TRACK_ID, "outsider@fpt.edu.vn", AssignmentRole.JUDGE)).thenReturn(false);
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(
+                1L, gradeReq(7L, 1L, "8"), "outsider@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not assigned as a Judge");
+        verify(scoreRepository, never()).save(any());
+    }
+
+    /** A team still waiting on the track draw cannot be graded at all. */
+    @Test
+    void grade_rejectsWhenTeamHasNoTrackYet() {
+        Round round = round(RoundStatus.COMPLETED, null, null);
+        RoundRanking rr = new RoundRanking();
+        Team trackless = new Team();
+        trackless.setId(901L);
+        rr.setTeam(trackless);
+        Submission sub = submission(1L, round, rr);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(sub));
+        when(accountRepository.findByEmail("judge7@fpt.edu.vn")).thenReturn(Optional.of(judge(7L)));
+
+        assertThatThrownBy(() -> scoreService.gradeSubmission(
+                1L, gradeReq(7L, 1L, "8"), "judge7@fpt.edu.vn"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("not assigned to a track");
     }
 
     @Test

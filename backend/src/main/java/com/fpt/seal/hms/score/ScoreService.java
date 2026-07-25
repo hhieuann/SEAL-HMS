@@ -2,6 +2,7 @@ package com.fpt.seal.hms.score;
 
 import com.fpt.seal.hms.account.Account;
 import com.fpt.seal.hms.account.AccountRepository;
+import com.fpt.seal.hms.common.enums.AssignmentRole;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.criterion.CriterionRepository;
@@ -13,9 +14,8 @@ import com.fpt.seal.hms.score.dto.ScoreResponse;
 import com.fpt.seal.hms.score.entity.Score;
 import com.fpt.seal.hms.submission.SubmissionRepository;
 import com.fpt.seal.hms.submission.entity.Submission;
-import com.fpt.seal.hms.team.TeamRepository;
 import com.fpt.seal.hms.lecturer.LecturerRepository;
-import com.fpt.seal.hms.lecturer.Lecturer;
+import com.fpt.seal.hms.trackassignment.TrackAssignmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,8 +36,8 @@ public class ScoreService {
     private final AccountRepository accountRepository;
     private final CriterionRepository criterionRepository;
     private final RoundRankingRepository roundRankingRepository;
-    private final TeamRepository teamRepository;
     private final LecturerRepository lecturerRepository;
+    private final TrackAssignmentRepository trackAssignmentRepository;
 
     @Transactional(readOnly = true)
     public List<ScoreResponse> getScoresForSubmission(Long submissionId) {
@@ -74,6 +74,18 @@ public class ScoreService {
         // body (a client could grade under someone else's identity).
         Account judge = accountRepository.findByEmail(actorEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Judge account not found: " + actorEmail));
+
+        var team = submission.getRoundRanking().getTeam();
+        var track = team != null ? team.getTrack() : null;
+        if (track == null) {
+            throw new BusinessException("Cannot grade: The submission team is not assigned to a track.");
+        }
+        boolean isAssignedJudge =
+                trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                        track.getId(), actorEmail, AssignmentRole.JUDGE);
+        if (!isAssignedJudge) {
+            throw new BusinessException("You are not assigned as a Judge for this submission's track.");
+        }
 
         // Upsert each score entry
         for (var scoreReq : request.getScores()) {

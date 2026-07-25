@@ -166,10 +166,7 @@ const AccountManagement = () => {
     STUDENT: '#3b82f6', 
     LECTURER: '#10b981', 
     ADMIN: '#ef4444', 
-    STAFF: '#f59e0b', 
-    JUDGE: '#8b5cf6', 
-    GUEST_JUDGE: '#d946ef', 
-    MENTOR: '#06b6d4' 
+    STAFF: '#f59e0b'
   };
 
   const filteredPending = pendingList.filter(a => 
@@ -215,9 +212,6 @@ const AccountManagement = () => {
               <option value="LECTURER">Lecturer</option>
               <option value="STAFF">Staff</option>
               <option value="ADMIN">Admin</option>
-              <option value="JUDGE">Judge</option>
-              <option value="GUEST_JUDGE">Guest Judge</option>
-              <option value="MENTOR">Mentor</option>
             </select>
           </div>
         </div>

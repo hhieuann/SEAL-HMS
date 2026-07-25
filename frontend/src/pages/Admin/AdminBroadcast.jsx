@@ -19,7 +19,9 @@ const AdminBroadcast = () => {
   const [composing, setComposing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const defaultRole = localStorage.getItem('userRole') === 'STAFF' ? 'STUDENT' : 'ALL';
-  const [form, setForm] = useState({ title: '', body: '', tag: 'General', targetRole: defaultRole });
+  // No `tag` here on purpose: announcements have no tag column on the backend, so the
+  // field was silently dropped on every send. Adding tags needs a migration first.
+  const [form, setForm] = useState({ title: '', body: '', targetRole: defaultRole });
   const [sendError, setSendError] = useState('');
   const [sendShaking, setSendShaking] = useState(false);
   const [sendToast, setSendToast] = useState('');
@@ -64,7 +66,7 @@ const AdminBroadcast = () => {
         eventId: eventId ? parseInt(eventId) : null,
         targetRole: form.targetRole || 'ALL',
       });
-      setForm({ title: '', body: '', tag: 'General', targetRole: 'ALL' });
+      setForm({ title: '', body: '', targetRole: 'ALL' });
       setComposing(false);
       setSendToast('Announcement sent successfully!');
       setTimeout(() => setSendToast(''), 3000);

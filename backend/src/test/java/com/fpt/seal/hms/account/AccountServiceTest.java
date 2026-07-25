@@ -122,9 +122,9 @@ class AccountServiceTest {
         Account a = account(AccountStatus.ACTIVE, Role.STUDENT);
         when(accountRepository.findById(1L)).thenReturn(Optional.of(a));
 
-        Account result = accountService.updateRole(1L, Role.GUEST_JUDGE);
+        Account result = accountService.updateRole(1L, Role.LECTURER);
 
-        assertThat(result.getRole()).isEqualTo(Role.GUEST_JUDGE);
+        assertThat(result.getRole()).isEqualTo(Role.LECTURER);
     }
 
     @Test

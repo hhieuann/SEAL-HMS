@@ -1,6 +1,7 @@
 package com.fpt.seal.hms.trackassignment;
 
 import com.fpt.seal.hms.common.dto.ApiResponse;
+import com.fpt.seal.hms.trackassignment.dto.ExpertAssignmentResponse;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentRequest;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentResponse;
 import jakarta.validation.Valid;
@@ -42,9 +43,10 @@ public class TrackAssignmentController {
     }
 
     @GetMapping("/api/v1/users/me/assignments")
-    @PreAuthorize("hasAnyRole('JUDGE', 'LECTURER', 'GUEST_JUDGE', 'MENTOR')")
-    public ApiResponse<List<TrackAssignmentResponse>> getMyAssignments(org.springframework.security.core.Authentication auth) {
-        return ApiResponse.ok(assignmentService.getByLecturerEmail(auth.getName()));
+    @PreAuthorize("hasRole('LECTURER')")
+    public ApiResponse<List<ExpertAssignmentResponse>> getMyAssignments(
+            org.springframework.security.core.Authentication auth) {
+        return ApiResponse.ok(assignmentService.getExpertAssignments(auth.getName()));
     }
 
     /** Remove an assignment. */
@@ -56,7 +58,7 @@ public class TrackAssignmentController {
     }
 
     @PostMapping("/api/v1/tracks/{trackId}/complete-scoring")
-    @PreAuthorize("hasAnyRole('LECTURER', 'GUEST_JUDGE', 'ADMIN')")
+    @PreAuthorize("hasRole('LECTURER')")
     public ApiResponse<Void> completeScoring(@PathVariable Long trackId, org.springframework.security.core.Authentication auth) {
         assignmentService.completeScoring(trackId, auth.getName());
         return ApiResponse.ok("Scoring completed for this track", null);

@@ -43,11 +43,21 @@ class ScoreServiceTest {
     @Mock
     private RoundRankingRepository roundRankingRepository;
     @Mock
-    private com.fpt.seal.hms.team.TeamRepository teamRepository;
-    @Mock
     private com.fpt.seal.hms.lecturer.LecturerRepository lecturerRepository;
+    @Mock
+    private com.fpt.seal.hms.trackassignment.TrackAssignmentRepository trackAssignmentRepository;
     @InjectMocks
     private ScoreService scoreService;
+
+    /** Track the graded team sits in; grading requires a JUDGE assignment on it. */
+    private static final long TRACK_ID = 500L;
+
+    /** Let the acting judge through the track-assignment gate. */
+    private void assignedToTrack(String judgeEmail) {
+        when(trackAssignmentRepository.existsByTrack_IdAndLecturer_Account_EmailAndRole(
+                TRACK_ID, judgeEmail, com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE))
+                .thenReturn(true);
+    }
 
     private Account judge(long id) {
         Account a = new Account();
@@ -80,8 +90,18 @@ class ScoreServiceTest {
         s.setId(id);
         RoundRanking rr = new RoundRanking();
         rr.setRound(roundEntity());
+        rr.setTeam(teamOnTrack());
         s.setRoundRanking(rr);
         return s;
+    }
+
+    private com.fpt.seal.hms.team.entity.Team teamOnTrack() {
+        com.fpt.seal.hms.track.entity.Track track = new com.fpt.seal.hms.track.entity.Track();
+        track.setId(TRACK_ID);
+        com.fpt.seal.hms.team.entity.Team team = new com.fpt.seal.hms.team.entity.Team();
+        team.setId(900L);
+        team.setTrack(track);
+        return team;
     }
 
     private ScoreRequest scoreReq(long criterionId, String score) {
@@ -123,6 +143,7 @@ class ScoreServiceTest {
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(
                 persisted(sub, j, c1, "8"), persisted(sub, j, c2, "5")));
 
+        assignedToTrack("judge7@fpt.edu.vn");
         scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "8"), scoreReq(2L, "5")), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
@@ -144,6 +165,7 @@ class ScoreServiceTest {
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(
                 persisted(sub, j1, c1, "10"), persisted(sub, j2, c1, "5")));
 
+        assignedToTrack("judge8@fpt.edu.vn");
         scoreService.gradeSubmission(1L, gradeReq(8L, scoreReq(1L, "5")), "judge8@fpt.edu.vn");
 
         ArgumentCaptor<RoundRanking> cap = ArgumentCaptor.forClass(RoundRanking.class);
@@ -163,6 +185,7 @@ class ScoreServiceTest {
                 .thenReturn(Optional.empty());
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(persisted(sub, j, c1, "10")));
 
+        assignedToTrack("judge7@fpt.edu.vn");
         scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "15")), "judge7@fpt.edu.vn"); // 15 > max 10
 
         ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);
@@ -183,6 +206,7 @@ class ScoreServiceTest {
                 .thenReturn(Optional.of(existing));
         when(scoreRepository.findBySubmissionId(1L)).thenReturn(List.of(existing));
 
+        assignedToTrack("judge7@fpt.edu.vn");
         scoreService.gradeSubmission(1L, gradeReq(7L, scoreReq(1L, "9")), "judge7@fpt.edu.vn");
 
         ArgumentCaptor<Score> cap = ArgumentCaptor.forClass(Score.class);

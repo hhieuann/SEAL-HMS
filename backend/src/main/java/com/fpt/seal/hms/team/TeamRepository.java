@@ -15,6 +15,9 @@ public interface TeamRepository extends JpaRepository<Team, Long> {
     /** Teams that opted into a chapter — used to build the year-long Chapter Leaderboard. */
     List<Team> findByChapterIsNotNull();
     boolean existsByTrack_IdAndMentor_Id(Long trackId, Long mentorId);
+    List<Team> findByMentor_Account_Email(String email);
+    boolean existsByMentor_Account_Email(String email);
+    boolean existsByEvent_IdAndMentor_Account_Email(Long eventId, String email);
     Optional<Team> findByInviteCode(String inviteCode);
     boolean existsByInviteCode(String inviteCode);
 }

@@ -54,8 +54,6 @@ class AdminSeederTest {
         ReflectionTestUtils.setField(seeder, "lecturerPassword", "Lecturer@12345");
         ReflectionTestUtils.setField(seeder, "studentEmail", "student@seal-hms.local");
         ReflectionTestUtils.setField(seeder, "studentPassword", "Student@12345");
-        ReflectionTestUtils.setField(seeder, "guestJudgeEmail", "judge@seal-hms.local");
-        ReflectionTestUtils.setField(seeder, "guestJudgePassword", "Judge@12345");
     }
 
     @Test
@@ -64,8 +62,7 @@ class AdminSeederTest {
                 "admin@seal-hms.local", account(1L, "admin@seal-hms.local", Role.ADMIN),
                 "staff@seal-hms.local", account(2L, "staff@seal-hms.local", Role.STAFF),
                 "lecturer@seal-hms.local", account(3L, "lecturer@seal-hms.local", Role.LECTURER),
-                "student@seal-hms.local", account(4L, "student@seal-hms.local", Role.STUDENT),
-                "judge@seal-hms.local", account(5L, "judge@seal-hms.local", Role.GUEST_JUDGE));
+                "student@seal-hms.local", account(4L, "student@seal-hms.local", Role.STUDENT));
 
         when(accountRepository.findByEmail(any()))
                 .thenAnswer(invocation -> Optional.ofNullable(accounts.get(invocation.getArgument(0))));

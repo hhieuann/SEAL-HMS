@@ -31,7 +31,7 @@ public class ScoreController {
     }
 
     @PostMapping("/grade")
-    @PreAuthorize("hasAnyRole('LECTURER','GUEST_JUDGE','ADMIN')")
+    @PreAuthorize("hasRole('LECTURER')")
     public ResponseEntity<ApiResponse<List<ScoreResponse>>> grade(
             @PathVariable Long submissionId,
             @RequestBody GradeSubmissionRequest request,

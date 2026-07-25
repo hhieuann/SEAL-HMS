@@ -43,7 +43,7 @@ const Settings = () => {
       if (role === 'STUDENT') {
         const res = await profileApi.getStudentProfile();
         data = res.data?.data || res.data;
-      } else if (['LECTURER', 'JUDGE', 'MENTOR', 'GUEST_JUDGE'].includes(role)) {
+      } else if (role === 'LECTURER') {
         const res = await profileApi.getLecturerProfile();
         data = res.data?.data || res.data;
       } else if (role === 'STAFF') {
@@ -160,7 +160,7 @@ const Settings = () => {
 
       if (role === 'STUDENT') {
         await profileApi.updateStudentProfile(profile);
-      } else if (['LECTURER', 'JUDGE', 'MENTOR', 'GUEST_JUDGE'].includes(role)) {
+      } else if (role === 'LECTURER') {
         await profileApi.updateLecturerProfile(profile);
       } else if (role === 'STAFF') {
         await profileApi.updateStaffProfile(profile);

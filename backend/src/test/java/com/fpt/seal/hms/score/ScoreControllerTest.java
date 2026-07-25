@@ -49,14 +49,17 @@ class ScoreControllerTest {
         verify(scoreService).gradeSubmission(eq(1L), any(), any());
     }
 
+    /**
+     * Judging is a lecturer responsibility earned through a track assignment, so an admin
+     * can no longer grade on a judge's behalf.
+     */
     @Test
-    void grade_asGuestJudge_ok() throws Exception {
-        when(scoreService.gradeSubmission(eq(1L), any(), any())).thenReturn(List.of());
-
+    void grade_asAdmin_forbidden() throws Exception {
         mockMvc.perform(post("/api/v1/submissions/1/scores/grade")
-                        .with(user("gj").roles("GUEST_JUDGE")).with(csrf())
+                        .with(user("admin").roles("ADMIN")).with(csrf())
                         .contentType("application/json").content(GRADE_BODY))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+        verify(scoreService, never()).gradeSubmission(any(), any(), any());
     }
 
     @Test

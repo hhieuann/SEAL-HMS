@@ -15,6 +15,7 @@ import {
   Settings as SettingsIcon,
   Shield,
   User,
+  Users,
 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { eventService } from '../../api/eventService';
@@ -67,30 +68,13 @@ const ACCOUNT_DETAILS = {
     heading: 'Academic expert workspace',
     summary: 'Move between judging and mentoring responsibilities from one place.',
   },
-  JUDGE: {
-    label: 'Judge',
-    portal: 'Judge Workspace',
-    heading: 'Evaluation workspace',
-    summary: 'Review assigned teams and complete fair, consistent scoring.',
-  },
-  GUEST_JUDGE: {
-    label: 'Guest Judge',
-    portal: 'Guest Judge Workspace',
-    heading: 'Evaluation workspace',
-    summary: 'Review assigned teams and complete fair, consistent scoring.',
-  },
-  MENTOR: {
-    label: 'Mentor',
-    portal: 'Mentor Workspace',
-    heading: 'Team support workspace',
-    summary: 'Guide assigned teams and keep support requests moving.',
-  },
 };
 
+// A lecturer always lands on Judging; which tabs actually hold workspaces depends on
+// their assignments, not on their account role.
 const getInitialTab = () => {
   const role = localStorage.getItem('userRole');
   if (role === 'STAFF') return 'staff';
-  if (role === 'MENTOR') return 'mentor';
   return 'judge';
 };
 
@@ -105,9 +89,9 @@ const getAssignmentMetrics = (assignment) => {
 
   if (assignment.role === 'Mentor') {
     return [
-      { label: 'Open tickets', value: assignment.stats.openTickets, icon: Clock },
-      { label: 'Urgent', value: assignment.stats.urgentTickets, icon: AlertCircle, tone: 'danger' },
-      { label: 'Resolved', value: assignment.stats.resolved, icon: CheckCircle2, tone: 'success' },
+      { label: 'Teams', value: assignment.stats.teams, icon: Users },
+      { label: 'Tracks', value: assignment.stats.tracks, icon: LayoutDashboard },
+      { label: 'Support', value: 'Available', icon: CheckCircle2, tone: 'success' },
     ];
   }
 
@@ -128,7 +112,15 @@ const ExpertDashboard = () => {
   const [activeTab, setActiveTab] = useState(getInitialTab);
 
   const handleEnterWorkspace = (ctx) => {
-    const contextData = { event: ctx.event, role: ctx.role, track: ctx.track, trackId: ctx.trackId, path: ctx.path, eventId: ctx.eventId };
+    const contextData = {
+      event: ctx.event,
+      role: ctx.role,
+      track: ctx.track,
+      trackId: ctx.trackId,
+      teamIds: ctx.teamIds || [],
+      path: ctx.path,
+      eventId: ctx.eventId,
+    };
     localStorage.setItem('expertContext', JSON.stringify(contextData));
     navigate(ctx.path);
   };
@@ -139,12 +131,11 @@ const ExpertDashboard = () => {
   const [currentUser, setCurrentUser] = useState(() => {
     const email = localStorage.getItem('userEmail') || 'Expert';
     const userName = localStorage.getItem('userName');
-    const role = localStorage.getItem('userRole') || 'JUDGE';
+    const role = localStorage.getItem('userRole') || 'LECTURER';
     const userId = parseInt(localStorage.getItem('userId') || '1');
     
     const roles = [];
-    if (role === 'JUDGE' || role === 'LECTURER' || role === 'GUEST_JUDGE') roles.push('Judge');
-    if (role === 'MENTOR' || role === 'LECTURER') roles.push('Mentor');
+    if (role === 'LECTURER') roles.push('Judge', 'Mentor');
     if (role === 'STAFF') roles.push('Staff');
     
     const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
@@ -211,53 +202,51 @@ const ExpertDashboard = () => {
             } catch { /* ignored on purpose */ }
           }
           
-          // Filter my assignments that match this event's tracks
-          const eventTrackIds = eventTracks.map(t => t.id);
-          const myAssignmentsForEvent = myAssignments.filter(a => eventTrackIds.includes(a.trackId));
+          const myAssignmentsForEvent = myAssignments.filter(a => a.eventId === evt.id);
           const judgeAssignments = myAssignmentsForEvent.filter(a => a.role === 'JUDGE');
+          const mentorAssignments = myAssignmentsForEvent.filter(a => a.role === 'MENTOR');
           
-          if (currentUser.roles.includes('Judge')) {
-            if (judgeAssignments.length > 0) {
-              for (const assignment of judgeAssignments) {
-                const trackObj = eventTracks.find(t => t.id === assignment.trackId);
-                const trackName = trackObj ? trackObj.name : 'All Tracks';
-                const trackId = trackObj ? trackObj.id : null;
-                
-                // Calculate Judge Stats if applicable
-                let pending = '-', completed = '-';
-                if (evt.status !== 'CREATED') {
-                  try {
-                    let p = 0, c = 0;
-                    const roundsRes = await eventService.getEventRounds(evt.id);
-                    const rounds = roundsRes.data || [];
-                    let activeRoundIdx = -1;
-                    for (let i = rounds.length - 1; i >= 0; i--) {
-                      if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
-                        activeRoundIdx = i; break;
+          if (currentUser.roles.includes('Judge') && judgeAssignments.length > 0) {
+            for (const assignment of judgeAssignments) {
+              const trackObj = eventTracks.find(t => t.id === assignment.trackId);
+              const trackName = trackObj ? trackObj.name : 'All Tracks';
+              const trackId = trackObj ? trackObj.id : null;
+              
+              // Calculate Judge Stats if applicable
+              let pending = '-', completed = '-';
+              if (evt.status !== 'CREATED') {
+                try {
+                  let p = 0, c = 0;
+                  const roundsRes = await eventService.getEventRounds(evt.id);
+                  const rounds = roundsRes.data || [];
+                  let activeRoundIdx = -1;
+                  for (let i = rounds.length - 1; i >= 0; i--) {
+                    if (rounds[i].status !== 'CREATED' && rounds[i].status?.toLowerCase() !== 'planned') {
+                      activeRoundIdx = i; break;
+                    }
+                  }
+                  const activeRound = rounds[activeRoundIdx !== -1 ? activeRoundIdx : 0];
+                  
+                  if (activeRound) {
+                    await Promise.all(teamsList.map(async (t) => {
+                    if (trackId && t.trackId !== trackId) return;
+                    if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
+                      try {
+                        const subRes = await submissionService.getSubmission(activeRound.id, t.id);
+                        if (subRes?.data?.id) {
+                          const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
+                          if (scoresRes?.data?.length > 0) c++; else p++;
+                        }
+                      } catch {
+                        // No submission yet
                       }
                     }
-                    const activeRound = rounds[activeRoundIdx !== -1 ? activeRoundIdx : 0];
-                    
-                    if (activeRound) {
-                      await Promise.all(teamsList.map(async (t) => {
-                      if (trackId && t.trackId !== trackId) return;
-                      if (['REGISTERED', 'APPROVED', 'CONFIRMED', 'IN_PROGRESS'].includes(t.status)) {
-                        try {
-                          const subRes = await submissionService.getSubmission(activeRound.id, t.id);
-                          if (subRes?.data?.id) {
-                            const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
-                            if (scoresRes?.data?.length > 0) c++; else p++;
-                          }
-                        } catch {
-                          // No submission yet
-                        }
-                      }
-                    }));
-                  }
-                  pending = p;
-                  completed = c;
-                } catch (e) { console.error(e); }
-              }
+                  }));
+                }
+                pending = p;
+                completed = c;
+              } catch (e) { console.error(e); }
+            }
 
               dynamicAssignments.push({
                 id: `judge-${evt.id}-${trackId || 'any'}`,
@@ -271,58 +260,32 @@ const ExpertDashboard = () => {
                 status: evt.status === 'CREATED' ? 'upcoming' : 'active'
               });
             }
-          } else {
-            dynamicAssignments.push({
-                id: `judge-none-${evt.id}`,
-                eventId: evt.id,
-                event: evt.name,
-                role: 'Judge',
-                track: 'No judge assignments',
-                trackId: null,
-                path: null,
-                stats: { pending: '-', flagged: '-', completed: '-' },
-                status: 'upcoming'
-              });
-            }
           }
 
-          if (currentUser.roles.includes('Mentor')) {
-            const userEmail = localStorage.getItem('userEmail');
-            const isMentor = teamsList.some(t => t.mentor && (t.mentor.email === userEmail || t.mentor.id === currentUser.userId));
-            
-            if (isMentor) {
-              const mentoredTeams = teamsList.filter(t => t.mentor && (t.mentor.email === userEmail || t.mentor.id === currentUser.userId));
-              const mentoredTrackIds = [...new Set(mentoredTeams.map(t => t.trackId).filter(Boolean))];
-              const mentoredTrackNames = mentoredTrackIds.map(tid => {
-                const tr = eventTracks.find(t => t.id === tid);
-                return tr ? tr.name : null;
-              }).filter(Boolean);
-              const trackLabel = mentoredTrackNames.length > 0 ? mentoredTrackNames.join(', ') : 'All Tracks';
+          if (currentUser.roles.includes('Mentor') && mentorAssignments.length > 0) {
+            const teamNames = mentorAssignments.map(a => a.teamName).filter(Boolean);
+            const mentoredTrackIds = [...new Set(
+              mentorAssignments.map(a => a.trackId).filter(Boolean)
+            )];
+            const teamLabel = teamNames.length > 0
+              ? teamNames.join(', ')
+              : `${mentorAssignments.length} assigned team${mentorAssignments.length === 1 ? '' : 's'}`;
 
-              dynamicAssignments.push({
-                id: `mentor-${evt.id}`,
-                eventId: evt.id,
-                event: evt.name,
-                role: 'Mentor',
-                track: trackLabel,
-                trackId: mentoredTrackIds[0] || null,
-                path: '/mentor/tickets',
-                stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
-                status: evt.status === 'CREATED' ? 'upcoming' : 'active'
-              });
-            } else {
-              dynamicAssignments.push({
-                id: `mentor-none-${evt.id}`,
-                eventId: evt.id,
-                event: evt.name,
-                role: 'Mentor',
-                track: 'No mentor assignments',
-                trackId: null,
-                path: null,
-                stats: { openTickets: '-', urgentTickets: '-', resolved: '-' },
-                status: 'upcoming'
-              });
-            }
+            dynamicAssignments.push({
+              id: `mentor-${evt.id}`,
+              eventId: evt.id,
+              event: evt.name,
+              role: 'Mentor',
+              track: teamLabel,
+              trackId: mentoredTrackIds[0] || null,
+              teamIds: mentorAssignments.map(a => a.teamId).filter(Boolean),
+              path: '/mentor/tickets',
+              stats: {
+                teams: mentorAssignments.length,
+                tracks: mentoredTrackIds.length,
+              },
+              status: evt.status === 'CREATED' ? 'upcoming' : 'active'
+            });
           }
 
           if (currentUser.roles.includes('Staff')) {
@@ -353,8 +316,8 @@ const ExpertDashboard = () => {
   const hasJudge = currentUser.roles.includes('Judge');
   const hasMentor = currentUser.roles.includes('Mentor');
   const hasStaff = currentUser.roles.includes('Staff');
-  const accountRole = localStorage.getItem('userRole') || 'JUDGE';
-  const accountDetails = ACCOUNT_DETAILS[accountRole] || ACCOUNT_DETAILS.JUDGE;
+  const accountRole = localStorage.getItem('userRole') || 'LECTURER';
+  const accountDetails = ACCOUNT_DETAILS[accountRole] || ACCOUNT_DETAILS.LECTURER;
   const roleOptions = [
     { key: 'judge', enabled: hasJudge },
     { key: 'mentor', enabled: hasMentor },
@@ -368,6 +331,7 @@ const ExpertDashboard = () => {
   const activeWorkspaces = assignedWorkspaces.filter(assignment => assignment.status === 'active');
   const upcomingWorkspaces = assignedWorkspaces.filter(assignment => assignment.status === 'upcoming');
   const activeRoleAssigned = visibleAssignments.filter(assignment => assignment.path);
+  const ActiveRoleIcon = activeRole.icon;
   const firstName = currentUser.name.trim().split(/\s+/)[0] || 'Expert';
 
   return (
@@ -569,7 +533,13 @@ const ExpertDashboard = () => {
                         </div>
 
                         <div className="expert-assignment-scope">
-                          <span>{assignment.role === 'Event Staff' ? 'Scope' : 'Track'}</span>
+                          <span>
+                            {assignment.role === 'Event Staff'
+                              ? 'Scope'
+                              : assignment.role === 'Mentor'
+                                ? 'Teams'
+                                : 'Track'}
+                          </span>
                           <strong>
                             {assignment.role === 'Event Staff' ? 'Entire event' : assignment.track}
                           </strong>
@@ -617,7 +587,7 @@ const ExpertDashboard = () => {
               >
                 <div className="expert-role-summary-heading">
                   <div className="expert-role-summary-icon">
-                    <activeRole.icon size={22} />
+                    <ActiveRoleIcon size={22} />
                   </div>
                   <div>
                     <span>Current view</span>

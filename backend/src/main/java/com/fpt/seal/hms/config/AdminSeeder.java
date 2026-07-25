@@ -61,12 +61,6 @@ public class AdminSeeder implements CommandLineRunner {
     @Value("${app.student.password:Student@12345}")
     private String studentPassword;
 
-    @Value("${app.guest_judge.email:judge@seal-hms.local}")
-    private String guestJudgeEmail;
-
-    @Value("${app.guest_judge.password:Judge@12345}")
-    private String guestJudgePassword;
-
     @Override
     @Transactional
     public void run(String... args) {
@@ -74,7 +68,6 @@ public class AdminSeeder implements CommandLineRunner {
         Account staff = seedIfMissing(Role.STAFF, staffEmail, staffPassword);
         Account lecturer = seedIfMissing(Role.LECTURER, lecturerEmail, lecturerPassword);
         Account student = seedIfMissing(Role.STUDENT, studentEmail, studentPassword);
-        seedIfMissing(Role.GUEST_JUDGE, guestJudgeEmail, guestJudgePassword);
 
         seedStaffProfileIfMissing(staff);
         seedLecturerProfileIfMissing(lecturer);

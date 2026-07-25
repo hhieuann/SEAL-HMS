@@ -114,17 +114,17 @@ function App() {
           <Route path="notifications" element={<Notifications />} />
         </Route>
 
-        {/* Judge & Mentor & Staff Routes */}
-        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['JUDGE', 'MENTOR', 'GUEST_JUDGE', 'LECTURER', 'STAFF']}><ExpertDashboard /></ProtectedRoute>} />
+        {/* Lecturer responsibilities and Staff operations */}
+        <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={['LECTURER', 'STAFF']}><ExpertDashboard /></ProtectedRoute>} />
         
-        <Route path="/judge" element={<ProtectedRoute allowedRoles={['JUDGE', 'GUEST_JUDGE', 'LECTURER']}><JudgeLayout /></ProtectedRoute>}>
+        <Route path="/judge" element={<ProtectedRoute allowedRoles={['LECTURER']}><JudgeLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="panel" replace />} />
           <Route path="panel" element={<JudgePanel />} />
           <Route path="announcements" element={<Notifications />} />
         </Route>
 
         {/* Mentor Routes */}
-        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['MENTOR', 'LECTURER']}><MentorLayout /></ProtectedRoute>}>
+        <Route path="/mentor" element={<ProtectedRoute allowedRoles={['LECTURER']}><MentorLayout /></ProtectedRoute>}>
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />

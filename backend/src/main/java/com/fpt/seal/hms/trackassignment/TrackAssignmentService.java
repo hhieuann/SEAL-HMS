@@ -6,6 +6,7 @@ import com.fpt.seal.hms.lecturer.Lecturer;
 import com.fpt.seal.hms.lecturer.LecturerRepository;
 import com.fpt.seal.hms.track.TrackRepository;
 import com.fpt.seal.hms.track.entity.Track;
+import com.fpt.seal.hms.trackassignment.dto.ExpertAssignmentResponse;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentRequest;
 import com.fpt.seal.hms.trackassignment.dto.TrackAssignmentResponse;
 import lombok.RequiredArgsConstructor;
@@ -75,6 +76,23 @@ public class TrackAssignmentService {
         return assignmentRepository.findByLecturer_Account_Email(email).stream()
                 .map(TrackAssignmentResponse::from)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpertAssignmentResponse> getExpertAssignments(String email) {
+        List<ExpertAssignmentResponse> responsibilities = new java.util.ArrayList<>();
+
+        assignmentRepository.findByLecturer_Account_Email(email).stream()
+                .filter(assignment -> assignment.getRole()
+                        == com.fpt.seal.hms.common.enums.AssignmentRole.JUDGE)
+                .map(ExpertAssignmentResponse::fromJudge)
+                .forEach(responsibilities::add);
+
+        teamRepository.findByMentor_Account_Email(email).stream()
+                .map(ExpertAssignmentResponse::fromMentor)
+                .forEach(responsibilities::add);
+
+        return responsibilities;
     }
 
     @Transactional

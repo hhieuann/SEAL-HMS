@@ -5,9 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  // 'hash.js' is a one-off dev scratch script (CommonJS, UTF-16) that is not part of the
-  // app bundle and cannot be parsed as app source.
-  globalIgnores(['dist', 'hash.js']),
+  globalIgnores(['dist']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

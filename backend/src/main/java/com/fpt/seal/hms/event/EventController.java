@@ -27,7 +27,7 @@ public class EventController {
     }
 
     @GetMapping("/assigned")
-    @PreAuthorize("hasAnyRole('JUDGE', 'LECTURER', 'GUEST_JUDGE', 'MENTOR', 'STAFF')")
+    @PreAuthorize("hasAnyRole('LECTURER', 'STAFF')")
     public ResponseEntity<ApiResponse<List<EventResponse>>> getAssignedEvents(Authentication auth) {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getAssignedEvents(auth.getName())));
     }

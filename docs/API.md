@@ -25,7 +25,8 @@ Every response (success or error) has this shape:
 ### Enums
 | Enum | Values |
 |------|--------|
-| `Role` | `ADMIN`, `STAFF`, `LECTURER`, `STUDENT`, `GUEST_JUDGE` |
+| `Role` | `ADMIN`, `STAFF`, `LECTURER`, `STUDENT` |
+| `AssignmentRole` | `JUDGE`, `MENTOR` — a LECTURER's per-event responsibility |
 | `AccountStatus` | `ACTIVE`, `PENDING`, `DISABLED` |
 
 > Role mapping: **Event Coordinator** ≈ `ADMIN`/`STAFF`. New accounts start as `STUDENT` + `PENDING` and must be approved.
