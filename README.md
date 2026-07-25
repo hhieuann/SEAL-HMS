@@ -39,7 +39,7 @@ Chapter leaderboard    <-  Event ranking / prizes  <-  Final round  <-----------
 - Lombok, Bean Validation
 
 ### Frontend (`/frontend`)
-- **React 19 + Vite 7**, React Router 7, Axios, lucide-react icons
+- **React 19 + Vite 8**, React Router 7, Axios, lucide-react icons
 - **Vitest + React Testing Library** (jsdom) for component tests
 - ESLint 9 (flat config) — `npx eslint .` is clean of errors
 
