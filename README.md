@@ -86,7 +86,7 @@ copy .env.example frontend\.env.local
 ```powershell
 docker compose up -d        # postgres:18 on the host port from DB_PORT (5432 or 5433)
 ```
-This only creates an **empty** `seal_hms` database. **Docker does not create the tables** — Flyway does, automatically when the backend first starts: it replays every migration from `V1__init_schema.sql` up to the current `V37`, ending with 23 tables.
+This only creates an **empty** `seal_hms` database. **Docker does not create the tables** — Flyway does, automatically when the backend first starts: it replays every migration from `V1__init_schema.sql` up to the current `V37`, ending with 22 application tables (plus Flyway's own `flyway_schema_history`).
 
 > Prefer a local PostgreSQL? Create the DB once (`CREATE DATABASE seal_hms;`) and point `backend/.env.properties` at it.
 
@@ -130,7 +130,7 @@ SEAL-HMS/
 │   ├── src/main/resources/
 │   │   ├── application.yml / application-dev.yml
 │   │   └── db/migration/    # V1 … V37 (Flyway)
-│   └── src/test/java/...    # 55 test classes, 492 tests
+│   └── src/test/java/...    # 55 test classes, 499 tests
 ├── docs/                 # ARCHITECTURE, FEATURES, API, DEVELOPMENT_RULES, TEST_GITFLOW
 └── frontend/             # React + Vite SPA (34 pages)
 ```
@@ -186,7 +186,7 @@ Full breakdown in **[docs/FEATURES.md](docs/FEATURES.md)**. At a glance:
 
 | | |
 |---|---|
-| Backend tests | **492 passing** (55 classes, JUnit 5 + Mockito) |
+| Backend tests | **499 passing** (55 classes, JUnit 5 + Mockito) |
 | Backend coverage | **96.9% line · 87.7% branch** (JaCoCo; DTOs/entities/config excluded) |
 | Frontend tests | **18 passing** (Vitest + React Testing Library) |
 | Lint | `npx eslint .` — **0 errors** |

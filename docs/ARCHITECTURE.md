@@ -6,7 +6,7 @@ React (Vite)  —  34 pages, role-gated by <ProtectedRoute>
    │  REST /api/v1/**  (JWT in the Authorization header)
    ▼
 Controller  ──>  Service  ──>  Repository (Spring Data JPA)  ──>  PostgreSQL 18
-        (DTO in/out)     (business rules)        (18 entities)      (23 tables)
+        (DTO in/out)     (business rules)        (18 entities)      (22 tables)
    20 controllers      @Transactional          JpaRepository       Flyway V1..V37
    108 endpoints
 ```
@@ -113,7 +113,7 @@ Two layers, as shown in the walkthrough above:
    the token, never from the request body.
 
 ## Testing
-- **Backend:** 492 tests in 55 classes (JUnit 5 + Mockito). Service tests mock repositories;
+- **Backend:** 499 tests in 55 classes (JUnit 5 + Mockito). Service tests mock repositories;
   controller tests use `@WebMvcTest` slices with a shared `WebMvcTestSecurityConfig` so
   `@PreAuthorize` rules are actually exercised.
 - **Coverage:** JaCoCo, 96.9% line / 87.7% branch, excluding `dto`, `entity`, `config` and

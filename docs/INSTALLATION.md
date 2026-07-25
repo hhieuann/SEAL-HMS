@@ -189,7 +189,7 @@ o.s.boot.tomcat.TomcatWebServer     : Tomcat started on port 8080 (http)
 c.fpt.seal.hms.SealHmsApplication   : Started SealHmsApplication in 4.7 seconds
 ```
 
-Flyway has now built the schema — **23 tables** — and seeded four demo accounts. Verify:
+Flyway has now built the schema — **22 application tables**, plus its own `flyway_schema_history` — and seeded four demo accounts. Verify:
 
 ```powershell
 docker exec seal-hms-postgres psql -U postgres -d seal_hms -c "\dt"
@@ -278,7 +278,7 @@ projects** — the repository root is not itself a Maven or npm project.
 |---|---|---|
 | Backend health | <http://localhost:8080/api/v1/events> | `{"success":true, ...}` |
 | API documentation | <http://localhost:8080/swagger-ui.html> | Swagger UI listing 108 endpoints |
-| Backend tests | `cd backend` → `.\mvnw test` | `BUILD SUCCESS` — 492 tests across 55 classes, 0 failures |
+| Backend tests | `cd backend` → `.\mvnw test` | `BUILD SUCCESS` — 499 tests across 55 classes, 0 failures |
 | Coverage report | `.\mvnw verify` → open `backend/target/site/jacoco/index.html` | 96.9% line, 87.7% branch |
 | Frontend tests | `cd frontend` → `npx vitest run` | `Tests 18 passed (18)` |
 | Frontend lint | `npx eslint .` | 0 errors |
