@@ -72,7 +72,9 @@ const ExpertDashboard = () => {
           eventService.getAssignedEvents(),
           apiClient.get('/api/v1/users/me/assignments').catch(() => ({ data: { data: [] } }))
         ]);
-        const events = eventsRes.data || [];
+        const events = (eventsRes.data || []).filter(
+          e => e.status !== 'COMPLETED' && e.status !== 'CANCELLED'
+        );
         const myAssignments = assignmentsRes.data?.data || [];
         
         const dynamicAssignments = [];
