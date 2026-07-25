@@ -2,6 +2,30 @@
 
 A monorepo platform to manage the **SEAL (Software Engineering Agile League)** hackathon at FPT University HCMC: account & role management, event/track/round configuration, team registration, per-round submissions, multi-judge scoring, and ranking (round → event → chapter).
 
+## What the system does
+
+A hackathon at SEAL runs as a pipeline, and the system covers every stage of it:
+
+```
+Admin sets up an event          Students form teams        Track draw            Each round
+(tracks, rounds, criteria)  ->  (leader + members)     ->  (balanced,        ->  (submit -> judges
+                                                            random)              score -> promote)
+                                                                                      |
+Chapter leaderboard    <-  Event ranking / prizes  <-  Final round  <---------------- +
+(year-long, 20/15/10)
+```
+
+- **Events** hold *tracks* (parallel problem statements) and *rounds* (sequential elimination stages). Every round must define its scoring criteria, weighted to 100%.
+- **Teams** register for an event, get drawn into a track, and submit once per round. Only the team leader may submit or update.
+- **Judges** score submissions against the round's criteria; a team's round score is the weighted average across judges.
+- **Ranking** happens at three levels: per round (source of truth) → per event (derived) → per chapter (year-long aggregate).
+
+## Two ideas worth knowing before reading the code
+
+**1. Judge and Mentor are jobs, not accounts.** There are only four account roles — `ADMIN`, `STAFF`, `LECTURER`, `STUDENT`. A lecturer *becomes* a judge or a mentor by being assigned to a track or a team for one event (`AssignmentRole`). The same lecturer can judge Track A of one hackathon and mentor a team in another.
+
+**2. Judging and mentoring the same teams is blocked.** A lecturer who mentors a team cannot judge the track that team competes in, and vice versa — enforced on all three paths that could create the conflict (assigning a judge, assigning a mentor, moving a team to another track).
+
 ---
 
 ## Tech Stack
@@ -15,8 +39,9 @@ A monorepo platform to manage the **SEAL (Software Engineering Agile League)** h
 - Lombok, Bean Validation
 
 ### Frontend (`/frontend`)
-- **React 18 + Vite**, React Router, Axios
-- ESLint + Prettier
+- **React 19 + Vite 7**, React Router 7, Axios, lucide-react icons
+- **Vitest + React Testing Library** (jsdom) for component tests
+- ESLint 9 (flat config) — `npx eslint .` is clean of errors
 
 > **Switching Java 21 → 25:** the team assessment lists Java 25 (also an LTS with first-class Spring Boot 4 support). To switch, change `<java.version>` in `backend/pom.xml`. We default to 21 for the widest tooling support across machines.
 
@@ -61,7 +86,7 @@ copy .env.example frontend\.env.local
 ```powershell
 docker compose up -d        # postgres:18 on the host port from DB_PORT (5432 or 5433)
 ```
-This only creates an **empty** `seal_hms` database. **Docker does not create the tables** — Flyway does, automatically when the backend first starts (it runs `backend/src/main/resources/db/migration/V1__init_schema.sql` → 18 tables).
+This only creates an **empty** `seal_hms` database. **Docker does not create the tables** — Flyway does, automatically when the backend first starts: it replays every migration from `V1__init_schema.sql` up to the current `V37`, ending with 23 tables.
 
 > Prefer a local PostgreSQL? Create the DB once (`CREATE DATABASE seal_hms;`) and point `backend/.env.properties` at it.
 
@@ -95,17 +120,22 @@ SEAL-HMS/
 │   ├── mvnw, mvnw.cmd, .mvn/     # Maven wrapper (committed)
 │   ├── src/main/java/com/fpt/seal/hms/
 │   │   ├── common/       # BaseEntity, ApiResponse, exceptions, enums
-│   │   ├── config/       # Security, JPA auditing, OpenAPI
+│   │   ├── config/       # Security, JPA auditing, OpenAPI, AdminSeeder
 │   │   ├── auth/         # login/register + JWT
-│   │   ├── account/      # SAMPLE feature (entity→repo→service→controller)
-│   │   └── (event, team, submission, judging, ranking, ... = TODO)
+│   │   ├── account/ student/ lecturer/ staff/      # accounts & profiles
+│   │   ├── event/ round/ track/ topic/ criterion/  # event configuration
+│   │   ├── team/ teammember/ trackassignment/      # teams, draw, judge/mentor jobs
+│   │   ├── submission/ score/ roundranking/        # submit, grade, rank
+│   │   └── chapter/ prize/ announcement/ auditlog/ # awards & comms
 │   ├── src/main/resources/
 │   │   ├── application.yml / application-dev.yml
-│   │   └── db/migration/V1__init_schema.sql
-│   └── pom.xml
-├── docs/                 # ARCHITECTURE.md, DEVELOPMENT_RULES.md
-└── frontend/             # React + Vite SPA
+│   │   └── db/migration/    # V1 … V37 (Flyway)
+│   └── src/test/java/...    # 55 test classes, 492 tests
+├── docs/                 # ARCHITECTURE, FEATURES, API, DEVELOPMENT_RULES, TEST_GITFLOW
+└── frontend/             # React + Vite SPA (34 pages)
 ```
+
+**22 feature packages · 18 entities · 20 controllers · 108 REST endpoints.**
 
 ---
 
@@ -136,9 +166,47 @@ Excludes build output (`target/`, `node_modules/`), **all secret/env files** (`.
 - `docker-compose.yml` — defines the PostgreSQL 18 container (the shared dev database).
 - `backend/pom.xml` — backend dependencies (Spring Boot, JPA, Flyway + `spring-boot-flyway`, JWT…).
 - `backend/src/main/resources/application.yml` — Spring config (datasource, JPA `validate`, Flyway, JWT). `application-dev.yml` adds verbose SQL logging for the `dev` profile.
-- `backend/src/main/resources/db/migration/V1__init_schema.sql` — the Flyway migration that **creates the 18 tables**. ⚠️ Never edit an already-applied migration — add a new `V2__…`, `V3__…` instead.
+- `backend/src/main/resources/db/migration/` — the Flyway migrations that build the schema, `V1__init_schema.sql` through `V37`. ⚠️ Never edit an already-applied migration — add the next `V38__…` instead, or Flyway's checksum validation fails for everyone.
 
 ---
+
+## Actors & features
+
+Full breakdown in **[docs/FEATURES.md](docs/FEATURES.md)**. At a glance:
+
+| Actor | Account role | What they do |
+|-------|--------------|--------------|
+| **Admin** | `ADMIN` | Approve accounts, create/configure events (tracks, rounds, criteria), run the track draw, assign judges & mentors, manage chapters, advance rounds, award prizes |
+| **Event Staff** | `STAFF` | Same event operations as Admin, but only for events they are assigned to |
+| **Judge** | `LECTURER` + `JUDGE` assignment on a track | Score submissions of teams in that track against the round criteria, then mark scoring complete |
+| **Mentor** | `LECTURER` + `MENTOR` assignment on a team | Chat with and support the assigned teams |
+| **Student** | `STUDENT` | Register for an event, create or join a team (leader submits), view scores, view the chapter leaderboard |
+
+## Quality
+
+| | |
+|---|---|
+| Backend tests | **492 passing** (55 classes, JUnit 5 + Mockito) |
+| Backend coverage | **96.9% line · 87.7% branch** (JaCoCo; DTOs/entities/config excluded) |
+| Frontend tests | **18 passing** (Vitest + React Testing Library) |
+| Lint | `npx eslint .` — **0 errors** |
+| Migrations | Flyway V1 → V37, validated on every boot |
+
+Run them:
+```powershell
+cd backend  ; .\mvnw verify        # tests + JaCoCo report -> target/site/jacoco/index.html
+cd frontend ; npx vitest run ; npx eslint . ; npm run build
+```
+
+## Security decisions worth pointing out
+
+Identity always comes from the JWT, never from the request body — several holes were closed on that principle:
+
+- Only a team's **leader** may create or update its submission; members are read-only.
+- A judge's identity is taken from the token, so a `judgeAccountId` in the body cannot be used to score as somebody else. A DB unique constraint `(submission_id, judge_account_id, criterion_id)` prevents double-scoring.
+- Grading additionally requires the lecturer to be the **assigned judge for that submission's track**.
+- Creating a team makes the caller the leader; only `ADMIN`/`STAFF` may nominate a different leader.
+- Mentor chat is restricted to the team's own members and its assigned mentor.
 
 ## Git workflow
 Full rules in **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short:

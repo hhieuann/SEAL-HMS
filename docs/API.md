@@ -1,9 +1,23 @@
 # SEAL-HMS API (v1) — Frontend reference
 
-> Contract for the **currently implemented** endpoints (auth + account). More modules
-> (event, team, submission, judging, ranking, prize) appear here and in Swagger as they are built.
+> **108 endpoints across 20 controllers.** This file documents the conventions and the auth flow in
+> prose; the endpoint-by-endpoint contract is generated and always current in Swagger.
 >
 > **Live & interactive:** Swagger UI `http://localhost:8080/swagger-ui.html` · OpenAPI JSON `http://localhost:8080/v3/api-docs`
+
+## Endpoint groups
+
+| Area | Base paths |
+|---|---|
+| Auth & profile | `/auth/**`, `/profile/**` |
+| Accounts | `/accounts/**`, `/lecturers`, `/students`, `/staff` |
+| Events | `/events/**` (incl. `/events/assigned`, `/events/{id}/staff`, `/events/{id}/status`) |
+| Event setup | `/events/{id}/tracks`, `/events/{id}/rounds`, `/rounds/{id}/criteria`, `/topics/**` |
+| Teams | `/events/{id}/teams`, `/teams/{id}/**` (assign-track, mentor, messages, status) |
+| Assignments | `/tracks/{id}/assignments`, `/track-assignments/{id}`, `/users/me/assignments` |
+| Competition | `/submissions/**`, `/submissions/{id}/scores/**`, `/rounds/{id}/standings` |
+| Recognition | `/chapters/**`, `/chapters/leaderboard`, `/prizes/**` |
+| Platform | `/announcements/**`, `/audit-logs` |
 
 ## Conventions
 - **Base URL:** `http://localhost:8080` (FE reads it from `VITE_API_BASE_URL`). Everything is under `/api/v1`.
