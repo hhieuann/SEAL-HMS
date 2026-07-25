@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import { authApi } from '../../api/auth';
+import { authApi, clearAuthSession } from '../../api/auth';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -11,13 +11,7 @@ const Login = () => {
 
   // Clear stale session data from previous login (any role)
   useEffect(() => {
-    const keysToRemove = [
-      'token', 'role', 'accountId', 'userId', 'currentUser',
-      'p_eventId', 'p_selectedEventId', 'p_hasJoinedEvent',
-      'p_hasTeam', 'p_isLeader', 'p_teamId', 'p_teamInviteCode',
-      'myTeamName', 'currentEventId', 'userName', 'userEmail', 'avatarUrl'
-    ];
-    keysToRemove.forEach(key => localStorage.removeItem(key));
+    clearAuthSession();
   }, []);
 
   const [email, setEmail] = useState('');
@@ -54,7 +48,22 @@ const Login = () => {
       else navigate('/');
       
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password.');
+      const status = err.response?.status;
+      const backendMessage = err.response?.data?.message;
+
+      console.error('Login failed', {
+        status,
+        code: err.code,
+        message: err.message,
+        hasResponse: Boolean(err.response),
+      });
+
+      const fallbackMessage = status === 401
+        ? 'Invalid email or password.'
+        : status === 403
+          ? 'Login request was blocked by the server configuration.'
+          : 'Unable to sign in. Please try again.';
+      setError(backendMessage || fallbackMessage);
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
     } finally {

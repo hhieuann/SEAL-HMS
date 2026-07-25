@@ -1,15 +1,29 @@
 import apiClient from './apiClient';
 
-const PARTICIPANT_KEYS = ['p_hasJoinedEvent', 'p_hasTeam', 'p_teamInviteCode', 'myTeamName', 'p_teamId', 'p_isLeader'];
+const AUTH_KEYS = [
+  'token', 'role', 'userRole', 'accountId', 'userId', 'currentUser',
+  'userEmail', 'userName', 'avatarUrl',
+];
+
+const PARTICIPANT_KEYS = [
+  'p_eventId', 'p_selectedEventId', 'p_hasJoinedEvent', 'p_hasTeam',
+  'p_teamInviteCode', 'myTeamName', 'p_teamId', 'p_isLeader',
+  'currentEventId',
+];
+
+export const clearAuthSession = () => {
+  AUTH_KEYS.forEach(key => localStorage.removeItem(key));
+  PARTICIPANT_KEYS.forEach(key => localStorage.removeItem(key));
+};
 
 export const authApi = {
   login: async (email, password) => {
     // Clear old state before login to prevent cross-account bleeding
-    localStorage.removeItem('currentUser');
-    PARTICIPANT_KEYS.forEach(key => localStorage.removeItem(key));
+    clearAuthSession();
     
     const response = await apiClient.post('/api/v1/auth/login', { email, password });
     const { token, role, accountId, email: returnedEmail, name: returnedName, avatarUrl } = response.data.data;
+    let resolvedAccountId = accountId;
     
     localStorage.setItem('token', token);
     localStorage.setItem('userRole', role);
@@ -30,6 +44,7 @@ export const authApi = {
         const accounts = accountsRes.data?.data || [];
         const matched = accounts.find(a => a.email === (returnedEmail || email));
         if (matched) {
+          resolvedAccountId = matched.id;
           localStorage.setItem('accountId', matched.id);
           localStorage.setItem('userId', matched.id);
         }
@@ -40,6 +55,7 @@ export const authApi = {
           const accounts = accountsRes.data?.data || [];
           const matched = accounts.find(a => a.email === (returnedEmail || email));
           if (matched) {
+            resolvedAccountId = matched.id;
             localStorage.setItem('accountId', matched.id);
             localStorage.setItem('userId', matched.id);
           }
@@ -56,6 +72,7 @@ export const authApi = {
           };
           const resolvedId = knownAccounts[returnedEmail || email];
           if (resolvedId) {
+            resolvedAccountId = resolvedId;
             localStorage.setItem('accountId', resolvedId);
             localStorage.setItem('userId', resolvedId);
           } else {
@@ -65,7 +82,7 @@ export const authApi = {
       }
     }
     
-    return { token, role, accountId };
+    return { token, role, accountId: resolvedAccountId, name: returnedName, avatarUrl };
   },
 
   register: async (email, password, role = 'STUDENT', studentCode, firstName, lastName, campus, proofFile) => {
@@ -99,18 +116,7 @@ export const authApi = {
   },
 
   logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('avatarUrl');
-    localStorage.removeItem('accountId');
-    localStorage.removeItem('currentUser');
-    
-    PARTICIPANT_KEYS.forEach(key => {
-      localStorage.removeItem(key);
-    });
-    
+    clearAuthSession();
     window.location.href = '/login';
   }
 };
