@@ -1,14 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Megaphone, Plus, Send, Pin, PinOff, Trash2, Globe, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Megaphone, Plus, Send, Trash2, Globe, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
-
-const tagColors = {
-  Important: { bg: 'rgba(239,68,68,0.12)', color: 'var(--danger)', border: 'rgba(239,68,68,0.3)' },
-  Deadline:  { bg: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: 'rgba(245,158,11,0.3)' },
-  Update:    { bg: 'rgba(59,130,246,0.12)', color: 'var(--primary)', border: 'rgba(59,130,246,0.3)' },
-  General:   { bg: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'var(--border-color)' },
-};
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -129,7 +122,6 @@ const AdminBroadcast = () => {
           )}
 
           {!loading && posts.map(post => {
-            const tag = tagColors[post.tag] || tagColors.General;
             return (
               <div key={post.id} className="glass-panel" style={{ padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>

@@ -3,6 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, Calendar, Target, Plus, X, AlertTriangle, Save, AlertCircle, Users } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 
+// Defined at module scope: a component declared inside EventForm would be a brand-new
+// component type on every render, which remounts it and drops its state.
+const InlineWarn = ({ msg }) => <div style={{display:'flex',alignItems:'center',gap:'5px',marginTop:'5px',color:'var(--danger)',fontSize:'12px'}}><AlertTriangle size={11}/> {msg}</div>;
+
 const EventForm = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
@@ -98,7 +102,6 @@ const EventForm = () => {
     .map((r, i) => r.name || `Round ${i + 1}`);
 
   const maxTeamsNum = parseInt(formData.maxTeams) || 0;
-  const trackCount = Math.max(1, formData.subTopics?.length || 1);
   const teamFlow = formData.rounds.reduce((acc, round, idx) => {
     const isFinal    = idx === formData.rounds.length - 1;
     const prevLeft   = acc.length > 0 ? acc[acc.length - 1].promotedTotal : maxTeamsNum;
@@ -121,8 +124,6 @@ const EventForm = () => {
         if (!rawEvent) return;
         const roundsRes = await eventService.getEventRounds(eventId);
         const rawRounds = roundsRes.data || [];
-        const tracksRes = await trackService.getTracksByEvent(eventId);
-        const tracks    = tracksRes.data || [];
         const topicsRes = await trackService.getTopicsByEvent(eventId);
         const subTopics = (topicsRes.data || []).map((t, i) => ({ id: t.id || i, name: t.name, desc: t.description }));
         setInitialTopics(subTopics);
@@ -301,7 +302,6 @@ const EventForm = () => {
   const errBorder = { borderColor:'rgba(239,68,68,0.5)' };
   const lbl = { display:'block',fontSize:'13px',fontWeight:'600',color:'var(--text-secondary)',marginBottom:'8px' };
   const req = <span style={{color:'var(--danger)'}}>*</span>;
-  const InlineWarn = ({msg}) => <div style={{display:'flex',alignItems:'center',gap:'5px',marginTop:'5px',color:'var(--danger)',fontSize:'12px'}}><AlertTriangle size={11}/> {msg}</div>;
 
   return (
     <div className="animate-fade-in" style={{paddingBottom:'40px'}}>

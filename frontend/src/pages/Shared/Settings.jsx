@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, Lock, AlertCircle, CheckCircle, Save } from 'lucide-react';
 import { profileApi } from '../../api/profileApi';
 import { authApi } from '../../api/auth';
 import './Settings.css';
 
 const Settings = () => {
-  const [role, setRole] = useState(localStorage.getItem('userRole') || '');
+  const [role] = useState(localStorage.getItem('userRole') || '');
   
   // Profile State
   const [profile, setProfile] = useState({
@@ -18,7 +18,9 @@ const Settings = () => {
     phone: '',
     email: ''
   });
-  const [initialProfile, setInitialProfile] = useState(null);
+  // Kept only as a setter: the loaded profile is stored for future dirty-checking,
+  // the form itself always renders from `profile`.
+  const [, setInitialProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMessage, setProfileMessage] = useState(null);
@@ -34,11 +36,7 @@ const Settings = () => {
   const [securitySaving, setSecuritySaving] = useState(false);
   const [securityMessage, setSecurityMessage] = useState(null);
 
-  useEffect(() => {
-    fetchProfile();
-  }, [role]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       setProfileLoading(true);
       let data = null;
@@ -76,7 +74,7 @@ const Settings = () => {
       try {
         const storedUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
         fallbackName = storedUser.name || '';
-      } catch(e) {}
+      } catch { /* ignored on purpose */ }
       
       if (!fallbackName && fallbackEmail) {
         fallbackName = fallbackEmail.split('@')[0];
@@ -109,7 +107,11 @@ const Settings = () => {
     } finally {
       setProfileLoading(false);
     }
-  };
+  }, [role]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
@@ -176,7 +178,7 @@ const Settings = () => {
         if (finalAvatarUrl) storedUser.avatarUrl = finalAvatarUrl;
         localStorage.setItem('currentUser', JSON.stringify(storedUser));
         window.dispatchEvent(new Event('participant_state_updated'));
-      } catch(e) {}
+      } catch { /* ignored on purpose */ }
 
     } catch (err) {
       if (err.response?.status === 404) {
@@ -188,7 +190,7 @@ const Settings = () => {
           storedUser.name = newName;
           localStorage.setItem('currentUser', JSON.stringify(storedUser));
           window.dispatchEvent(new Event('participant_state_updated'));
-        } catch(e) {}
+        } catch { /* ignored on purpose */ }
       } else {
         const msg = err.response?.data?.message || 'Failed to update profile. Please try again.';
         setProfileMessage({ type: 'error', text: msg });

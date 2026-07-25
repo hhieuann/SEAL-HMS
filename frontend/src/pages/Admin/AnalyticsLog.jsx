@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Shield, Filter, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import apiClient from '../../api/apiClient';

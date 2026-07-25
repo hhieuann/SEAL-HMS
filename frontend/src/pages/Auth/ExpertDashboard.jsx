@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Code, Shield, BookOpen, Clock, AlertCircle, CheckCircle2, ArrowRight, LogOut, User, Settings as SettingsIcon } from 'lucide-react';
 import apiClient from '../../api/apiClient';
@@ -9,7 +9,6 @@ import Settings from '../Shared/Settings';
 
 const ExpertDashboard = () => {
   const navigate = useNavigate();
-  const [showDropdown, setShowDropdown] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState('judge');
 
@@ -20,7 +19,9 @@ const ExpertDashboard = () => {
   };
 
   const [assignments, setAssignments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Only the setter is used: the dashboard renders assignments as soon as they arrive,
+  // so there is no separate loading state in the markup.
+  const [, setLoading] = useState(true);
 
   const [currentUser, setCurrentUser] = useState(() => {
     const email = localStorage.getItem('userEmail') || 'Expert';
@@ -54,7 +55,7 @@ const ExpertDashboard = () => {
             avatar: u.avatarUrl ? `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}` : `https://ui-avatars.com/api/?name=${encodeURIComponent(u.name || prev.name)}&background=14b8a6&color=fff`
           }));
         }
-      } catch(e) {}
+      } catch { /* ignored on purpose */ }
     };
     window.addEventListener('storage', handleProfileUpdate);
     window.addEventListener('participant_state_updated', handleProfileUpdate);
@@ -85,14 +86,14 @@ const ExpertDashboard = () => {
              const { trackService } = await import('../../api/trackService.js');
              const tr = await trackService.getTracksByEvent(evt.id);
              eventTracks = tr.data || [];
-          } catch(e) {}
+          } catch { /* ignored on purpose */ }
           
           let teamsList = [];
           if (evt.status !== 'CREATED') {
             try {
               const teamsData = await teamService.getTeamsByEvent(evt.id);
               teamsList = teamsData?.data || teamsData || [];
-            } catch(e) {}
+            } catch { /* ignored on purpose */ }
           }
           
           // Filter my assignments that match this event's tracks
@@ -132,7 +133,7 @@ const ExpertDashboard = () => {
                             const scoresRes = await scoreService.getScoresByJudge(subRes.data.id, currentUser.userId);
                             if (scoresRes?.data?.length > 0) c++; else p++;
                           }
-                        } catch (e) {
+                        } catch {
                           // No submission yet
                         }
                       }

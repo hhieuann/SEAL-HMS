@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { UserX, Search, Plus, Eye, CheckCircle, XCircle, Clock, X, Save, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserX, Search, Eye, CheckCircle, XCircle, Clock, X, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
 
 const AccountManagement = () => {
@@ -111,7 +111,7 @@ const AccountManagement = () => {
       return;
     }
 
-    const phoneRegex = /^\+?[0-9\s\-]{10,20}$/;
+    const phoneRegex = /^\+?[0-9\s-]{10,20}$/;
     if (!phoneRegex.test(newAccount.phone.trim())) {
       setError('Phone number must contain only 10-20 digits (spaces/hyphens allowed).');
       setShaking(true);

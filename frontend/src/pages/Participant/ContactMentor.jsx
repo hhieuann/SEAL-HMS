@@ -1,7 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, Send, RefreshCw, UserX, Users } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import './Workspace.css';
+
+// Module scope on purpose: declaring this inside ContactMentor would make React treat it
+// as a new component type on every render and remount it.
+const EmptyState = ({ icon, title, subtitle }) => (
+  <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+    {icon}
+    <h3 style={{ fontSize: '18px' }}>{title}</h3>
+    <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '420px' }}>{subtitle}</p>
+  </div>
+);
 
 // Real mentor chat: mentor info comes from the team (assigned by staff) and the
 // conversation is persisted through /api/v1/teams/{id}/messages — no mock data.
@@ -61,14 +71,6 @@ const ContactMentor = () => {
     try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
     catch { return ''; }
   };
-
-  const EmptyState = ({ icon, title, subtitle }) => (
-    <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-      {icon}
-      <h3 style={{ fontSize: '18px' }}>{title}</h3>
-      <p style={{ color: 'var(--text-secondary)', fontSize: '14px', maxWidth: '420px' }}>{subtitle}</p>
-    </div>
-  );
 
   return (
     <div className="animate-fade-in" style={{ padding: '0 20px', height: '100%', display: 'flex', flexDirection: 'column' }}>

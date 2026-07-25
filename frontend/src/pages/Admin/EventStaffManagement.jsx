@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { UserCheck, Shield, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
+import { Shield, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import apiClient from '../../api/apiClient';
 import './EventDashboard.css';
@@ -15,11 +15,7 @@ const EventStaffManagement = () => {
   const [assigning, setAssigning] = useState(false);
   const [removingId, setRemovingId] = useState(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [eventId]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -38,7 +34,11 @@ const EventStaffManagement = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [eventId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleAssign = async () => {
     if (!selectedAccountId) return;

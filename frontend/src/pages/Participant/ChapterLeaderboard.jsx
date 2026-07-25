@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Award, RefreshCw } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 

@@ -19,7 +19,7 @@ const calculateTimeAgo = (dateStr) => {
 const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const eventMatch = location.pathname.match(/\/admin\/event\/([^\/]+)/);
+  const eventMatch = location.pathname.match(/\/admin\/event\/([^/]+)/);
   const eventId = eventMatch ? eventMatch[1] : null;
 
   const [bellOpen, setBellOpen] = useState(false);
@@ -28,17 +28,16 @@ const AdminLayout = () => {
   
   const [eventName, setEventName] = useState(null);
   
-  const [userRole, setUserRole] = useState(null);
-  const [userName, setUserName] = useState('Administrator');
-  
-  React.useEffect(() => {
+  // Read straight from localStorage as the initial value: an effect would render once
+  // with the placeholder name before swapping it in.
+  const [userRole] = useState(() => {
+    try { return localStorage.getItem('userRole'); } catch { return null; }
+  });
+  const [userName] = useState(() => {
     try {
-      const role = localStorage.getItem('userRole');
-      const name = localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'Administrator';
-      if (role) setUserRole(role);
-      setUserName(name);
-    } catch(e) {}
-  }, []);
+      return localStorage.getItem('userName') || localStorage.getItem('userEmail') || 'Administrator';
+    } catch { return 'Administrator'; }
+  });
 
   React.useEffect(() => {
     const fetchAlerts = async () => {
@@ -50,8 +49,7 @@ const AdminLayout = () => {
           let icon = <Bell size={15} />;
           let color = 'var(--primary)';
           let bg = 'rgba(59,130,246,0.12)';
-          let title = log.action;
-          
+
           if (log.action.includes('CREATED') || log.action.includes('SUBMITTED')) {
             color = 'var(--success)';
             bg = 'rgba(16,185,129,0.12)';
@@ -223,7 +221,7 @@ const AdminLayout = () => {
               try {
                 const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
                 if (u.avatarUrl) return u.avatarUrl.startsWith('http') ? u.avatarUrl : `${import.meta.env.VITE_API_BASE_URL || ''}${u.avatarUrl}`;
-              } catch(e) {}
+              } catch { /* ignored on purpose */ }
               return "https://ui-avatars.com/api/?name=Admin+SEAL&background=fff&color=F26F21";
             })()} alt="Admin" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} />
             <div style={{ textAlign: 'left', minWidth: '90px' }}>

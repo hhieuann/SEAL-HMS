@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, Upload, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle, AlertTriangle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CheckCircle, Clock, GitBranch, Globe, FileText, AlertCircle, Lock, ChevronDown, ChevronUp, Send, XCircle, AlertTriangle } from 'lucide-react';
 import { submissionService, criterionService, standingsService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
 import { teamService } from '../../api/teamService';
@@ -64,7 +64,7 @@ const MySubmission = () => {
           try {
             const critRes = await criterionService.getCriteria(round.id);
             if (critRes?.data) round.criteria = critRes.data;
-          } catch (e) {}
+          } catch { /* ignored on purpose */ }
         }
         setCurrentRound(round);
 

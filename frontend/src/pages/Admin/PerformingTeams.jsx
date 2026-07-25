@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import ConfirmModal from '../../components/ConfirmModal';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Search, Filter, Users, Star, TrendingUp, Code, Zap, Globe, Shield, ChevronRight, X, ExternalLink, Monitor, Trophy } from 'lucide-react';
+import { Search, Users, Star, TrendingUp, Code, Zap, Globe, Shield, ChevronRight, X, ExternalLink, Trophy } from 'lucide-react';
 
 const ICONS = [
   <Zap size={24} color="#3b82f6" />,
@@ -79,7 +78,7 @@ const PerformingTeams = () => {
             }
           }
           setCurrentRound(activeRound);
-        } catch (e) {}
+        } catch { /* ignored on purpose */ }
 
         // Fetch round standings to get scores and penalties
         let standingsMap = {};
@@ -90,7 +89,7 @@ const PerformingTeams = () => {
             sList.forEach(st => {
               standingsMap[st.teamId] = { score: st.score, penaltyPoints: st.penaltyPoints, penaltyReason: st.penaltyReason };
             });
-          } catch(e) {}
+          } catch { /* ignored on purpose */ }
         }
 
         const enriched = await Promise.all(mappedTeams.map(async (team, i) => {
@@ -108,7 +107,7 @@ const PerformingTeams = () => {
                 desc = subRes.data.description;
                 repo = subRes.data.githubUrl;
               }
-            } catch (e) {}
+            } catch { /* ignored on purpose */ }
           }
 
           return {

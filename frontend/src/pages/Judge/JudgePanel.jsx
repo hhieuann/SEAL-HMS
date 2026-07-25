@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Users, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CheckCircle, Clock, AlertCircle, Star, GitBranch, Globe, FileText, Target, ChevronRight, RefreshCw, Lock } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { scoreService, submissionService, criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
@@ -29,6 +29,20 @@ const JudgePanel = () => {
   const [judgeTrackId, setJudgeTrackId] = useState(null);
 
   const judgeAccountId = parseInt(localStorage.getItem('userId') || '1');
+
+  // Declared before the effect below, which calls it while seeding the first team.
+  const initScores = (teamId, scoresMap) => {
+    const existing = scoresMap[teamId];
+    if (existing && existing.length > 0) {
+      const init = {};
+      existing.forEach(s => { init[s.criterionId] = parseFloat(s.score); });
+      setScores(init);
+      setFeedback(existing[0]?.comment || '');
+    } else {
+      setScores({});
+      setFeedback('');
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -171,19 +185,6 @@ const JudgePanel = () => {
     load();
   }, []);
 
-  const initScores = (teamId, scoresMap) => {
-    const existing = scoresMap[teamId];
-    if (existing && existing.length > 0) {
-      const init = {};
-      existing.forEach(s => { init[s.criterionId] = parseFloat(s.score); });
-      setScores(init);
-      setFeedback(existing[0]?.comment || '');
-    } else {
-      setScores({});
-      setFeedback('');
-    }
-  };
-
   const handleSelectTeam = (teamId) => {
     setActiveTeamId(teamId);
     setSubmitError('');
@@ -239,7 +240,7 @@ const JudgePanel = () => {
       setExistingScores(prev => ({ ...prev, [activeTeamId]: myNewScores }));
       setSubmitToast(`✓ Score submitted: ${total.toFixed(1)} pts for ${activeTeam?.name}`);
       setTimeout(() => setSubmitToast(''), 3500);
-    } catch (e) {
+    } catch {
       setSubmitError('Failed to submit score. Please try again.');
     } finally {
       setIsSubmitting(false);

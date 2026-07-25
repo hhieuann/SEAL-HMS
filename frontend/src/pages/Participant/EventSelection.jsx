@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, Users, Trophy, Clock, Shuffle, CheckCircle, ArrowRight, Info, Activity, AlertCircle } from 'lucide-react';
+import { Calendar, Users, Trophy, Clock, CheckCircle, ArrowRight, Info, Activity, AlertCircle } from 'lucide-react';
 
 // Custom hook for live countdown
 const useCountdown = (targetDateStr) => {
@@ -303,7 +303,6 @@ const CompletedEventCard = ({ evt, isJoinedThisEvent }) => {
 };
 
 const EventSelection = () => {
-  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [registeredEventId, setRegisteredEventId] = useState(null);
   const [registeringEventId, setRegisteringEventId] = useState(null);

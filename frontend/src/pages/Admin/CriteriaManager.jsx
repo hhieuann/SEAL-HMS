@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Save, Target, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, Target, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
 
@@ -33,7 +33,7 @@ const CriteriaManager = () => {
           }
           setCriteria(criteriaMap);
         }
-      } catch (e) {
+      } catch {
         setError('Failed to load event data.');
       } finally {
         setLoading(false);
@@ -85,7 +85,7 @@ const CriteriaManager = () => {
       }));
       setToast('Criterion deleted.');
       setTimeout(() => setToast(''), 2500);
-    } catch (e) {
+    } catch {
       setError('Failed to delete criterion.');
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, UserPlus, CheckCircle, XCircle, ArrowLeft, Loader2, Shield, Map } from 'lucide-react';
 import { teamService } from '../../api/teamService';
@@ -41,7 +41,7 @@ const TeamManagement = () => {
               name: m.name || m.accountName || m.email || 'Unknown',
               role: m.role || 'Member',
             }));
-          } catch (e) {
+          } catch {
             teamData.members = [];
           }
         }
@@ -52,7 +52,7 @@ const TeamManagement = () => {
             const tracksRes = await trackService.getTracksByEvent(eventId);
             const assignedTrack = tracksRes.data?.find(t => t.id === teamData.trackId);
             if (assignedTrack) teamData.trackName = assignedTrack.name;
-          } catch (e) {
+          } catch {
             console.error('Failed to load track info');
           }
         }

@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, ChevronRight, CheckCircle, AlertCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download, Gavel } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { AlertTriangle, ChevronRight, CheckCircle, Lock, XCircle, Users, Trophy, ArrowRight, Download, Gavel } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import ConfirmModal from '../../components/ConfirmModal';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
 
 const RoundTransition = () => {
-  const navigate = useNavigate();
   const { eventId } = useParams();
   const [confirmed, setConfirmed] = useState(false);
   const [lockError, setLockError] = useState(false);
@@ -21,8 +20,6 @@ const RoundTransition = () => {
   const [showCelebration, setShowCelebration] = useState(false);
   const [showEndConfirmModal, setShowEndConfirmModal] = useState(false);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
-  const [showManualAdvanceModal, setShowManualAdvanceModal] = useState(false);
-  const [manualOverrideList, setManualOverrideList] = useState([]);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [viewRoundIndex, setViewRoundIndex] = useState(-1);
   const [trackStandings, setTrackStandings] = useState([]);
@@ -76,7 +73,6 @@ const RoundTransition = () => {
         
         const activeIdx = viewRoundIndex === -1 ? savedRoundIdx : viewRoundIndex;
         const round = evt.rounds?.[activeIdx];
-        const roundId = round?.id || String(activeIdx);
 
         // Load real standings from DB for this round
         let dbScoreMap = {}; // teamId -> score
@@ -113,7 +109,7 @@ const RoundTransition = () => {
         try {
           const { trackService } = await import('../../api/trackService.js');
           dbTracks = (await trackService.getTracksByEvent(parsedEventId))?.data || [];
-        } catch (e) {}
+        } catch { /* ignored on purpose */ }
 
         // Validate starting rounds (check judges for tracks, and mentors for teams)
         try {
@@ -183,7 +179,6 @@ const RoundTransition = () => {
             });
 
             // Assign rank
-            const roundObj = evt.rounds?.[activeIdx];
             const ranked = teamEntries.map((entry, idx) => {
               const rank = idx + 1;
               return { rank, team: entry.team, teamId: entry.teamId, score: entry.score, penalty: entry.penalty, penaltyReason: entry.penaltyReason, isDisqualified: entry.isDisqualified };
@@ -225,19 +220,6 @@ const RoundTransition = () => {
         return (b.score ?? 0) - (a.score ?? 0);
       }).map((t, i) => ({ ...t, rank: i + 1 }))
     : [];
-
-  const handleComputeStandings = async () => {
-    if (!currentRound) return;
-    try {
-      const { standingsService } = await import('../../api/scoreService.js');
-      const manuallyPromoted = Array.from(selectedTeams);
-
-      await standingsService.computeRoundRanking(currentRound.id, manuallyPromoted);
-      alert('Round rankings computed successfully and saved to database!');
-    } catch (err) {
-      alert("Error computing rankings: " + (err.response?.data?.message || err.message));
-    }
-  };
 
   const openPenaltyModal = (teamId) => {
     let t = trackStandings.flatMap(ts => ts.teams).find(x => x.teamId === teamId);

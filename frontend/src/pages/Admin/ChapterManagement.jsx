@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Award, Plus, Edit2, Trash2, X, Save, AlertCircle, Loader2, Users, Trophy } from 'lucide-react';
 import ConfirmModal from '../../components/ConfirmModal';
 import { adminApi } from '../../api/adminApi';

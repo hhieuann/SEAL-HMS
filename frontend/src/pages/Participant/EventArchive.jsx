@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Gift, Award, Target, CheckCircle2 } from 'lucide-react';
+import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Target, CheckCircle2 } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
 import { teamService } from '../../api/teamService';

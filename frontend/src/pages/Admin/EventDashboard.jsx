@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Users, FileCode2, CheckSquare, AlertTriangle, ArrowUp, ArrowRight, Activity, UserPlus, MessageSquare, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, GraduationCap, X, Plus, UserCheck, Loader2 } from 'lucide-react';
+import { Users, CheckSquare, AlertTriangle, ArrowRight, Activity, Ban, Calendar, Target, Lock, Unlock, PlayCircle, CheckCircle2, X } from 'lucide-react';
 import './EventDashboard.css';
 
 const formatDate = (dateStr) => {
@@ -15,7 +15,7 @@ const formatDate = (dateStr) => {
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + 
            d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-  } catch(e) { return dateStr; }
+  } catch { return dateStr; }
 };
 
 const EventDashboard = () => {
@@ -34,7 +34,7 @@ const EventDashboard = () => {
   useEffect(() => {
     try {
       setUserRole(localStorage.getItem('userRole') || '');
-    } catch(e) {}
+    } catch { /* ignored on purpose */ }
     const fetchData = async () => {
       try {
         const { eventService } = await import('../../api/eventService.js');

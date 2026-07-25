@@ -1,4 +1,3 @@
-import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Anchor } from 'lucide-react';
 import './Auth.css';

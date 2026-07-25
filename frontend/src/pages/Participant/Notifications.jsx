@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Info, Loader2, AlertTriangle, RefreshCw, Globe } from 'lucide-react';
 import './Workspace.css';
 import { useParams } from 'react-router-dom';
@@ -43,7 +43,7 @@ const Notifications = () => {
           const evt = await eventService.getEventDetails(eventId);
           if (evt?.data?.title) setEventName(evt.data.title);
           else if (evt?.data?.name) setEventName(evt.data.name);
-        } catch(e) {}
+        } catch { /* ignored on purpose */ }
       }
 
       const res = await apiClient.get('/api/v1/announcements', { params });

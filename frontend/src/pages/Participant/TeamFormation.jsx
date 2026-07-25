@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, UserPlus, ArrowRight, AlertCircle, CheckCircle2, PartyPopper, Copy, Check } from 'lucide-react';
 import './Workspace.css';
