@@ -47,6 +47,7 @@ class EventServiceTest {
     @Mock private RoundRankingRepository roundRankingRepository;
     @Mock private SubmissionRepository submissionRepository;
     @Mock private ScoreRepository scoreRepository;
+    @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
     @InjectMocks private EventService eventService;
 
     private EventRequest validRequest() {
@@ -186,6 +187,8 @@ class EventServiceTest {
 
     // ---------- delete ----------
 
+    // Permanent delete is now a two-step flow: an event must be CANCELLED first.
+
     @Test
     void deleteEvent_blocked_whenOngoing() {
         Event e = event(1L, EventStatus.ONGOING);
@@ -193,19 +196,70 @@ class EventServiceTest {
 
         assertThatThrownBy(() -> eventService.deleteEvent(1L))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Cannot delete event");
+                .hasMessageContaining("unless its status is CANCELLED");
         verify(eventRepository, never()).delete(any());
     }
 
     @Test
-    void deleteEvent_ok_whenPlanned_andAuditLogs() {
+    void deleteEvent_blocked_whenStillPlanned() {
         Event e = event(1L, EventStatus.PLANNED);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+
+        assertThatThrownBy(() -> eventService.deleteEvent(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("unless its status is CANCELLED");
+        verify(eventRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteEvent_ok_whenCancelled_andAuditLogs() {
+        Event e = event(1L, EventStatus.CANCELLED);
         when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
 
         eventService.deleteEvent(1L);
 
         verify(eventRepository).delete(e);
         verify(auditLogService).log(eq("EVENT_DELETED"), eq("event"), eq(1L), any());
+    }
+
+    // ---------- cancel ----------
+
+    @Test
+    void cancelEvent_setsCancelled_andAuditLogs() {
+        Event e = event(1L, EventStatus.UPCOMING);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        EventResponse res = eventService.cancelEvent(1L);
+
+        assertThat(res.getStatus()).isEqualTo(EventStatus.CANCELLED);
+        verify(auditLogService).log(eq("EVENT_CANCELLED"), eq("event"), eq(1L), any());
+    }
+
+    @Test
+    void cancelEvent_allowedFromPlanned() {
+        Event e = event(1L, EventStatus.PLANNED);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(e));
+        when(eventRepository.save(any(Event.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+
+        assertThat(eventService.cancelEvent(1L).getStatus()).isEqualTo(EventStatus.CANCELLED);
+    }
+
+    @Test
+    void cancelEvent_rejected_whenOngoingOrCompleted() {
+        Event ongoing = event(1L, EventStatus.ONGOING);
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(ongoing));
+        assertThatThrownBy(() -> eventService.cancelEvent(1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Only PLANNED or UPCOMING");
+
+        Event completed = event(2L, EventStatus.COMPLETED);
+        when(eventRepository.findById(2L)).thenReturn(Optional.of(completed));
+        assertThatThrownBy(() -> eventService.cancelEvent(2L))
+                .isInstanceOf(BusinessException.class);
+        verify(eventRepository, never()).save(any());
     }
 
     // ---------- read ----------

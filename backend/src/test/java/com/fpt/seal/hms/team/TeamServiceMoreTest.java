@@ -616,4 +616,59 @@ class TeamServiceMoreTest {
         assertThatThrownBy(() -> teamService.getTeamById(9L))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
+
+    // ---------- invite code ----------
+
+    @Test
+    void createTeam_generatesSixCharInviteCode_fromUnambiguousAlphabet() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        when(teamRepository.existsByInviteCode(any())).thenReturn(false);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        TeamResponse res = teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn");
+
+        assertThat(res.getInviteCode()).hasSize(6)
+                // excludes look-alike characters (0/O, 1/I) to avoid typos when sharing
+                .matches("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}");
+    }
+
+    @Test
+    void createTeam_retriesInviteCode_onCollision() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(openEvent()));
+        when(accountRepository.findByEmail("u20@fpt.edu.vn")).thenReturn(Optional.of(account(20L)));
+        when(teamMemberRepository.findByAccountIdAndTeam_EventIdAndStatusNot(20L, 1L, MemberStatus.DECLINED)).thenReturn(List.of());
+        when(teamRepository.countByEventId(1L)).thenReturn(0L);
+        // first two generated codes already exist, the third is free
+        when(teamRepository.existsByInviteCode(any())).thenReturn(true, true, false);
+        when(teamRepository.save(any(Team.class))).thenAnswer(inv -> { Team t = inv.getArgument(0); t.setId(5L); return t; });
+
+        TeamResponse res = teamService.createTeam(1L, teamRequest(), "u20@fpt.edu.vn");
+
+        assertThat(res.getInviteCode()).hasSize(6);
+        verify(teamRepository, times(3)).existsByInviteCode(any());
+    }
+
+    @Test
+    void getTeamByInviteCode_findsTeam_caseInsensitively() {
+        Team t = team(5L, TeamStatus.CREATED);
+        t.setInviteCode("AB23CD");
+        when(teamRepository.findByInviteCode("AB23CD")).thenReturn(Optional.of(t));
+
+        TeamResponse res = teamService.getTeamByInviteCode("ab23cd"); // lower-case input
+
+        assertThat(res.getId()).isEqualTo(5L);
+        assertThat(res.getInviteCode()).isEqualTo("AB23CD");
+    }
+
+    @Test
+    void getTeamByInviteCode_throws_whenUnknownCode() {
+        when(teamRepository.findByInviteCode("ZZZZZZ")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> teamService.getTeamByInviteCode("ZZZZZZ"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("No team found with invite code");
+    }
 }
