@@ -29,12 +29,36 @@ const Notifications = () => {
   const [error, setError] = useState(null);
   const [eventName, setEventName] = useState('');
 
+  /**
+   * Which event scopes this list. Each role keeps its context in a different place, and they
+   * must not be mixed: the `p_*` keys belong to a participant session, so reading them for a
+   * lecturer scoped their announcements to whichever event a student had last opened in the
+   * same browser — and every event-scoped post vanished.
+   */
+  const resolveEventId = () => {
+    if (paramEventId) return paramEventId; // admin / staff event workspace
+    const role = localStorage.getItem('userRole');
+    if (role === 'LECTURER') {
+      try {
+        return JSON.parse(localStorage.getItem('expertContext') || '{}').eventId || null;
+      } catch {
+        return null;
+      }
+    }
+    if (role === 'STUDENT') {
+      return localStorage.getItem('currentEventId')
+        || localStorage.getItem('p_selectedEventId')
+        || localStorage.getItem('p_eventId')
+        || null;
+    }
+    return null; // no context -> everything this account is entitled to see
+  };
+
   const fetchAnnouncements = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Get eventId from URL params first, then localStorage
-      const eventId = paramEventId || localStorage.getItem('currentEventId') || localStorage.getItem('p_selectedEventId') || localStorage.getItem('p_eventId');
+      const eventId = resolveEventId();
       const params = {};
       if (eventId) {
         params.eventId = eventId;

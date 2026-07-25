@@ -78,6 +78,15 @@ export const adminApi = {
     return response.data.data || [];
   },
 
+  /**
+   * Judges who still have scoring to finish before this round can close. The backend leaves out
+   * tracks no team advanced into — those judges have nothing to score and must not block.
+   */
+  getPendingJudges: async (roundId) => {
+    const response = await apiClient.get(`/api/v1/rounds/${roundId}/pending-judges`);
+    return response.data.data || [];
+  },
+
   assignLecturerToTrack: async (trackId, lecturerId, role) => {
     const response = await apiClient.post(`/api/v1/tracks/${trackId}/assignments`, {
       lecturerId, role

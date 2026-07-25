@@ -49,6 +49,16 @@ public class TrackAssignmentController {
         return ApiResponse.ok(assignmentService.getExpertAssignments(auth.getName()));
     }
 
+    /**
+     * Judges who still have scoring to finish before this round can be closed. Tracks that no
+     * team advanced into are excluded — their judge has nothing to score.
+     */
+    @GetMapping("/api/v1/rounds/{roundId}/pending-judges")
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
+    public ApiResponse<List<TrackAssignmentResponse>> getPendingJudges(@PathVariable Long roundId) {
+        return ApiResponse.ok(assignmentService.getJudgesBlockingRound(roundId));
+    }
+
     /** Remove an assignment. */
     @DeleteMapping("/api/v1/track-assignments/{assignmentId}")
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, UserPlus, CheckCircle, XCircle, ArrowLeft, Loader2, Shield, Map } from 'lucide-react';
 import { teamService } from '../../api/teamService';
 import { trackService } from '../../api/trackService';
+import ConfirmModal from '../../components/ConfirmModal';
 import './Workspace.css';
 
 const TeamManagement = () => {
@@ -10,6 +11,7 @@ const TeamManagement = () => {
   const [team, setTeam] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
+  const [notice, setNotice] = useState(null); // { title, message } shown in an in-app dialog
   
   const isLeader = localStorage.getItem('p_isLeader') === 'true';
   const teamId = localStorage.getItem('p_teamId');
@@ -79,9 +81,13 @@ const TeamManagement = () => {
       if (action === 'Approve') {
         await teamService.acceptInvite(teamId, accountId);
       } else {
-        // Backend doesn't have a explicit reject invite API yet, so we could theoretically delete member
-        // For now just simulate success or alert
-        alert('Reject functionality pending backend support');
+        // No reject-invite endpoint exists yet, so say so plainly rather than pretend it worked.
+        setNotice({
+          title: 'Not available yet',
+          message: 'Declining a join request is not supported by the server yet. The request stays pending for now.',
+        });
+        setProcessingId(null);
+        return;
       }
       
       // Reload team data after action
@@ -97,7 +103,10 @@ const TeamManagement = () => {
       
       setTeam(prev => ({...prev, members: activeMembers, pendingRequests: pendingReqs}));
     } catch (err) {
-      alert(err.response?.data?.message || err.message || 'Error processing request');
+      setNotice({
+        title: 'Request failed',
+        message: err.response?.data?.message || err.message || 'Could not process this request.',
+      });
     } finally {
       setProcessingId(null);
     }
@@ -209,6 +218,15 @@ const TeamManagement = () => {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!notice}
+        title={notice?.title || ''}
+        message={notice?.message || ''}
+        type="info"
+        onConfirm={null}
+        onClose={() => setNotice(null)}
+      />
     </div>
   );
 };

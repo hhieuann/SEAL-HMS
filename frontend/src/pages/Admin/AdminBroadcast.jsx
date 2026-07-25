@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Megaphone, Plus, Send, Trash2, Globe, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const formatTime = (dateStr) => {
   if (!dateStr) return '';
@@ -23,6 +24,9 @@ const AdminBroadcast = () => {
   // field was silently dropped on every send. Adding tags needs a migration first.
   const [form, setForm] = useState({ title: '', body: '', targetRole: defaultRole });
   const [sendError, setSendError] = useState('');
+  // In-app dialog; the browser's own confirm()/alert() are not used anywhere in this app.
+  const [modal, setModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
+  const closeModal = () => setModal(m => ({ ...m, isOpen: false }));
   const [sendShaking, setSendShaking] = useState(false);
   const [sendToast, setSendToast] = useState('');
 
@@ -81,8 +85,19 @@ const AdminBroadcast = () => {
     }
   };
 
-  const deletePost = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this announcement?')) return;
+  const deletePost = (post) => {
+    setModal({
+      isOpen: true,
+      type: 'danger',
+      title: 'Delete announcement?',
+      message: `"${post.title}" will be removed for everyone who can see it. This cannot be undone.`,
+      confirmText: 'Delete',
+      onConfirm: () => confirmDeletePost(post.id),
+    });
+  };
+
+  const confirmDeletePost = async (id) => {
+    closeModal();
     try {
       await apiClient.delete(`/api/v1/announcements/${id}`);
       setPosts(prev => prev.filter(p => p.id !== id));
@@ -90,7 +105,13 @@ const AdminBroadcast = () => {
       setTimeout(() => setSendToast(''), 2500);
     } catch (err) {
       console.error('Failed to delete announcement', err);
-      alert('Failed to delete announcement. Please try again.');
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Delete failed',
+        message: err.response?.data?.message || 'Failed to delete announcement. Please try again.',
+        onConfirm: null,
+      });
     }
   };
 
@@ -144,7 +165,7 @@ const AdminBroadcast = () => {
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <button
-                      onClick={() => deletePost(post.id)}
+                      onClick={() => deletePost(post)}
                       title="Delete"
                       style={{ padding: '6px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', color: 'var(--danger)', cursor: 'pointer', display: 'flex' }}
                     >
@@ -270,6 +291,16 @@ const AdminBroadcast = () => {
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      <ConfirmModal
+        isOpen={modal.isOpen}
+        title={modal.title}
+        message={modal.message}
+        confirmText={modal.confirmText}
+        type={modal.type}
+        onConfirm={modal.onConfirm}
+        onClose={closeModal}
+      />
     </div>
   );
 };

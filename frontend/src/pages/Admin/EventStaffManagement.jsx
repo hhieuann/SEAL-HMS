@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Shield, Plus, Trash2, Loader2, AlertCircle } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import apiClient from '../../api/apiClient';
+import ConfirmModal from '../../components/ConfirmModal';
 import './EventDashboard.css';
 
 const EventStaffManagement = () => {
@@ -14,6 +15,7 @@ const EventStaffManagement = () => {
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [removingId, setRemovingId] = useState(null);
+  const [removeTarget, setRemoveTarget] = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -55,8 +57,14 @@ const EventStaffManagement = () => {
     }
   };
 
-  const handleRemove = async (accountId) => {
-    if (!window.confirm("Are you sure you want to remove this staff member from the event?")) return;
+  const handleRemove = (member) => {
+    setRemoveTarget(member);
+  };
+
+  const confirmRemove = async () => {
+    if (!removeTarget) return;
+    const accountId = removeTarget.accountId ?? removeTarget.id;
+    setRemoveTarget(null);
     setRemovingId(accountId);
     setError(null);
     try {
@@ -171,7 +179,7 @@ const EventStaffManagement = () => {
                       <button 
                         className="btn-icon" 
                         title="Remove Staff"
-                        onClick={() => handleRemove(s.accountId)}
+                        onClick={() => handleRemove(s)}
                         disabled={removingId === s.accountId}
                         style={{ color: 'var(--danger)', padding: '6px', borderRadius: '6px', border: '1px solid rgba(239, 68, 68, 0.2)', background: 'rgba(239, 68, 68, 0.05)' }}
                       >
@@ -185,6 +193,18 @@ const EventStaffManagement = () => {
           </div>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!removeTarget}
+        title="Remove staff member?"
+        message={removeTarget
+          ? `${removeTarget.fullName || removeTarget.email || 'This account'} will lose access to this event's operations.`
+          : ''}
+        confirmText="Remove"
+        type="danger"
+        onConfirm={confirmRemove}
+        onClose={() => setRemoveTarget(null)}
+      />
     </div>
   );
 };

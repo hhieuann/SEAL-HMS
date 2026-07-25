@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { User, Lock, AlertCircle, CheckCircle, Save } from 'lucide-react';
 import { profileApi } from '../../api/profileApi';
 import { authApi } from '../../api/auth';
+import ConfirmModal from '../../components/ConfirmModal';
 import './Settings.css';
 
 const Settings = () => {
@@ -35,6 +36,7 @@ const Settings = () => {
   });
   const [securitySaving, setSecuritySaving] = useState(false);
   const [securityMessage, setSecurityMessage] = useState(null);
+  const [saveModal, setSaveModal] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -136,18 +138,21 @@ const Settings = () => {
     return /^SE\d{6}$/i.test(code);
   };
 
-  const handleProfileSubmit = async (e) => {
+  /** Validate first, then ask for confirmation in an in-app modal. */
+  const handleProfileSubmit = (e) => {
     e.preventDefault();
     setProfileMessage(null);
-    
+
     if (role === 'STUDENT' && !validateStudentCode(profile.studentCode)) {
       setProfileMessage({ type: 'error', text: 'Student ID must be in format SEXXXXXX (e.g. SE204911).' });
       return;
     }
 
-    const isConfirmed = window.confirm("Are you sure you want to save these changes?");
-    if (!isConfirmed) return;
+    setSaveModal(true);
+  };
 
+  const performProfileSave = async () => {
+    setSaveModal(false);
     try {
       setProfileSaving(true);
       
@@ -406,6 +411,15 @@ const Settings = () => {
         </form>
       </div>
 
+      <ConfirmModal
+        isOpen={saveModal}
+        title="Save profile changes?"
+        message="Your profile details will be updated with the values shown on this page."
+        confirmText="Save changes"
+        type="info"
+        onConfirm={performProfileSave}
+        onClose={() => setSaveModal(false)}
+      />
     </div>
   );
 };

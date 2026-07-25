@@ -25,6 +25,10 @@ const TrackDraw = () => {
   const [toast, setToast] = useState('');
   const [modalConfig, setModalConfig] = useState({ isOpen: false, title: '', message: '', onConfirm: null, type: 'warning' });
   const [resetModal, setResetModal] = useState(false);
+  const [roundsAdvanced, setRoundsAdvanced] = useState(false);
+  // Resetting the draw wipes tracks, mentors, submissions, scores and rankings, so it stays an
+  // ADMIN action even though STAFF may run the draw itself.
+  const isAdmin = localStorage.getItem('userRole') === 'ADMIN';
 
   const trackColors = [
     { color: 'var(--primary)', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.3)' },
@@ -51,6 +55,13 @@ const TrackDraw = () => {
         } else {
           setIsLocked(false);
         }
+
+        // Once a later round has been opened, teams have been promoted on the strength of this
+        // draw. Redrawing would invalidate those results, so the reset is withdrawn for good.
+        const rounds = activeEvent.rounds || [];
+        setRoundsAdvanced(
+          rounds.some((r, i) => i > 0 && r.status !== 'CREATED' && r.status !== 'PLANNED')
+        );
 
         // Fetch topics directly from the Event (no tracks required yet!)
         let realSubTopics = [];
@@ -249,6 +260,27 @@ const TrackDraw = () => {
   };
 
   const handleResetDraw = async () => {
+    if (roundsAdvanced) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Draw can no longer be reset',
+        message: 'Teams have already been promoted to a later round based on this draw. '
+          + 'Resetting it now would erase those results. Cancel the event instead if it has to start over.',
+        onConfirm: null,
+        type: 'warning',
+      });
+      return;
+    }
+    if (!isAdmin) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Administrator only',
+        message: 'Resetting the draw erases tracks, mentors, submissions, scores and rankings for this event. Only an administrator can do that.',
+        onConfirm: null,
+        type: 'warning',
+      });
+      return;
+    }
     if (isLocked) {
         setModalConfig({
           isOpen: true,
@@ -323,9 +355,16 @@ const TrackDraw = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '10px', color: 'var(--success)', fontWeight: '600', fontSize: '14px' }}>
               <Lock size={16} /> Confirmed & Published
             </div>
-            <button onClick={handleResetDraw} className="btn btn-secondary" style={{ padding: '8px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
-              Reset Draw
-            </button>
+            {isAdmin && !roundsAdvanced && (
+              <button onClick={handleResetDraw} className="btn btn-secondary" style={{ padding: '8px 16px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>
+                Reset Draw
+              </button>
+            )}
+            {roundsAdvanced && (
+              <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontStyle: 'italic' }}>
+                Teams have advanced to a later round — the draw can no longer be reset.
+              </span>
+            )}
           </div>
         )}
       </div>

@@ -361,16 +361,15 @@ const RoundTransition = () => {
       return;
     }
 
-    // Check if all judges have completed scoring
+    // Only judges with something left to score may block the round. The backend excludes
+    // tracks no team advanced into — otherwise their judge, who never gets a "Complete
+    // scoring" button, would deadlock the event.
     try {
-      const parsedEvId = eventId === 'seal-sp26' ? 1 : (parseInt(eventId) || 1);
       const { adminApi } = await import('../../api/adminApi.js');
-      const allAssignments = await adminApi.getEventAssignments(parsedEvId);
-      const judgeAssignments = allAssignments.filter(a => a.role === 'JUDGE');
-      const incompleteJudges = judgeAssignments.filter(a => !a.scoringCompleted);
-      
+      const incompleteJudges = await adminApi.getPendingJudges(currentRoundObj.id);
+
       if (incompleteJudges.length > 0) {
-        const details = incompleteJudges.map(j => 
+        const details = incompleteJudges.map(j =>
           `• "${j.lecturerFullName || j.lecturerEmail}" (Track: ${j.trackName || j.trackId})`
         ).join('\n');
         setLockError(true);

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Target, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
 import { criterionService } from '../../api/scoreService';
 import { eventService } from '../../api/eventService';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const CriteriaManager = () => {
   const [event, setEvent] = useState(null);
@@ -10,6 +11,7 @@ const CriteriaManager = () => {
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   // Form state per round
   const [newCriterion, setNewCriterion] = useState({}); // roundId -> { name, maxScore, weight }
@@ -75,8 +77,15 @@ const CriteriaManager = () => {
     }
   };
 
-  const handleDelete = async (roundId, criterionId) => {
-    if (!window.confirm('Delete this criterion?')) return;
+  const handleDelete = (roundId, criterion) => {
+    setDeleteTarget({ roundId, criterion });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const { roundId, criterion } = deleteTarget;
+    const criterionId = criterion.id;
+    setDeleteTarget(null);
     try {
       await criterionService.deleteCriterion(criterionId);
       setCriteria(prev => ({
@@ -156,7 +165,7 @@ const CriteriaManager = () => {
                           <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Weight: <strong style={{ color: 'var(--primary)' }}>{Math.round((c.weight || 0) * 100)}%</strong></span>
                         </div>
                         <button
-                          onClick={() => handleDelete(round.id, c.id)}
+                          onClick={() => handleDelete(round.id, c)}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '4px', borderRadius: '4px', transition: 'color 0.15s' }}
                           onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
                           onMouseLeave={e => e.currentTarget.style.color = 'var(--text-secondary)'}
@@ -229,6 +238,18 @@ const CriteriaManager = () => {
           <span style={{ fontSize: '14px', fontWeight: '600' }}>{toast}</span>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Delete criterion?"
+        message={deleteTarget
+          ? `"${deleteTarget.criterion.name}" will be removed from this round. Judges can no longer score it.`
+          : ''}
+        confirmText="Delete"
+        type="danger"
+        onConfirm={confirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

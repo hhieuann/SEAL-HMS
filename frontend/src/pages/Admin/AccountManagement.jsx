@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { UserX, Search, Eye, CheckCircle, XCircle, Clock, X, AlertCircle, Loader2, Copy, KeyRound, UserPlus } from 'lucide-react';
 import { adminApi } from '../../api/adminApi';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const AccountManagement = () => {
   const [tab, setTab] = useState('pending');
@@ -11,6 +12,8 @@ const AccountManagement = () => {
   const [newAccount, setNewAccount] = useState({ fullName: '', email: '', department: '', campus: '', phone: '' });
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState('');
+  // Failures outside the create form need their own dialog — `error` only renders there.
+  const [failureMessage, setFailureMessage] = useState('');
   const [shaking, setShaking] = useState(false);
   const [tempPassword, setTempPassword] = useState(null); // shown after successful creation
   const [copied, setCopied] = useState(false);
@@ -86,7 +89,7 @@ const AccountManagement = () => {
       loadData();
     } catch (err) {
       console.error('Failed to suspend account', err);
-      alert('Error: ' + (err.response?.data?.message || err.message));
+      setFailureMessage(err.response?.data?.message || err.message || 'Could not suspend this account.');
     } finally {
       setProcessingId(null);
     }
@@ -552,6 +555,15 @@ const AccountManagement = () => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!failureMessage}
+        title="Action failed"
+        message={failureMessage}
+        type="error"
+        onConfirm={null}
+        onClose={() => setFailureMessage('')}
+      />
     </div>
   );
 };
