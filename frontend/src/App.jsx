@@ -128,7 +128,9 @@ function App() {
           <Route index element={<Navigate to="tickets" replace />} />
           <Route path="tickets" element={<MentorTickets />} />
           <Route path="announcements" element={<Notifications />} />
-          <Route path="settings" element={<Settings />} />
+          {/* Profile settings live on the Expert Dashboard, not in the event workspace.
+              Anything else (e.g. the old /mentor/settings bookmark) falls back to tickets. */}
+          <Route path="*" element={<Navigate to="/mentor/tickets" replace />} />
         </Route>
       </Routes>
     </Router>
