@@ -52,6 +52,7 @@ public class StaffController {
         Staff staff = staffRepository.findByAccount_Id(acc.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Staff profile not found"));
         
+        accountService.validatePhoneUnique(req.phone(), staff.getId());
         staff.setFullName(req.fullName());
         staff.setDepartment(req.department());
         staff.setCampus(req.campus());
