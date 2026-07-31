@@ -114,10 +114,24 @@ const LandingPage = () => {
                   const isLive = event.status?.toLowerCase() === 'live' || event.status?.toLowerCase() === 'ongoing';
                   const isUpcoming = event.status?.toLowerCase() === 'upcoming' || event.status?.toLowerCase() === 'planned';
                   const isCompleted = event.status?.toLowerCase() === 'completed';
+                  const codeImages = [
+                    "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=400&h=200&fit=crop",
+                    "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&h=200&fit=crop",
+                    "https://images.unsplash.com/photo-1542831371-29b0f74f9713?w=400&h=200&fit=crop",
+                    "https://images.unsplash.com/photo-1525547719571-a2d4ac8945e2?w=400&h=200&fit=crop",
+                    "https://images.unsplash.com/photo-1605379399642-870262d3d051?w=400&h=200&fit=crop"
+                  ];
+                  const bgImage = codeImages[event.id % codeImages.length] || codeImages[0];
 
                   return (
                     <div key={event.id} className={`event-item ${isLive ? 'active-event' : ''}`} style={isLive ? { border: '1px solid rgba(59, 130, 246, 0.4)', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '12px', padding: '16px', marginBottom: '12px' } : {}}>
-                      {!isLive && <div className="event-img bg-cyan" style={{ background: isUpcoming ? 'var(--warning)' : 'var(--bg-active)' }}></div>}
+                      <div className="event-img" style={{ background: isUpcoming ? 'var(--warning)' : 'var(--bg-active)', overflow: 'hidden', borderRadius: '8px' }}>
+                        <img 
+                          src={bgImage} 
+                          alt={event.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
                       <div className="event-info" style={isLive ? { display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 } : {}}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: isLive ? 0 : '4px' }}>
                           {isLive && <span className="status-badge live" style={{ background: 'rgba(16, 185, 129, 0.2)', color: 'var(--success)', padding: '4px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', animation: 'pulse 2s infinite' }}>Live Now</span>}

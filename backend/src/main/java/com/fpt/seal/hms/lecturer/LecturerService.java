@@ -32,6 +32,7 @@ public class LecturerService {
         }
         Lecturer l = new Lecturer();
         l.setAccount(account);
+        accountService.validatePhoneUnique(req.phone(), null);
         apply(l, req);
         return LecturerResponse.from(lecturerRepository.save(l));
     }
@@ -45,6 +46,7 @@ public class LecturerService {
     public LecturerResponse updateMyProfile(String email, LecturerRequest req) {
         Account account = requireAccount(email);
         Lecturer l = myProfileEntity(account.getId());
+        accountService.validatePhoneUnique(req.phone(), l.getId());
         apply(l, req);
         accountService.updateEmail(account, req.email());
         l = lecturerRepository.save(l);

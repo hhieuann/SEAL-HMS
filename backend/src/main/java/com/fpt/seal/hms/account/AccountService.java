@@ -104,6 +104,7 @@ public class AccountService {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
+        validatePhoneUnique(phone, null);
 
         // Auto-generate a secure temp password
         String rawPassword = generateTempPassword();
@@ -132,6 +133,7 @@ public class AccountService {
         if (accountRepository.existsByEmail(email)) {
             throw new BusinessException("Email already registered: " + email);
         }
+        validatePhoneUnique(phone, null);
         String rawPassword = generateTempPassword();
         Account account = new Account();
         account.setEmail(email);
@@ -171,6 +173,30 @@ public class AccountService {
             char tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
         }
         return new String(arr);
+    }
+
+    /**
+     * Checks that the given phone number is not already used by any Lecturer or Staff profile.
+     * When updating an existing profile, pass the profile's own ID via excludeLecturerId or
+     * excludeStaffId so it doesn't flag itself as a duplicate.
+     */
+    public void validatePhoneUnique(String phone, Long excludeProfileId) {
+        if (phone == null || phone.isBlank()) return;
+        String trimmed = phone.trim();
+        // Check across Lecturer table
+        boolean lecturerDup = excludeProfileId != null
+                ? lecturerRepository.existsByPhoneAndIdNot(trimmed, excludeProfileId)
+                : lecturerRepository.existsByPhone(trimmed);
+        if (lecturerDup) {
+            throw new BusinessException("Phone number already in use: " + trimmed);
+        }
+        // Check across Staff table
+        boolean staffDup = excludeProfileId != null
+                ? staffRepository.existsByPhoneAndIdNot(trimmed, excludeProfileId)
+                : staffRepository.existsByPhone(trimmed);
+        if (staffDup) {
+            throw new BusinessException("Phone number already in use: " + trimmed);
+        }
     }
 
     @Transactional(readOnly = true)
