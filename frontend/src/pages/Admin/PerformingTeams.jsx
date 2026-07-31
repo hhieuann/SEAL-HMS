@@ -140,6 +140,22 @@ const PerformingTeams = () => {
     load();
   }, [eventId]);
 
+  const handleViewDetails = async (team) => {
+    setSelectedTeam(team); // Show modal immediately
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      const membersRes = await teamService.getMembers(team.id);
+      const members = membersRes.data || membersRes || [];
+      const mappedMembers = members.map(m => ({
+        name: m.accountName || m.email || 'Unknown',
+        role: m.role === 'LEADER' ? 'Leader' : 'Member'
+      }));
+      setSelectedTeam(prev => prev && prev.id === team.id ? { ...prev, membersList: mappedMembers } : prev);
+    } catch (e) {
+      console.error("Failed to load members", e);
+    }
+  };
+
   const handleStatusChange = async (teamId, newStatus) => {
     try {
       const { teamService } = await import('../../api/teamService.js');
@@ -370,7 +386,7 @@ const PerformingTeams = () => {
               </div>
 
               <button
-                onClick={() => setSelectedTeam(team)}
+                onClick={() => handleViewDetails(team)}
                 style={{ width: '100%', marginTop: '16px', padding: '10px', background: 'var(--bg-subtle)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--primary)', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', transition: 'background 0.2s ease' }}
                 onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-active)'}
                 onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-subtle)'}
