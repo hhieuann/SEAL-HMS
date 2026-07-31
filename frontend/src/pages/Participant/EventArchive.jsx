@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Calendar, MapPin, Users, ArrowLeft, Trophy, Medal, Target, CheckCircle2 } from 'lucide-react';
+import { Calendar, Users, ArrowLeft, Trophy, Medal, Target, CheckCircle2 } from 'lucide-react';
 import { eventService } from '../../api/eventService';
 import { standingsService } from '../../api/scoreService';
 import { teamService } from '../../api/teamService';
@@ -9,7 +9,6 @@ import { trackService } from '../../api/trackService';
 const EventArchive = () => {
   const navigate = useNavigate();
   const { eventId } = useParams();
-  const [activeTab, setActiveTab] = useState('overview');
   
   const [eventData, setEventData] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -158,85 +157,28 @@ const EventArchive = () => {
             <h1 style={{ fontSize: '42px', fontWeight: '800', marginBottom: '16px', background: 'linear-gradient(90deg, var(--text-primary), var(--text-secondary))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               {eventData.name}
             </h1>
-            <p style={{ fontSize: '18px', color: 'var(--text-secondary)', maxWidth: '600px', lineHeight: '1.6' }}>
-              {eventData.description || 'This event has officially concluded. Thank you to all teams who participated and pushed the boundaries of innovation!'}
-            </p>
+            {/* The event's own description only — no filler when it has none. */}
+            {eventData.description && (
+              <p style={{ fontSize: '18px', color: 'var(--text-secondary)', maxWidth: '600px', lineHeight: '1.6' }}>
+                {eventData.description}
+              </p>
+            )}
           </div>
-          <div style={{ background: 'var(--bg-subtle)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '200px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--primary)', opacity: 0.1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                <Users size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '20px', fontWeight: '700' }}>{leaderboard.length}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Finalist Teams</div>
-              </div>
+          <div style={{ background: 'var(--bg-subtle)', padding: '24px', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', minWidth: '200px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--primary)', opacity: 0.1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+              <Users size={20} />
             </div>
-            <div style={{ height: '1px', background: 'var(--border-color)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--accent-1)', opacity: 0.1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-1)' }}>
-                <MapPin size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>{eventData.location || 'FPT University'}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Host Venue</div>
-              </div>
+            <div>
+              <div style={{ fontSize: '20px', fontWeight: '700' }}>{leaderboard.length}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Finalist Teams</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '32px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px' }}>
-        <button className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-text'}`} onClick={() => setActiveTab('overview')} style={{ padding: '8px 20px', borderRadius: '20px', fontWeight: '600' }}>
-          Overview
-        </button>
-        <button className={`btn ${activeTab === 'leaderboard' ? 'btn-primary' : 'btn-text'}`} onClick={() => setActiveTab('leaderboard')} style={{ padding: '8px 20px', borderRadius: '20px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Trophy size={16} /> Final Leaderboard
-        </button>
-      </div>
-
-      {/* Content Area */}
+      {/* Results */}
       <div style={{ minHeight: '400px' }}>
-        
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="animate-fade-in" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '32px' }}>
-            <div className="glass-panel" style={{ padding: '32px', borderRadius: '16px' }}>
-              <h2 style={{ fontSize: '24px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={24} color="var(--primary)" /> Event Highlights</h2>
-              <div style={{ color: 'var(--text-secondary)', lineHeight: '1.8' }}>
-                <p style={{ marginBottom: '16px' }}>
-                  The {eventData.name} challenged participants to build innovative solutions. 
-                  Over {eventData.rounds?.length || 'several'} competitive rounds, teams proved their technical skills and creativity.
-                </p>
-                <p>
-                  Explore the final leaderboard to see the final standings of the event. Congratulations to the winning teams!
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div className="glass-panel" style={{ padding: '24px', borderRadius: '16px' }}>
-                <h3 style={{ fontSize: '16px', color: 'var(--text-secondary)', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>Event Rounds</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                   {eventData.rounds && eventData.rounds.map((r, idx) => (
-                      <div key={r.id || idx}>
-                        <div style={{ fontWeight: '600', marginBottom: '4px' }}>{r.name}</div>
-                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Status: {r.status}</div>
-                      </div>
-                   ))}
-                   {(!eventData.rounds || eventData.rounds.length === 0) && (
-                      <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No rounds configured.</div>
-                   )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Leaderboard Tab */}
-        {activeTab === 'leaderboard' && (
-          <div className="animate-fade-in">
+        <div className="animate-fade-in">
             <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               <button 
                 className={`btn ${selectedRoundTab === 'final' ? 'btn-primary' : 'btn-secondary'}`} 
@@ -366,8 +308,7 @@ const EventArchive = () => {
                 )}
               </div>
             )}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
