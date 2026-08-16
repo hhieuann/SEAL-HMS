@@ -1,5 +1,6 @@
 package com.fpt.seal.hms.roundranking;
 
+import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.roundranking.dto.EventStandingDto;
 import com.fpt.seal.hms.roundranking.dto.RoundStandingDto;
@@ -21,6 +22,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
@@ -73,7 +75,7 @@ class RankingServiceTest {
         when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
         when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
 
-        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null);
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
 
         assertThat(out).extracting(RoundStandingDto::teamName).containsExactly("B", "C", "A");
         assertThat(out).extracting(RoundStandingDto::rank).containsExactly(1, 2, 3);
@@ -83,7 +85,7 @@ class RankingServiceTest {
 
     @Test
     void computeRoundRanking_tiedScores_shareRank_competitionStyle() {
-        Round round = round(1L, 1);
+        Round round = round(1L, 2); // both tied teams fit, so no tie-break is needed
         List<RoundRanking> list = new ArrayList<>(List.of(
                 rr(11L, team(1L, "A"), round, "90"),
                 rr(12L, team(2L, "B"), round, "90"),
@@ -91,43 +93,158 @@ class RankingServiceTest {
         when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
         when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
 
-        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null);
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
 
         // "1224": two teams at 90 share rank 1, next distinct score lands at rank 3
         assertThat(out).extracting(RoundStandingDto::rank).containsExactly(1, 1, 3);
+        assertThat(out).extracting(RoundStandingDto::promoted).containsExactly(true, true, false);
     }
 
+    /** The point of the rewrite: scores decide promotion, nobody is picked. */
     @Test
-    void computeRoundRanking_promotedTeamIds_overridesTopN() {
-        Round round = round(1L, 2); // topN says 2, but explicit list promotes only team C
-        Team a = team(1L, "A"), b = team(2L, "B"), c = team(3L, "C");
+    void computeRoundRanking_promotesTheHigherScore_withoutAnyoneChoosing() {
+        Round round = round(1L, 1);
         List<RoundRanking> list = new ArrayList<>(List.of(
-                rr(11L, a, round, "90"), rr(12L, b, round, "75"), rr(13L, c, round, "60")));
+                rr(11L, team(1L, "A"), round, "51"), rr(12L, team(2L, "B"), round, "50")));
         when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
         when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
 
-        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, List.of(3L));
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
 
-        assertThat(out).extracting(RoundStandingDto::teamId, RoundStandingDto::promoted)
-                .containsExactly(
-                        org.assertj.core.groups.Tuple.tuple(1L, false),
-                        org.assertj.core.groups.Tuple.tuple(2L, false),
-                        org.assertj.core.groups.Tuple.tuple(3L, true));
+        assertThat(out).extracting(RoundStandingDto::teamName, RoundStandingDto::promoted)
+                .containsExactly(tuple("A", true), tuple("B", false));
+    }
+
+    @Test
+    void computeRoundRanking_refusesToFinalise_whenATieStraddlesTheCutOff() {
+        Round round = round(1L, 2); // one place left, two teams level on 75
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "90"),
+                rr(12L, team(2L, "B"), round, "75"),
+                rr(13L, team(3L, "C"), round, "75")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        assertThatThrownBy(() -> rankingService.computeRoundRanking(1L, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("tied on 75")
+                .hasMessageContaining("B, C");
+        verify(roundRankingRepository, never()).saveAll(any());
+    }
+
+    @Test
+    void computeRoundRanking_tieBreak_promotesTheChosenTiedTeam_andRecordsTheReason() {
+        Round round = round(1L, 2);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "90"),
+                rr(12L, team(2L, "B"), round, "75"),
+                rr(13L, team(3L, "C"), round, "75")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(
+                1L, List.of(3L), "C submitted first");
+
+        assertThat(out).extracting(RoundStandingDto::teamName, RoundStandingDto::promoted)
+                .containsExactly(tuple("A", true), tuple("B", false), tuple("C", true));
+        // the reason is recorded against everyone in the tie, not only the winner
+        assertThat(out).extracting(RoundStandingDto::tieBreakReason)
+                .containsExactly(null, "C submitted first", "C submitted first");
+    }
+
+    @Test
+    void computeRoundRanking_tieBreak_rejectsATeamThatIsNotInTheTie() {
+        Round round = round(1L, 2);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "90"),
+                rr(12L, team(2L, "B"), round, "75"),
+                rr(13L, team(3L, "C"), round, "75")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        // A is already through on score; it cannot be used to consume the contested place
+        assertThatThrownBy(() -> rankingService.computeRoundRanking(1L, List.of(1L), "because"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("only choose between the teams that are actually tied");
+    }
+
+    @Test
+    void computeRoundRanking_tieBreak_rejectsWrongNumberOfTeams() {
+        Round round = round(1L, 2);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "90"),
+                rr(12L, team(2L, "B"), round, "75"),
+                rr(13L, team(3L, "C"), round, "75")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        assertThatThrownBy(() -> rankingService.computeRoundRanking(1L, List.of(2L, 3L), "both"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("exactly 1 team");
+    }
+
+    @Test
+    void computeRoundRanking_tieBreak_requiresAReason() {
+        Round round = round(1L, 2);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "90"),
+                rr(12L, team(2L, "B"), round, "75"),
+                rr(13L, team(3L, "C"), round, "75")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        assertThatThrownBy(() -> rankingService.computeRoundRanking(1L, List.of(3L), "  "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("needs a reason");
     }
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void computeRoundRanking_promotedTeamIds_acceptsIntegersFromJson() {
+    void computeRoundRanking_tieBreak_acceptsIntegersFromJson() {
         // Jackson can deserialize small JSON numbers as Integer inside the List
-        Round round = round(1L, null);
-        List<RoundRanking> list = new ArrayList<>(List.of(rr(11L, team(2L, "B"), round, "80")));
+        Round round = round(1L, 1);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "80"),
+                rr(12L, team(2L, "B"), round, "80")));
         when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
         when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
 
         List rawIds = List.of(Integer.valueOf(2)); // Integer, not Long
-        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, (List<Long>) rawIds);
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, (List<Long>) rawIds, "coin toss");
 
-        assertThat(out.get(0).promoted()).isTrue();
+        assertThat(out).extracting(RoundStandingDto::teamId, RoundStandingDto::promoted)
+                .containsExactly(tuple(1L, false), tuple(2L, true));
+    }
+
+    /** A final round promotes nobody, so a tie there is harmless and must not block. */
+    @Test
+    void computeRoundRanking_finalRound_doesNotBlockOnTies() {
+        Round round = round(1L, null);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "80"),
+                rr(12L, team(2L, "B"), round, "80")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
+
+        assertThat(out).extracting(RoundStandingDto::promoted).containsExactly(false, false);
+        assertThat(out).extracting(RoundStandingDto::rank).containsExactly(1, 1);
+    }
+
+    /** topN wider than the field: everyone left continues, there is no cut-off to defend. */
+    @Test
+    void computeRoundRanking_topNCoversEveryTeam_promotesAll() {
+        Round round = round(1L, 5);
+        List<RoundRanking> list = new ArrayList<>(List.of(
+                rr(11L, team(1L, "A"), round, "80"),
+                rr(12L, team(2L, "B"), round, "70")));
+        when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
+        when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
+
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
+
+        assertThat(out).extracting(RoundStandingDto::promoted).containsExactly(true, true);
     }
 
     @Test
@@ -138,7 +255,7 @@ class RankingServiceTest {
         when(roundRepository.findById(1L)).thenReturn(Optional.of(round));
         when(roundRankingRepository.findByRoundId(1L)).thenReturn(list);
 
-        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null);
+        List<RoundStandingDto> out = rankingService.computeRoundRanking(1L, null, null);
 
         assertThat(out.get(0).teamName()).isEqualTo("B");
         assertThat(out.get(1).rank()).isEqualTo(2);
@@ -148,7 +265,7 @@ class RankingServiceTest {
     void computeRoundRanking_throws_whenRoundMissing() {
         when(roundRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> rankingService.computeRoundRanking(99L, null))
+        assertThatThrownBy(() -> rankingService.computeRoundRanking(99L, null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
         verify(roundRankingRepository, never()).saveAll(any());
     }

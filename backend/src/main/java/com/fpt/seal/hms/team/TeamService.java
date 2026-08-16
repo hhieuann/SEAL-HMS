@@ -45,6 +45,7 @@ public class TeamService {
     private final LecturerRepository lecturerRepository;
     private final com.fpt.seal.hms.roundranking.RoundRankingRepository roundRankingRepository;
     private final TrackAssignmentRepository trackAssignmentRepository;
+    private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     private final MentorMessageRepository mentorMessageRepository;
     private final com.fpt.seal.hms.account.AccountService accountService;
     private final Random random = new Random();
@@ -280,23 +281,53 @@ public class TeamService {
         return mapToResponse(teamRepository.save(team));
     }
 
+    /**
+     * Adjust a team's round result: a penalty, a bonus, or both, each with its reason.
+     *
+     * Only allowed while the round is UNDER_REVIEW — the stage between scoring closing and the
+     * result being finalised. Adjusting after a round is COMPLETED would silently change a
+     * standing teams have already been told, and adjusting while judges are still scoring would
+     * be overwritten by the next re-grade.
+     */
     @Transactional
-    public TeamResponse applyPenalty(Long teamId, Long roundId, java.math.BigDecimal penaltyPoints, String penaltyReason) {
+    public TeamResponse applyAdjustment(Long teamId, Long roundId,
+                                        java.math.BigDecimal penaltyPoints, String penaltyReason,
+                                        java.math.BigDecimal bonusPoints, String bonusReason) {
         com.fpt.seal.hms.roundranking.entity.RoundRanking rr = roundRankingRepository.findByRoundIdAndTeamId(roundId, teamId)
                 .orElseThrow(() -> new ResourceNotFoundException("RoundRanking not found for team " + teamId + " in round " + roundId));
-        
-        java.math.BigDecimal oldPenalty = rr.getPenaltyPoints() != null ? rr.getPenaltyPoints() : java.math.BigDecimal.ZERO;
-        java.math.BigDecimal newPenalty = penaltyPoints != null ? penaltyPoints : java.math.BigDecimal.ZERO;
-        
-        rr.setPenaltyPoints(penaltyPoints);
-        rr.setPenaltyReason(penaltyReason);
-        
-        if (rr.getScore() != null) {
-            rr.setScore(rr.getScore().add(oldPenalty).subtract(newPenalty));
+
+        com.fpt.seal.hms.common.enums.RoundStatus status = rr.getRound().getStatus();
+        if (status != com.fpt.seal.hms.common.enums.RoundStatus.UNDER_REVIEW) {
+            throw new BusinessException(
+                    "Penalties and bonuses can only be applied while the round is under review. "
+                    + "This round is " + status + ".");
         }
-        
+
+        if (penaltyPoints != null && penaltyPoints.signum() < 0) {
+            throw new BusinessException("Penalty points cannot be negative — use a bonus instead.");
+        }
+        if (bonusPoints != null && bonusPoints.signum() < 0) {
+            throw new BusinessException("Bonus points cannot be negative — use a penalty instead.");
+        }
+        if (penaltyPoints != null && penaltyPoints.signum() > 0
+                && (penaltyReason == null || penaltyReason.isBlank())) {
+            throw new BusinessException("A penalty needs a reason.");
+        }
+        if (bonusPoints != null && bonusPoints.signum() > 0
+                && (bonusReason == null || bonusReason.isBlank())) {
+            throw new BusinessException("A bonus needs a reason.");
+        }
+
+        rr.setPenaltyPoints(penaltyPoints != null ? penaltyPoints : java.math.BigDecimal.ZERO);
+        rr.setPenaltyReason(penaltyReason);
+        rr.setBonusPoints(bonusPoints != null ? bonusPoints : java.math.BigDecimal.ZERO);
+        rr.setBonusReason(bonusReason);
+        rr.recomputeScore();
+
         roundRankingRepository.save(rr);
-        
+        auditLogService.log("ROUND_RESULT_ADJUSTED", "team", teamId,
+                "round " + roundId + ": -" + rr.getPenaltyPoints() + " / +" + rr.getBonusPoints());
+
         return getTeamById(teamId);
     }
 

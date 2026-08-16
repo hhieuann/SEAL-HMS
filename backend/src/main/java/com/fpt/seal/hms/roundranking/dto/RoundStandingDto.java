@@ -7,10 +7,14 @@ public record RoundStandingDto(
         Long roundRankingId,
         Long teamId,
         String teamName,
+        BigDecimal rawScore,
         BigDecimal score,
         Integer rank,
         Boolean promoted,
         BigDecimal penaltyPoints,
-        String penaltyReason
+        String penaltyReason,
+        BigDecimal bonusPoints,
+        String bonusReason,
+        String tieBreakReason
 ) {
 }

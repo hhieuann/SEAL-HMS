@@ -24,12 +24,20 @@ public class RankingController {
         return ResponseEntity.ok(ApiResponse.ok(rankingService.getRoundStandings(roundId)));
     }
 
+    /**
+     * Rank the round and promote the top N by score. Send a body only to break a tie that this
+     * call has already rejected — see {@link com.fpt.seal.hms.roundranking.dto.TieBreakRequest}.
+     */
     @PostMapping("/rounds/{roundId}/ranking/compute")
     @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     public ResponseEntity<ApiResponse<List<RoundStandingDto>>> computeRoundRanking(
             @PathVariable Long roundId,
-            @RequestBody(required = false) List<Long> promotedTeamIds) {
-        return ResponseEntity.ok(ApiResponse.ok("Round ranking computed", rankingService.computeRoundRanking(roundId, promotedTeamIds)));
+            @RequestBody(required = false) com.fpt.seal.hms.roundranking.dto.TieBreakRequest tieBreak) {
+        List<RoundStandingDto> standings = rankingService.computeRoundRanking(
+                roundId,
+                tieBreak != null ? tieBreak.teamIds() : null,
+                tieBreak != null ? tieBreak.reason() : null);
+        return ResponseEntity.ok(ApiResponse.ok("Round ranking computed", standings));
     }
 
     // --- Event level ---

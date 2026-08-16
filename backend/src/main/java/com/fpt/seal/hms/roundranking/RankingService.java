@@ -1,5 +1,6 @@
 package com.fpt.seal.hms.roundranking;
 
+import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.roundranking.dto.EventStandingDto;
 import com.fpt.seal.hms.roundranking.dto.RoundStandingDto;
@@ -34,44 +35,113 @@ public class RankingService {
     private final TeamRepository teamRepository;
     private final com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
 
-    /** Rank every team in the round by score (desc) and mark the top-N as promoted. */
+    /**
+     * Rank every team in the round by final score and promote the top N. Promotion is decided by
+     * the scores, never by picking teams: whoever scored higher goes through.
+     *
+     * The one case scores cannot settle is a tie that straddles the cut-off — three teams level
+     * on points for two remaining places. Rather than promote all of them (breaking the round
+     * size) or silently drop one, this refuses to finalise and reports who is tied. A coordinator
+     * then re-runs it with {@code tieBreakTeamIds}, which may only name teams from that tied
+     * group, plus the reason that gets recorded against them.
+     */
     @Transactional
-    public List<RoundStandingDto> computeRoundRanking(Long roundId, List<Long> promotedTeamIds) {
+    public List<RoundStandingDto> computeRoundRanking(Long roundId, List<Long> tieBreakTeamIds,
+                                                      String tieBreakReason) {
         Round round = roundRepository.findById(roundId)
                 .orElseThrow(() -> new ResourceNotFoundException("Round not found: " + roundId));
 
         List<RoundRanking> rankings = roundRankingRepository.findByRoundId(roundId);
         rankings.sort(Comparator.comparing(this::scoreOf).reversed());
-
-        Integer topN = round.getPromotionTopN();
-
         assignRanks(rankings, this::scoreOf, RoundRanking::setRank);
 
-        // Build a safe Set<Long> from the input list.
-        // Jackson may deserialize small JSON numbers as Integer, but Team.getId() returns Long.
-        // Integer.equals(Long) is always false in Java, so we normalise via Number::longValue.
-        final java.util.Set<Long> promotedSet;
-        if (promotedTeamIds != null && !promotedTeamIds.isEmpty()) {
-            promotedSet = new java.util.HashSet<>();
-            for (Object raw : (List<?>) (Object) promotedTeamIds) {
-                promotedSet.add(((Number) raw).longValue());
+        Integer topN = round.getPromotionTopN();
+        boolean promotes = topN != null && topN > 0 && topN < rankings.size();
+
+        if (!promotes) {
+            // Final round, or every team continues: nobody is filtered out.
+            for (RoundRanking rr : rankings) {
+                rr.setIsPromoted(topN != null && topN > 0 && rr.getRank() != null && rr.getRank() <= topN);
             }
+            roundRankingRepository.saveAll(rankings);
+            auditLogService.log("ROUND_RANKING_COMPUTED", "round", roundId, "top-N: " + topN);
+            return rankings.stream().map(this::toRoundDto).toList();
+        }
+
+        // Teams that are clear of the cut-off, and the tied group sitting on it.
+        List<RoundRanking> clear = new ArrayList<>();
+        List<RoundRanking> onTheLine = new ArrayList<>();
+        BigDecimal cutoffScore = scoreOf(rankings.get(topN - 1));
+        for (RoundRanking rr : rankings) {
+            int cmp = scoreOf(rr).compareTo(cutoffScore);
+            if (cmp > 0) {
+                clear.add(rr);
+            } else if (cmp == 0) {
+                onTheLine.add(rr);
+            }
+        }
+
+        int slotsLeft = topN - clear.size();
+        java.util.Set<Long> promotedIds = new java.util.HashSet<>();
+        clear.forEach(rr -> promotedIds.add(rr.getTeam().getId()));
+        String auditNote = "top-" + topN;
+
+        if (onTheLine.size() > slotsLeft) {
+            java.util.Set<Long> chosen = normaliseIds(tieBreakTeamIds);
+            java.util.Set<Long> tiedIds = new java.util.HashSet<>();
+            onTheLine.forEach(rr -> tiedIds.add(rr.getTeam().getId()));
+
+            if (chosen.isEmpty()) {
+                throw new BusinessException(tieMessage(onTheLine, slotsLeft, cutoffScore));
+            }
+            if (!tiedIds.containsAll(chosen)) {
+                throw new BusinessException(
+                        "A tie-break may only choose between the teams that are actually tied on "
+                        + cutoffScore + " points.");
+            }
+            if (chosen.size() != slotsLeft) {
+                throw new BusinessException("There " + (slotsLeft == 1 ? "is 1 place" : "are " + slotsLeft + " places")
+                        + " left, so the tie-break must name exactly " + slotsLeft + " team"
+                        + (slotsLeft == 1 ? "" : "s") + ".");
+            }
+            if (tieBreakReason == null || tieBreakReason.isBlank()) {
+                throw new BusinessException("Breaking a tie needs a reason — it decides who leaves the event.");
+            }
+            promotedIds.addAll(chosen);
+            onTheLine.forEach(rr -> rr.setTieBreakReason(tieBreakReason));
+            auditNote += ", tie on " + cutoffScore + " broken for " + chosen + ": " + tieBreakReason;
         } else {
-            promotedSet = null;
+            onTheLine.forEach(rr -> promotedIds.add(rr.getTeam().getId()));
         }
 
         for (RoundRanking rr : rankings) {
-            Integer rank = rr.getRank();
-            if (promotedSet != null) {
-                rr.setIsPromoted(promotedSet.contains(rr.getTeam().getId()));
-            } else {
-                rr.setIsPromoted(topN != null && topN > 0 && rank != null && rank <= topN);
-            }
+            rr.setIsPromoted(promotedIds.contains(rr.getTeam().getId()));
         }
         roundRankingRepository.saveAll(rankings);
-        auditLogService.log("ROUND_RANKING_COMPUTED", "round", roundId,
-                promotedSet != null ? "explicit promotions: " + promotedSet : "top-N: " + topN);
+        auditLogService.log("ROUND_RANKING_COMPUTED", "round", roundId, auditNote);
         return rankings.stream().map(this::toRoundDto).toList();
+    }
+
+    private String tieMessage(List<RoundRanking> tied, int slotsLeft, BigDecimal score) {
+        String names = tied.stream().map(rr -> rr.getTeam().getName()).sorted()
+                .collect(java.util.stream.Collectors.joining(", "));
+        return tied.size() + " teams are tied on " + score + " points for "
+                + (slotsLeft == 1 ? "the last place" : "the last " + slotsLeft + " places")
+                + ": " + names + ". Decide which " + slotsLeft + " go through and give a reason.";
+    }
+
+    /**
+     * Jackson may deserialise small JSON numbers as Integer while Team.getId() is Long, and
+     * Integer.equals(Long) is always false — so normalise through Number::longValue.
+     */
+    private java.util.Set<Long> normaliseIds(List<Long> ids) {
+        java.util.Set<Long> out = new java.util.HashSet<>();
+        if (ids != null) {
+            for (Object raw : (List<?>) (Object) ids) {
+                if (raw != null) out.add(((Number) raw).longValue());
+            }
+        }
+        return out;
     }
 
     /** Read the current round standings (already-computed ranks), ordered by rank. */
@@ -146,7 +216,9 @@ public class RankingService {
 
     private RoundStandingDto toRoundDto(RoundRanking rr) {
         return new RoundStandingDto(rr.getId(), rr.getTeam().getId(), rr.getTeam().getName(),
-                rr.getScore(), rr.getRank(), rr.getIsPromoted(), rr.getPenaltyPoints(), rr.getPenaltyReason());
+                rr.getRawScore(), rr.getScore(), rr.getRank(), rr.getIsPromoted(),
+                rr.getPenaltyPoints(), rr.getPenaltyReason(),
+                rr.getBonusPoints(), rr.getBonusReason(), rr.getTieBreakReason());
     }
 
     private EventStandingDto toEventDto(Team t) {

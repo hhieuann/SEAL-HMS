@@ -50,6 +50,7 @@ class TeamServiceBranchTest {
     @Mock private TrackAssignmentRepository trackAssignmentRepository;
     @Mock private MentorMessageRepository mentorMessageRepository;
     @Mock private AccountService accountService;
+    @Mock private com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     @InjectMocks private TeamService teamService;
 
     private Team baseTeam() {
@@ -158,20 +159,24 @@ class TeamServiceBranchTest {
         assertThat(res.getStatus()).isEqualTo(TeamStatus.IN_PROGRESS);
     }
 
-    // ---------- applyPenalty: score null branch ----------
+    // ---------- adjustment: no judged score yet ----------
 
+    /** Nothing scored yet, so rawScore is null and the derived score is just the adjustment. */
     @Test
-    void applyPenalty_scoreNull_onlyStoresPenaltyWithoutAdjusting() {
+    void applyAdjustment_noRawScoreYet_treatsItAsZero() {
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(2L);
+        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.UNDER_REVIEW);
         com.fpt.seal.hms.roundranking.entity.RoundRanking rr =
                 new com.fpt.seal.hms.roundranking.entity.RoundRanking();
-        rr.setScore(null); // score not yet computed -> skip adjustment branch
+        rr.setRound(round);
         when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
         when(teamRepository.findById(5L)).thenReturn(Optional.of(baseTeam()));
 
-        teamService.applyPenalty(5L, 2L, new java.math.BigDecimal("10"), "Late");
+        teamService.applyAdjustment(5L, 2L, new java.math.BigDecimal("10"), "Late", null, null);
 
         assertThat(rr.getPenaltyPoints()).isEqualByComparingTo("10");
-        assertThat(rr.getScore()).isNull(); // untouched
+        assertThat(rr.getScore()).isEqualByComparingTo("-10");
         verify(roundRankingRepository).save(rr);
     }
 }

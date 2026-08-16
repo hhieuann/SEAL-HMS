@@ -155,12 +155,11 @@ public class ScoreService {
             // Multiply by 100 because the criterion weights in the DB sum to 1.0
             BigDecimal avg = weightedTotal.multiply(BigDecimal.valueOf(100))
                     .divide(BigDecimal.valueOf(judgeCount), 2, RoundingMode.HALF_UP);
-            
-            if (rr.getPenaltyPoints() != null) {
-                avg = avg.subtract(rr.getPenaltyPoints());
-            }
-            
-            rr.setScore(avg);
+
+            // Scoring owns rawScore only. The final score is derived in one place, so a
+            // re-grade after a penalty cannot subtract that penalty a second time.
+            rr.setRawScore(avg);
+            rr.recomputeScore();
             roundRankingRepository.save(rr);
         }
     }

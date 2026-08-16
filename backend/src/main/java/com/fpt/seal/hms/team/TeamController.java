@@ -96,8 +96,10 @@ public class TeamController {
             @PathVariable Long id,
             @PathVariable Long roundId,
             @RequestBody com.fpt.seal.hms.team.dto.TeamPenaltyRequest request) {
-        TeamResponse updated = teamService.applyPenalty(id, roundId, request.getPenaltyPoints(), request.getPenaltyReason());
-        return ResponseEntity.ok(ApiResponse.ok("Team penalty applied", updated));
+        TeamResponse updated = teamService.applyAdjustment(id, roundId,
+                request.getPenaltyPoints(), request.getPenaltyReason(),
+                request.getBonusPoints(), request.getBonusReason());
+        return ResponseEntity.ok(ApiResponse.ok("Round result adjusted", updated));
     }
 
     @PostMapping("/events/{eventId}/teams/reset-mentors")
