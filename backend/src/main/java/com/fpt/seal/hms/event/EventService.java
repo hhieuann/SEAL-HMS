@@ -3,6 +3,7 @@ package com.fpt.seal.hms.event;
 import com.fpt.seal.hms.common.enums.EventStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
 import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
+import com.fpt.seal.hms.event.dto.EventDuplicateRequest;
 import com.fpt.seal.hms.event.dto.EventRequest;
 import com.fpt.seal.hms.event.dto.EventResponse;
 import com.fpt.seal.hms.event.entity.Event;
@@ -34,6 +35,10 @@ public class EventService {
     private final com.fpt.seal.hms.submission.SubmissionRepository submissionRepository;
     private final com.fpt.seal.hms.score.ScoreRepository scoreRepository;
     private final org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    private final com.fpt.seal.hms.track.TrackRepository trackRepository;
+    private final com.fpt.seal.hms.topic.TopicRepository topicRepository;
+    private final com.fpt.seal.hms.round.RoundRepository roundRepository;
+    private final com.fpt.seal.hms.criterion.CriterionRepository criterionRepository;
 
     @Transactional(readOnly = true)
     public List<EventResponse> getAllEvents() {
@@ -471,5 +476,103 @@ public class EventService {
             }
         }
         roundRankingRepository.deleteAll(rankings);
+    }
+
+    /**
+     * Start a new edition from an existing one. Copies the parts that describe how the event is
+     * run — tracks, their topics, rounds, each round's criteria, and the team limits — and none
+     * of the parts that record what happened: no teams, staff, judge or mentor assignments,
+     * submissions, scores, rankings or prizes.
+     *
+     * The copy is always PLANNED with its rounds back at CREATED, whatever state the source is
+     * in. Giving a new start date shifts every round by the same number of days, so a schedule
+     * that worked in Spring keeps its shape in Summer.
+     */
+    @Transactional
+    public EventResponse duplicateEvent(Long sourceId, EventDuplicateRequest request) {
+        Event source = eventRepository.findById(sourceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Event not found with id: " + sourceId));
+
+        Event copy = new Event();
+        copy.setName(request.getName());
+        copy.setType(source.getType());
+        copy.setDescription(source.getDescription());
+        copy.setMinTeams(source.getMinTeams());
+        copy.setMaxTeams(source.getMaxTeams());
+        copy.setStatus(EventStatus.PLANNED);
+        copy.setRegistrationStartDate(firstNonNull(request.getRegistrationStartDate(), source.getRegistrationStartDate()));
+        copy.setRegistrationEndDate(firstNonNull(request.getRegistrationEndDate(), source.getRegistrationEndDate()));
+        copy.setStartDate(firstNonNull(request.getStartDate(), source.getStartDate()));
+        copy.setEndDate(firstNonNull(request.getEndDate(), source.getEndDate()));
+        Event saved = eventRepository.save(copy);
+
+        // How far the whole schedule moves, so rounds keep their spacing.
+        long dayShift = 0;
+        if (request.getStartDate() != null && source.getStartDate() != null) {
+            dayShift = java.time.temporal.ChronoUnit.DAYS.between(source.getStartDate(), request.getStartDate());
+        }
+
+        // Tracks, and the topics that belong to each. A topic keeps its track so the pairing
+        // survives, but the draw itself has not happened yet for the new event.
+        java.util.Map<Long, com.fpt.seal.hms.track.entity.Track> trackByOldId = new java.util.HashMap<>();
+        for (com.fpt.seal.hms.track.entity.Track oldTrack : trackRepository.findByEventId(sourceId)) {
+            com.fpt.seal.hms.track.entity.Track t = new com.fpt.seal.hms.track.entity.Track();
+            t.setEvent(saved);
+            t.setName(oldTrack.getName());
+            t.setDescription(oldTrack.getDescription());
+            t.setMaxTeams(oldTrack.getMaxTeams());
+            trackByOldId.put(oldTrack.getId(), trackRepository.save(t));
+        }
+
+        for (com.fpt.seal.hms.topic.entity.Topic oldTopic : topicRepository.findByEventId(sourceId)) {
+            com.fpt.seal.hms.topic.entity.Topic topic = new com.fpt.seal.hms.topic.entity.Topic();
+            topic.setEvent(saved);
+            topic.setName(oldTopic.getName());
+            topic.setDescription(oldTopic.getDescription());
+            if (oldTopic.getTrack() != null) {
+                topic.setTrack(trackByOldId.get(oldTopic.getTrack().getId()));
+            }
+            topicRepository.save(topic);
+        }
+
+        // Rounds, each with its criteria. Status resets: a copied round has not been run.
+        List<com.fpt.seal.hms.round.entity.Round> sourceRounds =
+                new java.util.ArrayList<>(roundRepository.findByEventId(sourceId));
+        sourceRounds.sort(java.util.Comparator.comparing(
+                r -> r.getRoundSeq() == null ? Integer.MAX_VALUE : r.getRoundSeq()));
+
+        for (com.fpt.seal.hms.round.entity.Round oldRound : sourceRounds) {
+            com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+            round.setEvent(saved);
+            round.setName(oldRound.getName());
+            round.setDurationHours(oldRound.getDurationHours());
+            round.setPromotionTopN(oldRound.getPromotionTopN());
+            round.setRoundSeq(oldRound.getRoundSeq());
+            round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.CREATED);
+            round.setStartTime(oldRound.getStartTime() == null
+                    ? null : oldRound.getStartTime().plusDays(dayShift));
+            com.fpt.seal.hms.round.entity.Round savedRound = roundRepository.save(round);
+
+            for (com.fpt.seal.hms.criterion.entity.Criterion oldCriterion : criterionRepository.findByRoundId(oldRound.getId())) {
+                com.fpt.seal.hms.criterion.entity.Criterion c = new com.fpt.seal.hms.criterion.entity.Criterion();
+                c.setRound(savedRound);
+                c.setName(oldCriterion.getName());
+                c.setMaxScore(oldCriterion.getMaxScore());
+                c.setWeight(oldCriterion.getWeight());
+                criterionRepository.save(c);
+            }
+        }
+
+        auditLogService.log("EVENT_DUPLICATED", "event", saved.getId(),
+                "copied from event " + sourceId + " (" + source.getName() + ")");
+
+        EventResponse response = mapToResponse(saved);
+        response.setRounds(roundService.getRoundsByEventId(saved.getId()));
+        response.setTracks(trackService.getTracksByEventId(saved.getId()));
+        return response;
+    }
+
+    private static <T> T firstNonNull(T preferred, T fallback) {
+        return preferred != null ? preferred : fallback;
     }
 }

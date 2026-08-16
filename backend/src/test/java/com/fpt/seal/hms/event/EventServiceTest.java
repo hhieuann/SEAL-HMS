@@ -4,6 +4,7 @@ import com.fpt.seal.hms.account.AccountRepository;
 import com.fpt.seal.hms.auditlog.AuditLogService;
 import com.fpt.seal.hms.common.enums.EventStatus;
 import com.fpt.seal.hms.common.exception.BusinessException;
+import com.fpt.seal.hms.common.exception.ResourceNotFoundException;
 import com.fpt.seal.hms.event.dto.EventRequest;
 import com.fpt.seal.hms.event.dto.EventResponse;
 import com.fpt.seal.hms.event.entity.Event;
@@ -16,6 +17,7 @@ import com.fpt.seal.hms.team.TeamRepository;
 import com.fpt.seal.hms.track.TrackService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -29,6 +31,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -48,6 +51,10 @@ class EventServiceTest {
     @Mock private SubmissionRepository submissionRepository;
     @Mock private ScoreRepository scoreRepository;
     @Mock private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+    @Mock private com.fpt.seal.hms.track.TrackRepository trackRepository;
+    @Mock private com.fpt.seal.hms.topic.TopicRepository topicRepository;
+    @Mock private com.fpt.seal.hms.round.RoundRepository roundRepository;
+    @Mock private com.fpt.seal.hms.criterion.CriterionRepository criterionRepository;
     @InjectMocks private EventService eventService;
 
     private EventRequest validRequest() {
@@ -275,5 +282,175 @@ class EventServiceTest {
 
         assertThat(res).hasSize(1);
         assertThat(res.get(0).getCurrentTeams()).isEqualTo(3);
+    }
+
+    // ---------- duplicateEvent ----------
+
+    private com.fpt.seal.hms.event.entity.Event sourceEvent() {
+        com.fpt.seal.hms.event.entity.Event e = new com.fpt.seal.hms.event.entity.Event();
+        e.setId(1L);
+        e.setName("SEAL Spring 2026");
+        e.setType("Hackathon");
+        e.setDescription("The spring edition");
+        e.setMinTeams(4);
+        e.setMaxTeams(20);
+        e.setStatus(com.fpt.seal.hms.common.enums.EventStatus.COMPLETED);
+        e.setRegistrationStartDate(java.time.LocalDate.of(2026, 1, 1));
+        e.setRegistrationEndDate(java.time.LocalDate.of(2026, 1, 20));
+        e.setStartDate(java.time.LocalDate.of(2026, 2, 1));
+        e.setEndDate(java.time.LocalDate.of(2026, 2, 28));
+        return e;
+    }
+
+    private com.fpt.seal.hms.event.dto.EventDuplicateRequest dupRequest(String name, java.time.LocalDate start) {
+        com.fpt.seal.hms.event.dto.EventDuplicateRequest r = new com.fpt.seal.hms.event.dto.EventDuplicateRequest();
+        r.setName(name);
+        r.setStartDate(start);
+        return r;
+    }
+
+    /** Wire the save calls so the copy comes back with an id, as JPA would. */
+    private void stubSavesForDuplicate() {
+        when(eventRepository.save(any(com.fpt.seal.hms.event.entity.Event.class))).thenAnswer(inv -> {
+            com.fpt.seal.hms.event.entity.Event e = inv.getArgument(0);
+            if (e.getId() == null) e.setId(99L);
+            return e;
+        });
+        when(trackRepository.save(any())).thenAnswer(inv -> {
+            com.fpt.seal.hms.track.entity.Track t = inv.getArgument(0);
+            if (t.getId() == null) t.setId(500L);
+            return t;
+        });
+        when(roundRepository.save(any())).thenAnswer(inv -> {
+            com.fpt.seal.hms.round.entity.Round r = inv.getArgument(0);
+            if (r.getId() == null) r.setId(700L);
+            return r;
+        });
+    }
+
+    @Test
+    void duplicateEvent_copiesSettings_butStartsPlannedUnderTheNewName() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(sourceEvent()));
+        stubSavesForDuplicate();
+
+        eventService.duplicateEvent(1L, dupRequest("SEAL Summer 2026", null));
+
+        ArgumentCaptor<com.fpt.seal.hms.event.entity.Event> cap =
+                ArgumentCaptor.forClass(com.fpt.seal.hms.event.entity.Event.class);
+        verify(eventRepository).save(cap.capture());
+        com.fpt.seal.hms.event.entity.Event copy = cap.getValue();
+        assertThat(copy.getName()).isEqualTo("SEAL Summer 2026");
+        assertThat(copy.getType()).isEqualTo("Hackathon");
+        assertThat(copy.getMinTeams()).isEqualTo(4);
+        assertThat(copy.getMaxTeams()).isEqualTo(20);
+        // the source was finished; the copy has not started
+        assertThat(copy.getStatus()).isEqualTo(com.fpt.seal.hms.common.enums.EventStatus.PLANNED);
+    }
+
+    @Test
+    void duplicateEvent_copiesTracksTopicsRoundsAndCriteria() {
+        com.fpt.seal.hms.event.entity.Event source = sourceEvent();
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(source));
+        stubSavesForDuplicate();
+
+        com.fpt.seal.hms.track.entity.Track track = new com.fpt.seal.hms.track.entity.Track();
+        track.setId(10L);
+        track.setName("Track A");
+        track.setMaxTeams(5);
+        when(trackRepository.findByEventId(1L)).thenReturn(List.of(track));
+
+        com.fpt.seal.hms.topic.entity.Topic topic = new com.fpt.seal.hms.topic.entity.Topic();
+        topic.setId(20L);
+        topic.setName("Medical RAG");
+        topic.setTrack(track);
+        when(topicRepository.findByEventId(1L)).thenReturn(List.of(topic));
+
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(30L);
+        round.setName("Qualifier");
+        round.setRoundSeq(1);
+        round.setPromotionTopN(3);
+        round.setDurationHours(24.0);
+        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.COMPLETED);
+        when(roundRepository.findByEventId(1L)).thenReturn(List.of(round));
+
+        com.fpt.seal.hms.criterion.entity.Criterion criterion = new com.fpt.seal.hms.criterion.entity.Criterion();
+        criterion.setId(40L);
+        criterion.setName("Innovation");
+        criterion.setMaxScore(new java.math.BigDecimal("10"));
+        criterion.setWeight(new java.math.BigDecimal("0.40"));
+        when(criterionRepository.findByRoundId(30L)).thenReturn(List.of(criterion));
+
+        eventService.duplicateEvent(1L, dupRequest("SEAL Summer 2026", null));
+
+        verify(trackRepository).save(argThat(t -> "Track A".equals(t.getName()) && t.getId() == null || t.getId() == 500L));
+        verify(topicRepository).save(argThat(t -> "Medical RAG".equals(t.getName())));
+        ArgumentCaptor<com.fpt.seal.hms.round.entity.Round> roundCap =
+                ArgumentCaptor.forClass(com.fpt.seal.hms.round.entity.Round.class);
+        verify(roundRepository).save(roundCap.capture());
+        assertThat(roundCap.getValue().getPromotionTopN()).isEqualTo(3);
+        // a copied round has not been run, whatever the source round's state was
+        assertThat(roundCap.getValue().getStatus()).isEqualTo(com.fpt.seal.hms.common.enums.RoundStatus.CREATED);
+        verify(criterionRepository).save(argThat(c -> "Innovation".equals(c.getName())));
+    }
+
+    /** Results belong to the edition that produced them and must never follow the copy. */
+    @Test
+    void duplicateEvent_doesNotCopyTeamsStaffOrResults() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(sourceEvent()));
+        stubSavesForDuplicate();
+
+        eventService.duplicateEvent(1L, dupRequest("SEAL Summer 2026", null));
+
+        verify(teamRepository, never()).save(any());
+        verify(eventStaffRepository, never()).save(any());
+        verify(roundRankingRepository, never()).save(any());
+        verify(submissionRepository, never()).save(any());
+        verify(scoreRepository, never()).save(any());
+    }
+
+    @Test
+    void duplicateEvent_shiftsRoundStartTimesByTheSameNumberOfDays() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(sourceEvent())); // starts 2026-02-01
+        stubSavesForDuplicate();
+
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(30L);
+        round.setName("Qualifier");
+        round.setRoundSeq(1);
+        round.setStartTime(java.time.LocalDateTime.of(2026, 2, 3, 9, 0)); // 2 days into the event
+        when(roundRepository.findByEventId(1L)).thenReturn(List.of(round));
+
+        // new event starts 2026-06-01, i.e. 120 days later
+        eventService.duplicateEvent(1L, dupRequest("SEAL Summer 2026", java.time.LocalDate.of(2026, 6, 1)));
+
+        ArgumentCaptor<com.fpt.seal.hms.round.entity.Round> cap =
+                ArgumentCaptor.forClass(com.fpt.seal.hms.round.entity.Round.class);
+        verify(roundRepository).save(cap.capture());
+        // still 2 days into the event, same time of day
+        assertThat(cap.getValue().getStartTime()).isEqualTo(java.time.LocalDateTime.of(2026, 6, 3, 9, 0));
+    }
+
+    @Test
+    void duplicateEvent_keepsSourceDates_whenNoneAreGiven() {
+        when(eventRepository.findById(1L)).thenReturn(Optional.of(sourceEvent()));
+        stubSavesForDuplicate();
+
+        eventService.duplicateEvent(1L, dupRequest("Copy", null));
+
+        ArgumentCaptor<com.fpt.seal.hms.event.entity.Event> cap =
+                ArgumentCaptor.forClass(com.fpt.seal.hms.event.entity.Event.class);
+        verify(eventRepository).save(cap.capture());
+        assertThat(cap.getValue().getStartDate()).isEqualTo(java.time.LocalDate.of(2026, 2, 1));
+        assertThat(cap.getValue().getRegistrationEndDate()).isEqualTo(java.time.LocalDate.of(2026, 1, 20));
+    }
+
+    @Test
+    void duplicateEvent_throws_whenSourceMissing() {
+        when(eventRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> eventService.duplicateEvent(404L, dupRequest("X", null)))
+                .isInstanceOf(ResourceNotFoundException.class);
+        verify(eventRepository, never()).save(any());
     }
 }
