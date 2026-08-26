@@ -294,6 +294,37 @@ const EventForm = () => {
   const addRound       = ()  => setFormData(p => ({ ...p, rounds: [...p.rounds, { id: Date.now(), name: `Round ${p.rounds.length+1}`, status: 'planned', start: '', durationHours: '', promotionTopN: '', criteria: [] }] }));
   const updateRound    = (id,f,v) => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===id ? { ...r,[f]:v } : r) }));
   const removeRound    = id  => setFormData(p => ({ ...p, rounds: p.rounds.filter(r => r.id !== id) }));
+  /**
+   * The four criteria most rounds end up with, already totalling the 100% the form demands.
+   * Saves typing the same set into every round of every edition.
+   */
+  const STANDARD_CRITERIA = [
+    { name: 'Innovation', weight: 30 },
+    { name: 'Technical execution', weight: 30 },
+    { name: 'Impact', weight: 20 },
+    { name: 'Presentation', weight: 20 },
+  ];
+
+  const applyStandardCriteria = rid => setFormData(p => ({ ...p, rounds: p.rounds.map(r =>
+    r.id === rid
+      ? { ...r, criteria: STANDARD_CRITERIA.map((c, i) => ({ ...c, id: Date.now() + i })) }
+      : r) }));
+
+  /** Copy a round with its criteria — later rounds are usually the same shape as the first. */
+  const duplicateRound = rid => setFormData(p => {
+    const source = p.rounds.find(r => r.id === rid);
+    if (!source) return p;
+    const copy = {
+      ...source,
+      id: Date.now(),
+      name: `Round ${p.rounds.length + 1}`,
+      status: 'planned',
+      start: '',
+      criteria: (source.criteria || []).map((c, i) => ({ ...c, id: Date.now() + i + 1 })),
+    };
+    return { ...p, rounds: [...p.rounds, copy] };
+  });
+
   const addCriterion   = rid => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===rid ? { ...r, criteria: [...r.criteria, { id: Date.now(), name: 'New Criterion', weight: 0 }] } : r) }));
   const updateCriterion = (rid,cid,f,v) => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===rid ? { ...r, criteria: r.criteria.map(c => c.id===cid ? { ...c,[f]:f==='weight'?Number(v):v } : c) } : r) }));
   const removeCriterion = (rid,cid) => setFormData(p => ({ ...p, rounds: p.rounds.map(r => r.id===rid ? { ...r, criteria: r.criteria.filter(c => c.id!==cid) } : r) }));
@@ -505,7 +536,12 @@ const EventForm = () => {
                     <div key={round.id} style={{padding:'24px',background:'#F8FAFC',borderRadius:'16px',border:`1px solid ${hasErrs?'rgba(239,68,68,0.4)':isFinalRound?'rgba(255,215,0,0.3)':'var(--border-color)'}`}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
                         <span style={{fontSize:'11px',fontWeight:'700',textTransform:'uppercase',letterSpacing:'1px',padding:'3px 10px',borderRadius:'20px',background:isFinalRound?'rgba(255,215,0,0.15)':'rgba(99,102,241,0.1)',color:isFinalRound?'#b8860b':'var(--primary)'}}>{isFinalRound?'🏆 Final Round':`Round ${rIdx+1}`}</span>
-                        {!isLocked && <button className="btn-icon" onClick={()=>removeRound(round.id)} style={{color:'var(--danger)',background:'rgba(239,68,68,0.1)'}}><Trash2Icon/></button>}
+                        {!isLocked && (
+                          <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+                            <button className="btn btn-secondary" style={{fontSize:'12px',padding:'5px 10px'}} onClick={()=>duplicateRound(round.id)} title="Add another round with these criteria">Duplicate round</button>
+                            <button className="btn-icon" onClick={()=>removeRound(round.id)} style={{color:'var(--danger)',background:'rgba(239,68,68,0.1)'}}><Trash2Icon/></button>
+                          </div>
+                        )}
                       </div>
 
                       <div style={{display:'flex',gap:'16px',marginBottom:'16px',flexWrap:'wrap'}}>
@@ -550,7 +586,12 @@ const EventForm = () => {
                             {weightErr&&<span style={{fontSize:'12px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'4px',background:'rgba(239,68,68,0.1)',padding:'2px 8px',borderRadius:'20px'}}><AlertTriangle size={12}/> {totalWeight}% (need 100%)</span>}
                             {!weightErr&&round.criteria.length>0&&<span style={{fontSize:'12px',color:'var(--success)',background:'rgba(16,185,129,0.1)',padding:'2px 8px',borderRadius:'20px'}}>✓ 100%</span>}
                           </h4>
-                          <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>addCriterion(round.id)} disabled={isLocked}><Plus size={14}/> Add Criterion</button>
+                          <div style={{display:'flex',gap:'8px'}}>
+                            {round.criteria.length===0&&(
+                              <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>applyStandardCriteria(round.id)} disabled={isLocked} title="Innovation 30 · Technical execution 30 · Impact 20 · Presentation 20">Use standard set</button>
+                            )}
+                            <button className="btn btn-secondary" style={{fontSize:'12px',padding:'6px 12px'}} onClick={()=>addCriterion(round.id)} disabled={isLocked}><Plus size={14}/> Add Criterion</button>
+                          </div>
                         </div>
                         {round.criteria.length===0
                           ? <div style={{fontSize:'13px',color:'var(--danger)',display:'flex',alignItems:'center',gap:'6px'}}><AlertTriangle size={14}/> At least one scoring criterion is required — judges cannot grade this round without it.</div>

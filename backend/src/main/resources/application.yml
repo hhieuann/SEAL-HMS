@@ -25,6 +25,11 @@ app:
   jwt:
     secret: ${JWT_SECRET:please_change_me_to_a_long_random_secret_key}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+  demo:
+    # Admin-only endpoints that bulk-create demo events, teams and accounts. Off unless asked
+    # for: with this false the controller bean is not created, so /api/v1/admin/demo 404s.
+    # Set APP_DEMO_ENABLED=true in backend/.env.properties to use it locally.
+    enabled: ${APP_DEMO_ENABLED:false}
 
 server:
   port: 8080
