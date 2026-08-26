@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Users, FolderKanban, ShieldCheck, ArrowRight, Activity, Code, Calendar, Server, Settings, Mail, UserPlus, PieChart, CheckCircle2 } from 'lucide-react';
+import DemoDataPanel from './DemoDataPanel';
 import './EventDashboard.css';
 import apiClient from '../../api/apiClient';
 
@@ -277,6 +278,8 @@ const GlobalDashboard = () => {
               </button>
             </div>
           </div>
+
+          <DemoDataPanel />
 
         </div>
       </div>

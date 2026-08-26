@@ -24,6 +24,16 @@ public class DemoController {
 
     private final DemoDataService demoDataService;
 
+    /**
+     * Exists only when demo mode is on, which is the point: the admin page probes this and
+     * hides the whole panel on a 404 rather than offering a button that cannot work.
+     */
+    @GetMapping("/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Boolean>> status() {
+        return ResponseEntity.ok(ApiResponse.ok("Demo mode is enabled", true));
+    }
+
     /** Build a demo event, up to whichever stage was asked for. */
     @PostMapping("/seed")
     @PreAuthorize("hasRole('ADMIN')")

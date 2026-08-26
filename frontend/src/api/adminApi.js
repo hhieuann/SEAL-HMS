@@ -123,6 +123,28 @@ export const adminApi = {
   deleteChapter: async (id) => {
     const response = await apiClient.delete(`/api/v1/chapters/${id}`);
     return response.data;
+  },
+
+  // --- Demo data (only reachable when the backend runs with app.demo.enabled=true) ---
+
+  /** True when demo mode is on. The route itself is absent otherwise, so a 404 means off. */
+  isDemoEnabled: async () => {
+    try {
+      await apiClient.get('/api/v1/admin/demo/status');
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  seedDemoData: async (payload) => {
+    const response = await apiClient.post('/api/v1/admin/demo/seed', payload);
+    return response.data.data;
+  },
+
+  purgeDemoData: async () => {
+    const response = await apiClient.delete('/api/v1/admin/demo');
+    return response.data.data;
   }
 };
 
