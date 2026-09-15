@@ -61,3 +61,41 @@ describe('adminApi.updateAccountStatus', () => {
     expect(apiClient.patch).toHaveBeenCalledWith('/api/v1/accounts/7/status', { status: 'DISABLED' });
   });
 });
+
+describe('adminApi.getSystemHealth', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const report = { status: 'UP', components: { db: { status: 'UP' } } };
+
+  it('returns the report with the measured latency', async () => {
+    apiClient.get.mockResolvedValue({ data: report });
+
+    const health = await adminApi.getSystemHealth();
+
+    expect(apiClient.get).toHaveBeenCalledWith('/actuator/health');
+    expect(health).toMatchObject({ reachable: true, status: 'UP', components: report.components });
+    expect(typeof health.latencyMs).toBe('number');
+  });
+
+  it('keeps a 503 DOWN answer as a report instead of an error', async () => {
+    const down = { status: 'DOWN', components: { db: { status: 'DOWN', details: { error: 'refused' } } } };
+    apiClient.get.mockRejectedValue({ response: { status: 503, data: down } });
+
+    const health = await adminApi.getSystemHealth();
+
+    expect(health).toMatchObject({ reachable: true, status: 'DOWN', components: down.components });
+  });
+
+  it('is unreachable when the request never got an answer', async () => {
+    apiClient.get.mockRejectedValue(new Error('Network Error'));
+
+    expect(await adminApi.getSystemHealth()).toEqual({ reachable: false, latencyMs: null, status: 'DOWN', components: {} });
+  });
+
+  it('is unreachable when something other than the backend answered', async () => {
+    // The dev server returns index.html for any path it does not proxy.
+    apiClient.get.mockResolvedValue({ data: '<!doctype html><html></html>' });
+
+    expect((await adminApi.getSystemHealth()).reachable).toBe(false);
+  });
+});

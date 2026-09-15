@@ -29,6 +29,7 @@ conflict-of-interest rule expressible — see [Conflict of interest](#conflict-o
 |---|---|
 | Account management | Approve/reject pending registrations, change roles, disable accounts |
 | Event configuration | Create/edit an event with its tracks, rounds and scoring criteria |
+| Duplicate an event | Copy a past edition — tracks, topics, rounds and criteria — under a new name and dates, instead of rebuilding it |
 | Criteria enforcement | Every round **must** have criteria whose weights total 100% — the form blocks saving otherwise |
 | Track draw | Balanced random draw: teams go to the least-loaded track that still has capacity |
 | Assignment matrix | Assign lecturers as judges (per track) and mentors (per team) |
@@ -37,6 +38,8 @@ conflict-of-interest rule expressible — see [Conflict of interest](#conflict-o
 | Prizes | Record event winners |
 | Announcements | Broadcast to everyone or to one audience (students / judges / mentors / lecturers / staff) |
 | Audit log | Read the trail of who changed what |
+| System health | Live status of the API, database, disk space and schema version on the dashboard (`/actuator/health`) |
+| Demo data | Seed a complete `[DEMO]` event and remove it again — only when the backend runs with `APP_DEMO_ENABLED=true` |
 
 ## Event Staff — `STAFF`
 

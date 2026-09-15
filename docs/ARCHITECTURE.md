@@ -7,8 +7,8 @@ React (Vite)  —  34 pages, role-gated by <ProtectedRoute>
    ▼
 Controller  ──>  Service  ──>  Repository (Spring Data JPA)  ──>  PostgreSQL 18
         (DTO in/out)     (business rules)        (18 entities)      (22 tables)
-   20 controllers      @Transactional          JpaRepository       Flyway V1..V37
-   108 endpoints
+   21 controllers      @Transactional          JpaRepository       Flyway V1..V38
+   112 endpoints
 ```
 - Controllers never expose entities — always DTOs (request/response).
 - Services hold business rules and transactions (`@Transactional`).
@@ -56,7 +56,7 @@ a feature is one folder, not five scattered edits.
 | Participation | `team`, `teammember`, `trackassignment` |
 | Competition | `submission`, `score`, `roundranking` |
 | Recognition | `chapter`, `prize` |
-| Platform | `announcement`, `auditlog`, `common`, `config` |
+| Platform | `announcement`, `auditlog`, `health`, `demo`, `common`, `config` |
 
 ## Domain model — the relationships that matter
 
@@ -112,13 +112,23 @@ Two layers, as shown in the walkthrough above:
 2. An ownership/assignment check in the service — this user, this row. Identity is always read from
    the token, never from the request body.
 
+## Health check
+`GET /actuator/health` is the only Actuator endpoint exposed. Anyone gets `{"status":"UP"}` or
+`DOWN` (the path is whitelisted in `SecurityConfig`); a request carrying an ADMIN token also gets
+the components — `db` (a validation query through the connection pool), `diskSpace`, and `schema`
+(`SchemaHealthIndicator`: the Flyway version the database is at, read once after startup).
+
+The admin dashboard's *System Health* panel is this endpoint rendered row by row. Nothing on it is
+hard-coded: a database outage shows as **Database · Down** within the pool's 10-second connection
+timeout, and a backend that is off shows as **API · Unreachable**.
+
 ## Testing
-- **Backend:** 499 tests in 55 classes (JUnit 5 + Mockito). Service tests mock repositories;
+- **Backend:** 536 tests in 58 classes (JUnit 5 + Mockito). Service tests mock repositories;
   controller tests use `@WebMvcTest` slices with a shared `WebMvcTestSecurityConfig` so
   `@PreAuthorize` rules are actually exercised.
-- **Coverage:** JaCoCo, 96.9% line / 87.7% branch, excluding `dto`, `entity`, `config` and
+- **Coverage:** JaCoCo, 96.5% line / 86.2% branch, excluding `dto`, `entity`, `config` and
   controllers (they hold no business logic worth a coverage denominator).
-- **Frontend:** 18 Vitest tests, focused on role-dependent rendering.
+- **Frontend:** 26 Vitest tests — role-dependent rendering, the confirm modal, and the health panel.
 
 > Spring Boot 4 note: `@WebMvcTest` moved to `org.springframework.boot.webmvc.test.autoconfigure`
 > and needs the `spring-boot-starter-webmvc-test` dependency. The slice instantiates

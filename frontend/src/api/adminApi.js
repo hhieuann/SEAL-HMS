@@ -145,6 +145,31 @@ export const adminApi = {
   purgeDemoData: async () => {
     const response = await apiClient.delete('/api/v1/admin/demo');
     return response.data.data;
+  },
+
+  // --- System health (Spring Boot Actuator, /actuator/health) ---
+
+  /**
+   * The health report, plus how long the backend took to answer. Anyone gets the overall status;
+   * an ADMIN token also gets the components (db, diskSpace, schema). Boot answers 503 when a
+   * component is DOWN — that is still a report, so it is returned rather than thrown. Only a call
+   * that never reached the backend (or reached something that is not it) counts as unreachable.
+   */
+  getSystemHealth: async () => {
+    const started = performance.now();
+    const asReport = (body) => ({
+      reachable: true,
+      latencyMs: Math.round(performance.now() - started),
+      ...body,
+    });
+    const isReport = (body) => typeof body?.status === 'string';
+    try {
+      const response = await apiClient.get('/actuator/health');
+      if (isReport(response.data)) return asReport(response.data);
+    } catch (err) {
+      if (isReport(err.response?.data)) return asReport(err.response.data);
+    }
+    return { reachable: false, latencyMs: null, status: 'DOWN', components: {} };
   }
 };
 

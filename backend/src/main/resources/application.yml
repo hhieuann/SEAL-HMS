@@ -7,6 +7,11 @@ spring:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:seal_hms}?options=-c%20TimeZone=UTC
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
+    hikari:
+      # How long a request waits for a connection when the pool has none to give — which, with
+      # PostgreSQL down, is every request. Hikari's default of 30 s meant the health check (and any
+      # page) took half a minute to report the outage; 10 s is plenty for a database on localhost.
+      connection-timeout: 10000
   servlet:
     multipart:
       max-file-size: 10MB
@@ -33,6 +38,19 @@ app:
 
 server:
   port: 8080
+
+# Health check at /actuator/health. Anyone can ask (SecurityConfig whitelists the path) but only
+# gets "UP"/"DOWN"; an ADMIN token additionally gets the components (db, diskSpace, schema) that
+# the admin dashboard's System Health panel displays. Nothing else from Actuator is exposed.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: when-authorized
+      roles: ADMIN
 
 springdoc:
   swagger-ui:
