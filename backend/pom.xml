@@ -41,6 +41,12 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
+    <!-- Health check at /actuator/health. Only "health" is exposed, and its component details
+         go to ADMIN callers only — see management.* in application.yml. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>org.postgresql</groupId>

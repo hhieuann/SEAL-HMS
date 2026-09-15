@@ -63,6 +63,7 @@ class TeamServiceMoreTest {
     @Mock private TrackAssignmentRepository trackAssignmentRepository;
     @Mock private MentorMessageRepository mentorMessageRepository;
     @Mock private AccountService accountService;
+    @Mock private com.fpt.seal.hms.auditlog.AuditLogService auditLogService;
     @InjectMocks private TeamService teamService;
 
     private Event openEvent() {
@@ -367,41 +368,131 @@ class TeamServiceMoreTest {
 
     // ---------- penalty ----------
 
-    @Test
-    void applyPenalty_adjustsScoreByPenaltyDelta() {
+    // ---------- round result adjustments ----------
+
+    /** A RoundRanking whose round is open for adjustment. */
+    private RoundRanking underReview(String rawScore) {
+        com.fpt.seal.hms.round.entity.Round round = new com.fpt.seal.hms.round.entity.Round();
+        round.setId(2L);
+        round.setStatus(com.fpt.seal.hms.common.enums.RoundStatus.UNDER_REVIEW);
         RoundRanking rr = new RoundRanking();
-        rr.setScore(new BigDecimal("80"));
-        rr.setPenaltyPoints(new BigDecimal("5")); // existing penalty
+        rr.setRound(round);
+        rr.setRawScore(new BigDecimal(rawScore));
+        rr.recomputeScore();
+        return rr;
+    }
+
+    @Test
+    void applyAdjustment_derivesScoreFromRawScore() {
+        RoundRanking rr = underReview("80");
         when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
-        Team t = team(5L, TeamStatus.IN_PROGRESS);
-        when(teamRepository.findById(5L)).thenReturn(Optional.of(t));
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(team(5L, TeamStatus.IN_PROGRESS)));
 
-        teamService.applyPenalty(5L, 2L, new BigDecimal("10"), "Late");
+        teamService.applyAdjustment(5L, 2L, new BigDecimal("10"), "Late submission", null, null);
 
-        // 80 + old(5) - new(10) = 75
-        assertThat(rr.getScore()).isEqualByComparingTo("75");
-        assertThat(rr.getPenaltyReason()).isEqualTo("Late");
+        assertThat(rr.getScore()).isEqualByComparingTo("70");
+        assertThat(rr.getRawScore()).isEqualByComparingTo("80"); // the judged score is preserved
+        assertThat(rr.getPenaltyReason()).isEqualTo("Late submission");
         verify(roundRankingRepository).save(rr);
     }
 
     @Test
-    void applyPenalty_zeroPenalty_revertsOldDeduction() {
-        RoundRanking rr = new RoundRanking();
-        rr.setScore(new BigDecimal("70"));
-        rr.setPenaltyPoints(new BigDecimal("10"));
+    void applyAdjustment_bonusRaisesTheScore() {
+        RoundRanking rr = underReview("80");
         when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
         when(teamRepository.findById(5L)).thenReturn(Optional.of(team(5L, TeamStatus.IN_PROGRESS)));
 
-        teamService.applyPenalty(5L, 2L, BigDecimal.ZERO, "revert");
+        teamService.applyAdjustment(5L, 2L, null, null, new BigDecimal("5"), "Helped another team");
 
-        assertThat(rr.getScore()).isEqualByComparingTo("80"); // 70 + 10 - 0
+        assertThat(rr.getScore()).isEqualByComparingTo("85");
+    }
+
+    /**
+     * The old code adjusted `score` in place, so a second edit compounded with the first. Deriving
+     * from rawScore every time means re-editing a penalty replaces it rather than stacking.
+     */
+    @Test
+    void applyAdjustment_reappliedPenalty_replacesItRatherThanStacking() {
+        RoundRanking rr = underReview("80");
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(team(5L, TeamStatus.IN_PROGRESS)));
+
+        teamService.applyAdjustment(5L, 2L, new BigDecimal("10"), "Late", null, null);
+        teamService.applyAdjustment(5L, 2L, new BigDecimal("4"), "Reduced on appeal", null, null);
+
+        assertThat(rr.getScore()).isEqualByComparingTo("76"); // 80 - 4, not 80 - 10 - 4
     }
 
     @Test
-    void applyPenalty_throws_whenNoRanking() {
+    void applyAdjustment_clearingThePenalty_restoresTheJudgedScore() {
+        RoundRanking rr = underReview("70");
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+        when(teamRepository.findById(5L)).thenReturn(Optional.of(team(5L, TeamStatus.IN_PROGRESS)));
+
+        teamService.applyAdjustment(5L, 2L, new BigDecimal("10"), "Late", null, null);
+        teamService.applyAdjustment(5L, 2L, BigDecimal.ZERO, null, null, null);
+
+        assertThat(rr.getScore()).isEqualByComparingTo("70");
+    }
+
+    @Test
+    void applyAdjustment_rejectedWhileJudgesAreStillScoring() {
+        RoundRanking rr = underReview("80");
+        rr.getRound().setStatus(com.fpt.seal.hms.common.enums.RoundStatus.SCORING);
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, BigDecimal.ONE, "x", null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("under review");
+        verify(roundRankingRepository, never()).save(any());
+    }
+
+    @Test
+    void applyAdjustment_rejectedAfterTheRoundIsCompleted() {
+        RoundRanking rr = underReview("80");
+        rr.getRound().setStatus(com.fpt.seal.hms.common.enums.RoundStatus.COMPLETED);
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, BigDecimal.ONE, "x", null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("under review");
+    }
+
+    @Test
+    void applyAdjustment_penaltyNeedsAReason() {
+        RoundRanking rr = underReview("80");
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, BigDecimal.TEN, "  ", null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("needs a reason");
+    }
+
+    @Test
+    void applyAdjustment_bonusNeedsAReason() {
+        RoundRanking rr = underReview("80");
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, null, null, BigDecimal.TEN, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("needs a reason");
+    }
+
+    @Test
+    void applyAdjustment_rejectsNegativeAmounts() {
+        RoundRanking rr = underReview("80");
+        when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.of(rr));
+
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, new BigDecimal("-5"), "x", null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("use a bonus instead");
+    }
+
+    @Test
+    void applyAdjustment_throws_whenNoRanking() {
         when(roundRankingRepository.findByRoundIdAndTeamId(2L, 5L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> teamService.applyPenalty(5L, 2L, BigDecimal.ONE, "x"))
+        assertThatThrownBy(() -> teamService.applyAdjustment(5L, 2L, BigDecimal.ONE, "x", null, null))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 

@@ -122,6 +122,59 @@ const AssignmentMatrix = () => {
     }
   };
 
+  /**
+   * Give every mentorless team a mentor in one pass, spreading them round-robin over the
+   * lecturers who are free to take that team.
+   *
+   * A lecturer judging a team's track cannot mentor it, so those pairings are skipped here
+   * rather than fired at the server to be rejected. The server enforces the same rule anyway —
+   * this only avoids pointless failures. Any team that still could not be matched is reported
+   * rather than silently left behind.
+   */
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+
+  const handleBulkAssignMentors = async () => {
+    setBulkBusy(true);
+    setBulkResult(null);
+    try {
+      const { teamService } = await import('../../api/teamService.js');
+      const pending = teams.filter(t => !t.mentor && t.trackId);
+      const judgeIdsByTrack = assignments.reduce((acc, a) => {
+        if (a.role === 'JUDGE') {
+          acc[a.trackId] = acc[a.trackId] || new Set();
+          acc[a.trackId].add(a.lecturerId);
+        }
+        return acc;
+      }, {});
+
+      let assigned = 0;
+      const skipped = [];
+      let cursor = 0;
+
+      for (const team of pending) {
+        const blocked = judgeIdsByTrack[team.trackId] || new Set();
+        const eligible = lecturers.filter(l => !blocked.has(l.id));
+        if (eligible.length === 0) {
+          skipped.push(team.name);
+          continue;
+        }
+        const lecturer = eligible[cursor % eligible.length];
+        cursor++;
+        try {
+          const res = await teamService.assignMentor(team.id, lecturer.id);
+          setTeams(prev => prev.map(t => (t.id === team.id ? res.data : t)));
+          assigned++;
+        } catch {
+          skipped.push(team.name);
+        }
+      }
+      setBulkResult({ assigned, skipped });
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
   const handleRemoveMentor = async (teamId) => {
     try {
       const { teamService } = await import('../../api/teamService.js');
@@ -229,6 +282,22 @@ const AssignmentMatrix = () => {
             <div>
               <h1>Team Mentors</h1>
               <p className="subtitle">Assign mentors directly to participating teams.</p>
+              {teams.some(t => !t.mentor && t.trackId) && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '13px', marginTop: '10px' }}
+                  onClick={handleBulkAssignMentors}
+                  disabled={bulkBusy}
+                >
+                  {bulkBusy ? 'Assigning…' : `Assign mentors to the ${teams.filter(t => !t.mentor && t.trackId).length} teams without one`}
+                </button>
+              )}
+              {bulkResult && (
+                <p style={{ fontSize: '13px', marginTop: '8px', color: bulkResult.skipped.length ? 'var(--warning)' : 'var(--success)' }}>
+                  Assigned {bulkResult.assigned} mentor{bulkResult.assigned === 1 ? '' : 's'}.
+                  {bulkResult.skipped.length > 0 && ` No eligible lecturer for: ${bulkResult.skipped.join(', ')}.`}
+                </p>
+              )}
             </div>
           </div>
           

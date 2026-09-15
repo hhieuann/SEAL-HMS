@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Users, FolderKanban, ShieldCheck, ArrowRight, Activity, Code, Calendar, Server, Settings, Mail, UserPlus, PieChart, CheckCircle2 } from 'lucide-react';
+import { Globe, Users, FolderKanban, ShieldCheck, ArrowRight, Activity, Code, Calendar, PieChart } from 'lucide-react';
+import DemoDataPanel from './DemoDataPanel';
+import SystemHealthPanel from './SystemHealthPanel';
 import './EventDashboard.css';
 import apiClient from '../../api/apiClient';
 
@@ -234,49 +236,9 @@ const GlobalDashboard = () => {
             </div>
           </div>
 
-          <div className="panel glass-panel">
-            <div className="panel-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Server size={18} color="var(--success)" /> System Health
-              </h2>
-            </div>
-            <div style={{ padding: '0 24px 24px 24px', display: 'flex', flexDirection: 'column', gap: '16px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>API Services</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}><CheckCircle2 size={14} /> Operational</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Database cluster</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}><CheckCircle2 size={14} /> Operational</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Email delivery</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)' }}><CheckCircle2 size={14} /> Operational</span>
-              </div>
-              <div style={{ marginTop: '8px', background: 'var(--bg-subtle)', padding: '12px', borderRadius: '8px', textAlign: 'center', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                Last backup: 1 hour ago
-              </div>
-            </div>
-          </div>
+          <SystemHealthPanel />
 
-          <div className="panel glass-panel">
-            <div className="panel-header">
-              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={18} color="var(--text-secondary)" /> Quick Actions
-              </h2>
-            </div>
-            <div style={{ padding: '0 24px 24px 24px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button className="btn btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px', background: 'var(--bg-subtle)', border: '1px solid transparent' }}>
-                <UserPlus size={16} /> Invite Administrators
-              </button>
-              <button className="btn btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px', background: 'var(--bg-subtle)', border: '1px solid transparent' }}>
-                <Mail size={16} /> SMTP Settings
-              </button>
-              <button className="btn btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: '12px', background: 'var(--bg-subtle)', border: '1px solid transparent' }}>
-                <Globe size={16} /> Custom Domain
-              </button>
-            </div>
-          </div>
+          <DemoDataPanel />
 
         </div>
       </div>

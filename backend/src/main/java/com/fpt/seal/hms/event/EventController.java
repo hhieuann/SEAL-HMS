@@ -32,11 +32,6 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getAssignedEvents(auth.getName())));
     }
 
-    @GetMapping("/debug/{id}")
-    public ResponseEntity<ApiResponse<EventResponse>> getEventByIdDebug(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
-    }
-
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<EventResponse>> getEventById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
@@ -70,6 +65,20 @@ public class EventController {
         eventService.verifyStaffAccess(id, auth.getName());
         EventResponse updated = eventService.updateEventStatus(id, request.getStatus());
         return ResponseEntity.ok(ApiResponse.ok("Event status updated successfully", updated));
+    }
+
+    /**
+     * Start the next edition from this one: copies tracks, topics, rounds and criteria, but no
+     * teams, assignments or results. The copy is PLANNED and ready to edit.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/{id}/duplicate")
+    public ResponseEntity<ApiResponse<EventResponse>> duplicateEvent(
+            @PathVariable Long id,
+            @Valid @RequestBody com.fpt.seal.hms.event.dto.EventDuplicateRequest request) {
+        EventResponse created = eventService.duplicateEvent(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Event duplicated successfully", created));
     }
 
     @PreAuthorize("hasRole('ADMIN')")

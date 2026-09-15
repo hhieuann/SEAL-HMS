@@ -68,6 +68,15 @@ export const eventService = {
     return response.data;
   },
 
+  /**
+   * Start a new edition from an existing one. The server copies tracks, topics, rounds and
+   * criteria; teams, assignments and results are not copied. Dates left null keep the source's.
+   */
+  duplicateEvent: async (id, payload) => {
+    const response = await apiClient.post(`/api/v1/events/${id}/duplicate`, payload);
+    return response.data;
+  },
+
   resetEventData: async (id) => {
     const response = await apiClient.delete(`/api/v1/events/${id}/reset-data`);
     return response.data;

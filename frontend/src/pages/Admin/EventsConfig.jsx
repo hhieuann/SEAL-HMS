@@ -1,9 +1,52 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Plus, ChevronDown, ChevronUp, Edit2, Settings, Target } from 'lucide-react';
+import { Calendar, Plus, ChevronDown, ChevronUp, Edit2, Settings, Target, Copy, Loader2 } from 'lucide-react';
+import { eventService } from '../../api/eventService';
 
 const EventsConfig = () => {
   const navigate = useNavigate();
+
+  // Duplicating an edition: the admin renames it and picks new dates, everything structural
+  // (tracks, topics, rounds, criteria) is copied server-side in one call.
+  const [dup, setDup] = useState(null); // { source, name, startDate, endDate, regStart, regEnd }
+  const [dupSaving, setDupSaving] = useState(false);
+  const [dupError, setDupError] = useState('');
+
+  const openDuplicate = (event) => {
+    setDupError('');
+    setDup({
+      source: event,
+      name: `${event.name} (copy)`,
+      registrationStartDate: '',
+      registrationEndDate: '',
+      startDate: '',
+      endDate: '',
+    });
+  };
+
+  const submitDuplicate = async () => {
+    if (!dup) return;
+    if (!dup.name.trim()) { setDupError('The new event needs a name.'); return; }
+    setDupSaving(true);
+    setDupError('');
+    try {
+      const created = await eventService.duplicateEvent(dup.source.id, {
+        name: dup.name.trim(),
+        registrationStartDate: dup.registrationStartDate || null,
+        registrationEndDate: dup.registrationEndDate || null,
+        startDate: dup.startDate || null,
+        endDate: dup.endDate || null,
+      });
+      const newId = created?.data?.id;
+      setDup(null);
+      if (newId) navigate(`/admin/event/${newId}/edit`);
+      else window.location.reload();
+    } catch (err) {
+      setDupError(err.response?.data?.message || 'Could not duplicate this event.');
+    } finally {
+      setDupSaving(false);
+    }
+  };
   const [expandedEvent, setExpandedEvent] = useState(0);
   const [events, setEvents] = useState([]);
 
@@ -89,6 +132,12 @@ const EventsConfig = () => {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '13px' }}
+                  title="Start the next edition from this one"
+                  onClick={(e) => { e.stopPropagation(); openDuplicate(event); }}
+                ><Copy size={14} /> Duplicate</button>
                 <button className="btn btn-secondary" style={{ fontSize: '13px' }} onClick={(e) => { e.stopPropagation(); navigate(`/admin/event/${event.id}/edit`); }}><Edit2 size={14} /> Edit</button>
                 {expandedEvent === event.id ? <ChevronUp size={20} color="var(--text-secondary)" /> : <ChevronDown size={20} color="var(--text-secondary)" />}
               </div>
@@ -150,6 +199,69 @@ const EventsConfig = () => {
           </div>
         ))}
       </div>
+
+      {dup && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel" style={{ maxWidth: '560px', width: '100%', padding: '28px', borderRadius: '16px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '6px' }}>Duplicate event</h2>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '20px' }}>
+              Copies the tracks, topics, rounds and scoring criteria of
+              <strong> {dup.source.name}</strong>. Teams, judges, mentors and results are not copied
+              — the new event starts empty and planned.
+            </p>
+
+            {dupError && (
+              <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '13px', marginBottom: '16px' }}>
+                {dupError}
+              </div>
+            )}
+
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+              New event name <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <input
+              type="text"
+              value={dup.name}
+              onChange={e => setDup(d => ({ ...d, name: e.target.value }))}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit', boxSizing: 'border-box', marginBottom: '18px' }}
+            />
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '8px' }}>
+              {[
+                ['Registration opens', 'registrationStartDate'],
+                ['Registration closes', 'registrationEndDate'],
+                ['Event starts', 'startDate'],
+                ['Event ends', 'endDate'],
+              ].map(([label, field]) => (
+                <div key={field}>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '5px' }}>{label}</label>
+                  <input
+                    type="date"
+                    value={dup[field]}
+                    onChange={e => setDup(d => ({ ...d, [field]: e.target.value }))}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '0 0 20px' }}>
+              Leave the dates blank to keep the original ones. Setting a start date moves every
+              round by the same number of days, so the schedule keeps its shape.
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setDup(null)} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} disabled={dupSaving}>
+                Cancel
+              </button>
+              <button onClick={submitDuplicate} className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={dupSaving}>
+                {dupSaving ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Copy size={16} />}
+                {dupSaving ? 'Duplicating…' : 'Duplicate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

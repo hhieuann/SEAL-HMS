@@ -1,6 +1,6 @@
 # SEAL-HMS API (v1) — Frontend reference
 
-> **108 endpoints across 20 controllers.** This file documents the conventions and the auth flow in
+> **112 endpoints across 21 controllers.** This file documents the conventions and the auth flow in
 > prose; the endpoint-by-endpoint contract is generated and always current in Swagger.
 >
 > **Live & interactive:** Swagger UI `http://localhost:8080/swagger-ui.html` · OpenAPI JSON `http://localhost:8080/v3/api-docs`
@@ -17,10 +17,10 @@
 | Assignments | `/tracks/{id}/assignments`, `/track-assignments/{id}`, `/users/me/assignments` |
 | Competition | `/submissions/**`, `/submissions/{id}/scores/**`, `/rounds/{id}/standings` |
 | Recognition | `/chapters/**`, `/chapters/leaderboard`, `/prizes/**` |
-| Platform | `/announcements/**`, `/audit-logs` |
+| Platform | `/announcements/**`, `/audit-logs`, `/actuator/health` (Actuator; status for anyone, components for ADMIN) |
 
 ## Conventions
-- **Base URL:** `http://localhost:8080` (FE reads it from `VITE_API_BASE_URL`). Everything is under `/api/v1`.
+- **Base URL:** `http://localhost:8080` (FE reads it from `VITE_API_BASE_URL`). Everything is under `/api/v1`, except the health check at `/actuator/health`.
 - **Content-Type:** `application/json` for requests with a body.
 - **Auth:** JWT Bearer. Log in → copy `data.token` → send header `Authorization: Bearer <token>` on protected calls.
 

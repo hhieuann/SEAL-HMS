@@ -13,7 +13,9 @@ const RoundTransition = () => {
   const [lockShaking, setLockShaking] = useState(false);
   const [lockToast, setLockToast] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [selectedTeams, setSelectedTeams] = useState(new Set());
+  // Only used when the server refuses to finalise because teams are tied on the cut-off.
+  // The choice is limited to those teams and needs a reason.
+  const [tieBreak, setTieBreak] = useState(null); // { round, message, tied: [], chosen: Set, reason }
   const [activeTrack, setActiveTrack] = useState(null);
 
   const [event, setEvent] = useState(null);
@@ -299,19 +301,52 @@ const RoundTransition = () => {
     document.body.removeChild(link);
   };
 
-  // Helper for advancing round
-  const proceedWithAdvance = async (currentRoundObj) => {
+  /**
+   * The server tells us which teams are tied and how many places are left; parse that out of
+   * its message so the coordinator only ever sees those teams as options.
+   */
+  const openTieBreak = (round, message) => {
+    const slots = parseInt((message.match(/the last (\d+) places/) || [])[1] || '1', 10);
+    const names = (message.match(/:\s*(.+?)\.\s*Decide/) || [])[1] || '';
+    const tiedNames = names.split(',').map(n => n.trim()).filter(Boolean);
+    const allTeams = trackStandings.flatMap(ts => ts.teams).concat(finalsTeamList);
+    const tied = tiedNames
+      .map(name => allTeams.find(t => t.team === name || t.name === name))
+      .filter(Boolean);
+    setTieBreak({ round, message, slots, tied, chosen: new Set(), reason: '' });
+  };
+
+  const submitTieBreak = async () => {
+    if (!tieBreak) return;
+    const { round, chosen, reason, slots } = tieBreak;
+    if (chosen.size !== slots || !reason.trim()) return;
+    const payload = { teamIds: Array.from(chosen), reason: reason.trim() };
+    setTieBreak(null);
+    await proceedWithAdvance(round, payload);
+  };
+
+  // Helper for advancing round. `tieBreak` is only supplied on the retry after the server
+  // reported teams tied across the promotion cut-off.
+  const proceedWithAdvance = async (currentRoundObj, tieBreak = null) => {
+    // Who advances is decided by the scores. The only thing that can stop this is a tie on
+    // the cut-off, and that must surface to the coordinator rather than be swallowed.
+    let promotedIds;
+    try {
+      const res = await standingsService.computeRoundRanking(currentRoundObj.id, tieBreak);
+      const standings = res?.data || [];
+      promotedIds = new Set(standings.filter(s => s.promoted).map(s => s.teamId));
+    } catch (e) {
+      const message = e.response?.data?.message || 'Could not compute the round ranking.';
+      if (/tied on/i.test(message)) {
+        openTieBreak(currentRoundObj, message);
+      } else {
+        setModalConfig({ isOpen: true, title: 'Cannot finalise this round', message, onConfirm: null, type: 'warning' });
+      }
+      return;
+    }
+
     setConfirmed(true);
     setLockToast(true);
-    
-    const promotedTeamIds = Array.from(selectedTeams);
-    
-    // Compute round ranking in backend before advancing (sets promoted flags)
-    try {
-      await standingsService.computeRoundRanking(currentRoundObj.id, promotedTeamIds);
-    } catch (e) {
-      console.error('Failed to compute round ranking:', e);
-    }
 
     const statuses = ['CREATED', 'ACTIVE', 'SCORING', 'UNDER_REVIEW', 'COMPLETED'];
     const startIdx = statuses.indexOf(currentRoundObj.status);
@@ -327,7 +362,7 @@ const RoundTransition = () => {
       // Build next round track draw (only keep advanced teams)
       const nextRoundDraw = trackStandings.map(track => {
         const advancedTeams = track.teams
-          .filter(t => selectedTeams.has(t.teamId))
+          .filter(t => promotedIds.has(t.teamId))
           .map(t => t.team);
         return { ...track, teams: advancedTeams };
       });
@@ -452,41 +487,14 @@ const RoundTransition = () => {
 
         // Advance to next round (from UNDER_REVIEW to COMPLETED)
         if (currentRoundObj.status === 'UNDER_REVIEW' || isLastRound) {
-          const promotionTopN = currentRoundObj.promotionTopN || 0;
-          const targetCount = promotionTopN;
-          const selectedCount = selectedTeams.size;
-
-          if (!isLastRound && selectedCount > targetCount) {
-             setLockError(true);
-             setLockShaking(true);
-             setTimeout(() => setLockShaking(false), 500);
-             setModalConfig({
-               isOpen: true,
-               title: 'Error: Too many teams selected',
-               message: `You have selected ${selectedCount} teams, but the maximum quota is only ${targetCount} teams in total. Please deselect some teams to proceed.`,
-               onConfirm: null,
-               type: 'error'
-             });
-             return;
-          }
-
-          if (!isLastRound && selectedCount < targetCount) {
-             setModalConfig({
-               isOpen: true,
-               title: 'Warning: Missing Teams',
-               message: `Attention: You have only selected ${selectedCount} teams to advance, which is less than the target quota of ${targetCount} teams in total. Are you sure you want to force advance with this list?`,
-               onConfirm: async () => {
-                  await proceedWithAdvance(currentRoundObj);
-               },
-               type: 'warning'
-             });
-             return;
-          }
+          const targetCount = currentRoundObj.promotionTopN || 0;
 
           setModalConfig({
             isOpen: true,
             title: isLastRound ? 'Finalize Event' : 'Advance Round',
-            message: isLastRound ? 'Finalize the event results? Rankings will be computed and this cannot be undone.' : `Confirm eliminations and advance ${selectedCount} teams to the next round? Eliminated teams cannot submit anymore.`,
+            message: isLastRound
+              ? 'Finalize the event results? Rankings will be computed and this cannot be undone.'
+              : `The top ${targetCount} teams by score advance to the next round. Everyone else is eliminated and can no longer submit.`,
             onConfirm: async () => {
                await proceedWithAdvance(currentRoundObj);
             },
@@ -769,7 +777,9 @@ const RoundTransition = () => {
                 ) : activeTrackData.teams.map((s, i) => {
                   const isScoringComplete = actualViewIdx < currentRoundIndex || currentRound?.status === 'UNDER_REVIEW' || currentRound?.status === 'COMPLETED';
                   const isUnderReview = currentRound?.status === 'UNDER_REVIEW' && actualViewIdx === currentRoundIndex;
-                  const isChecked = selectedTeams.has(s.teamId);
+                  // Promotion follows the score; nothing here is a choice any more.
+                  const topN = rounds[currentRoundIndex]?.promotionTopN;
+                  const isChecked = topN != null && s.rank != null && s.rank <= topN && !s.isDisqualified;
 
                   return (
                     <React.Fragment key={i}>
@@ -781,19 +791,12 @@ const RoundTransition = () => {
                       )}
                       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '12px', background: isChecked ? 'rgba(16,185,129,0.04)' : 'transparent', opacity: isScoringComplete && !isChecked && !isUnderReview ? 0.6 : 1 }}>
                         {isUnderReview && !s.isDisqualified ? (
-                          <div style={{ width: '24px', display: 'flex', justifyContent: 'center' }}>
-                            <input 
-                              type="checkbox" 
-                              checked={isChecked}
-                              onChange={(e) => {
-                                const newSet = new Set(selectedTeams);
-                                if (e.target.checked) newSet.add(s.teamId);
-                                else newSet.delete(s.teamId);
-                                setSelectedTeams(newSet);
-                              }}
-                              style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--primary)' }}
-                            />
-                          </div>
+                          <span
+                            title={isChecked ? 'Qualifies on score' : 'Below the cut-off'}
+                            style={{ width: '24px', textAlign: 'center', fontSize: '14px', fontWeight: '800', color: isChecked ? 'var(--success)' : 'var(--text-secondary)' }}
+                          >
+                            {isChecked ? '✓' : '#' + (s.rank ?? '-')}
+                          </span>
                         ) : isScoringComplete ? (
                           <span style={{ width: '24px', fontSize: '14px', fontWeight: '800', color: s.rank <= 2 ? 'var(--text-primary)' : 'var(--text-secondary)', textAlign: 'center' }}>#{s.rank}</span>
                         ) : (
@@ -1042,6 +1045,70 @@ const RoundTransition = () => {
           animation: 'fade-in 0.3s ease-out'
         }}>
           {toast.message}
+        </div>
+      )}
+
+      {tieBreak && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+          <div className="glass-panel" style={{ maxWidth: '560px', width: '100%', padding: '28px', borderRadius: '16px' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '10px' }}>Teams are tied for the last place</h2>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '20px' }}>
+              {tieBreak.message}
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+              {tieBreak.tied.map(t => {
+                const id = t.teamId;
+                const picked = tieBreak.chosen.has(id);
+                return (
+                  <label key={id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', border: `1px solid ${picked ? 'var(--success)' : 'var(--border-color)'}`, background: picked ? 'rgba(16,185,129,0.06)' : 'var(--bg-subtle)', borderRadius: '10px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={picked}
+                      onChange={() => setTieBreak(prev => {
+                        const chosen = new Set(prev.chosen);
+                        if (chosen.has(id)) chosen.delete(id); else chosen.add(id);
+                        return { ...prev, chosen };
+                      })}
+                      style={{ width: '17px', height: '17px', accentColor: 'var(--success)' }}
+                    />
+                    <span style={{ fontWeight: '600', fontSize: '14px' }}>{t.team || t.name}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {t.score != null ? Number(t.score).toFixed(1) : '-'} pts
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px' }}>
+              Why does this team go through? <span style={{ color: 'var(--danger)' }}>*</span>
+            </label>
+            <textarea
+              value={tieBreak.reason}
+              onChange={e => setTieBreak(prev => ({ ...prev, reason: e.target.value }))}
+              rows={2}
+              placeholder="e.g. submitted 40 minutes earlier"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-subtle)', color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '8px 0 20px' }}>
+              Recorded against every team in the tie and written to the audit log.
+            </p>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={() => setTieBreak(null)} className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>
+                Cancel
+              </button>
+              <button
+                onClick={submitTieBreak}
+                disabled={tieBreak.chosen.size !== tieBreak.slots || !tieBreak.reason.trim()}
+                className="btn btn-primary"
+                style={{ flex: 1, justifyContent: 'center', opacity: (tieBreak.chosen.size !== tieBreak.slots || !tieBreak.reason.trim()) ? 0.5 : 1 }}
+              >
+                Confirm {tieBreak.chosen.size}/{tieBreak.slots}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

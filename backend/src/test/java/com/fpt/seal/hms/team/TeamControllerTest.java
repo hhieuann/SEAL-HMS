@@ -129,7 +129,7 @@ class TeamControllerTest {
 
     @Test
     void applyPenalty_asStaff_ok() throws Exception {
-        when(teamService.applyPenalty(eq(1L), eq(2L), any(BigDecimal.class), eq("late")))
+        when(teamService.applyAdjustment(eq(1L), eq(2L), any(BigDecimal.class), eq("late"), any(), any()))
                 .thenReturn(mockResponse());
         mockMvc.perform(put("/api/v1/teams/1/rounds/2/penalty")
                         .with(user("staff").roles("STAFF")).with(csrf())

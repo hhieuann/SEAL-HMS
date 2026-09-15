@@ -69,9 +69,15 @@ export const standingsService = {
     const response = await apiClient.get(`/api/v1/rounds/${roundId}/standings`);
     return response.data;
   },
-  // Compute and persist round ranking (sets promoted flags)
-  computeRoundRanking: async (roundId, promotedTeamIds = []) => {
-    const response = await apiClient.post(`/api/v1/rounds/${roundId}/ranking/compute`, promotedTeamIds);
+  /**
+   * Rank the round and promote the top N by score. Teams are never picked by hand — pass a
+   * tieBreak only after the server has rejected the call because teams are tied across the
+   * cut-off, and then only with teams from that tie.
+   *
+   * @param {{teamIds: number[], reason: string}} [tieBreak]
+   */
+  computeRoundRanking: async (roundId, tieBreak = null) => {
+    const response = await apiClient.post(`/api/v1/rounds/${roundId}/ranking/compute`, tieBreak);
     return response.data;
   },
 };

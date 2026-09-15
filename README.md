@@ -129,13 +129,13 @@ SEAL-HMS/
 │   │   └── chapter/ prize/ announcement/ auditlog/ # awards & comms
 │   ├── src/main/resources/
 │   │   ├── application.yml / application-dev.yml
-│   │   └── db/migration/    # V1 … V37 (Flyway)
-│   └── src/test/java/...    # 55 test classes, 499 tests
+│   │   └── db/migration/    # V1 … V38 (Flyway)
+│   └── src/test/java/...    # 58 test classes, 536 tests
 ├── docs/                 # ARCHITECTURE, FEATURES, API, DEVELOPMENT_RULES, TEST_GITFLOW
 └── frontend/             # React + Vite SPA (34 pages)
 ```
 
-**22 feature packages · 18 entities · 20 controllers · 108 REST endpoints.**
+**24 feature packages · 18 entities · 21 controllers · 112 REST endpoints.**
 
 ---
 
@@ -186,9 +186,9 @@ Full breakdown in **[docs/FEATURES.md](docs/FEATURES.md)**. At a glance:
 
 | | |
 |---|---|
-| Backend tests | **499 passing** (55 classes, JUnit 5 + Mockito) |
-| Backend coverage | **96.9% line · 87.7% branch** (JaCoCo; DTOs/entities/config excluded) |
-| Frontend tests | **18 passing** (Vitest + React Testing Library) |
+| Backend tests | **536 passing** (58 classes, JUnit 5 + Mockito) |
+| Backend coverage | **96.5% line · 86.2% branch** (JaCoCo; DTOs/entities/config excluded) |
+| Frontend tests | **26 passing** (Vitest + React Testing Library) |
 | Lint | `npx eslint .` — **0 errors** |
 | Migrations | Flyway V1 → V37, validated on every boot |
 
@@ -207,6 +207,7 @@ Identity always comes from the JWT, never from the request body — several hole
 - Grading additionally requires the lecturer to be the **assigned judge for that submission's track**.
 - Creating a team makes the caller the leader; only `ADMIN`/`STAFF` may nominate a different leader.
 - Mentor chat is restricted to the team's own members and its assigned mentor.
+- The only Actuator endpoint exposed is `/actuator/health`. Anonymous callers get `UP`/`DOWN` and nothing else; the component details (database, disk, schema version) need an ADMIN token.
 
 ## Git workflow
 Full rules in **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short:
