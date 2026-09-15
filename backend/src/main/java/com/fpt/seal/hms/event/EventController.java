@@ -32,11 +32,6 @@ public class EventController {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getAssignedEvents(auth.getName())));
     }
 
-    @GetMapping("/debug/{id}")
-    public ResponseEntity<ApiResponse<EventResponse>> getEventByIdDebug(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
-    }
-
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<EventResponse>> getEventById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(eventService.getEventById(id)));
