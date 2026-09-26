@@ -128,7 +128,8 @@ timeout, and a backend that is off shows as **API · Unreachable**.
   `@PreAuthorize` rules are actually exercised.
 - **Coverage:** JaCoCo, 96.5% line / 86.2% branch, excluding `dto`, `entity`, `config` and
   controllers (they hold no business logic worth a coverage denominator).
-- **Frontend:** 26 Vitest tests — role-dependent rendering, the confirm modal, and the health panel.
+- **Frontend:** 47 Vitest tests — role-dependent rendering, the confirm modal, the health panel,
+  and the public home and season pages (VI/EN switch, date and money formatting).
 
 > Spring Boot 4 note: `@WebMvcTest` moved to `org.springframework.boot.webmvc.test.autoconfigure`
 > and needs the `spring-boot-starter-webmvc-test` dependency. The slice instantiates

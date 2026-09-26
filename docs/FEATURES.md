@@ -82,6 +82,17 @@ level, since the `mentor` join table keys on `team_id`.
 | Mentor support | Chat with the team's assigned mentor |
 | Announcements | Posts targeted at students or at everyone |
 
+## Visitors — no account
+
+| Feature | Notes |
+|---|---|
+| Home page | Past SEAL seasons (Fall 2025, Spring 2026, Summer 2026) with photos, the next scheduled event read from `GET /api/v1/events`, and entry points per role |
+| Season recap | `/seasons/:slug` — theme, schedule, format, prizes, finalists and photos of one past season |
+| Language | Vietnamese by default, English on request; the choice is remembered in the browser |
+
+The past-season archive lives in `frontend/src/data/seasons.js`: the backend has no fields for a
+season's photos, theme or winners, so it is kept by hand and extended when a season ends.
+
 ---
 
 ## Conflict of interest

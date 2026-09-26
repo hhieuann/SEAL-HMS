@@ -17,7 +17,8 @@ import AdminBroadcast from './pages/Admin/AdminBroadcast';
 import TrackDraw from './pages/Admin/TrackDraw';
 import EventStaffManagement from './pages/Admin/EventStaffManagement';
 
-import LandingPage from './pages/LandingPage';
+import HomePage from './pages/Home/HomePage';
+import SeasonDetail from './pages/Home/SeasonDetail';
 import AuthLayout from './layouts/AuthLayout';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
@@ -57,7 +58,8 @@ function App() {
     <Router>
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/seasons/:slug" element={<SeasonDetail />} />
         
         <Route path="/403" element={<Forbidden403 />} />
 
