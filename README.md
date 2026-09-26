@@ -188,7 +188,7 @@ Full breakdown in **[docs/FEATURES.md](docs/FEATURES.md)**. At a glance:
 |---|---|
 | Backend tests | **536 passing** (58 classes, JUnit 5 + Mockito) |
 | Backend coverage | **96.5% line · 86.2% branch** (JaCoCo; DTOs/entities/config excluded) |
-| Frontend tests | **26 passing** (Vitest + React Testing Library) |
+| Frontend tests | **47 passing** (Vitest + React Testing Library) |
 | Lint | `npx eslint .` — **0 errors** |
 | Migrations | Flyway V1 → V37, validated on every boot |
 

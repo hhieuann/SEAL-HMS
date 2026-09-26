@@ -4,6 +4,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
+import LanguageProvider from "./i18n/LanguageProvider";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -37,7 +38,9 @@ class ErrorBoundary extends React.Component {
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </ErrorBoundary>
   </StrictMode>
 );

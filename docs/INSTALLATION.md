@@ -280,7 +280,7 @@ projects** — the repository root is not itself a Maven or npm project.
 | API documentation | <http://localhost:8080/swagger-ui.html> | Swagger UI listing 112 endpoints |
 | Backend tests | `cd backend` → `.\mvnw test` | `BUILD SUCCESS` — 536 tests across 58 classes, 0 failures |
 | Coverage report | `.\mvnw verify` → open `backend/target/site/jacoco/index.html` | 96.5% line, 86.2% branch |
-| Frontend tests | `cd frontend` → `npx vitest run` | `Tests 18 passed (18)` |
+| Frontend tests | `cd frontend` → `npx vitest run` | `Tests 47 passed (47)` |
 | Frontend lint | `npx eslint .` | 0 errors |
 | Frontend build | `npm run build` | `✓ built in …`, output in `frontend/dist` |
 
